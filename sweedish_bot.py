@@ -15,13 +15,13 @@ from dateutil import tz
 load_dotenv()
 
 #mongodb stuff
-URI = os.getenv('MONGO_URI')
+URI = os.getenv('MONGO_PROD_URI')
 print(URI)
 client = pymongo.MongoClient(URI)
 db = client.user_pickems
 
 #discordpy stuff
-TOKEN = os.getenv('DISCORD_TOKEN')
+TOKEN = os.getenv('DISCORD_PROD_TOKEN')
 print(TOKEN)
 
 intents = discord.Intents.default()
@@ -58,6 +58,7 @@ async def set(ctx, *args):
         if response.content.lower() not in ("yes", "y"):
             return
         
+        #TODO update for new teams in shanghai major
         accepted_teams = list(map(lambda x:x.lower(), ['FaZe Clan', 'Team Spirit', 'Team Vitality', 'MOUZ', 'Complexity', 'Virtus.pro', 'Natus Vincere', 'G2 Esports', 'HEROIC', 'Cloud9', 'Eternal Fire', 'ECSTATIC', 'paiN Gaming', 'Imperial Esports', 'The MongolZ', 'FURIA Esports']))
         
         for team in list_args:
@@ -89,6 +90,7 @@ async def set(ctx, *args):
 async def check(ctx):
     #Scrape data. This result should get cached to save api calls / time to check / processing cycles
     URL = "https://liquipedia.net/counterstrike/PGL/2024/Copenhagen/Elimination_Stage"
+    #URL = "https://liquipedia.net/counterstrike/Perfect_World/Major/2024/Shanghai/Opening_Stage"
     page = requests.get(URL)
 
     soup = BeautifulSoup(page.content, "html.parser")
@@ -352,6 +354,9 @@ async def upcoming(ctx):
     response = ""
     for i in matches:
         response += (f"{i} <t:{matches[i]}>\n")
+    
+    if response == "":
+        response = "No Upcoming Matches"
     await ctx.send(response)
 
 @bot.command(name="get_help")
