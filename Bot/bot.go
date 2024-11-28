@@ -75,7 +75,7 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	case strings.Contains(message.Content, "$set"):
 		setPredictions(discord, message)
 	case strings.Contains(message.Content, "$teams"):
-		discord.ChannelMessageSend(message.ChannelID, "this feature hasn't been implemented yet")
+		discord.ChannelMessageSend(message.ChannelID, getTeamsMessage())
 	case strings.Contains(message.Content, "$upcoming"):
 		discord.ChannelMessageSend(message.ChannelID, "this feature hasn't been implemented yet")
 	case strings.Contains(message.Content, "$hello"):
@@ -89,6 +89,18 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 func getHelpMessage() string {
 	var message = "PickEms Bot v2.0\n`$set [team1] [team2] ... [team10]`: Sets your Pick'Ems. 1 & 2 are the 3-0 teams, 3-8 are the 3-1 / 3-2 teams and 9-10 are the 0-3 teams. Please note that the teams names need to be specified exactly how the appear on liquipedia (not case sensitive) as I'm not doing any proper checking. Names that contains two or more words need to be encased in \" \". E.g. \"The MongolZ\"\n`$check`: shows the current status of your Pick'Ems\n`$teams`: shows the teams currently in the current stage of the tournament. Use this list to set your PickEms\n`$leaderboard`: shows which users have the best pickems in the current stage. This is sorted by number of successful picks. There is no tie breaker in the event two users have the same number of successes\n`$upcoming`: shows todays live and upcoming matches\n"
 	return message
+}
+
+// Function to return valid teams list to the
+// Preconditions: None
+// Postcondtions: Returns string to be sent in discord channel
+func getTeamsMessage() string {
+	validTeams := getValidTeams()
+	returnString := fmt.Sprintf("Valid teams for the %s stage are: ", Round)
+	for _, team := range validTeams {
+		returnString += fmt.Sprintf("%s, ", team)
+	}
+	return returnString
 }
 
 // Function that processes the user input for `$set` message, validates the picks are correct and updates the values stored in the db
