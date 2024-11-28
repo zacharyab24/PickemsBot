@@ -30,6 +30,6 @@ Added upcoming match support. This may still be broken. I have to wait for today
 Updated help command
 Updated formatting for check command
 
-### v2
+### v2.0
 Updated the code base to use go instead of python.
 Updated to work with upcoming Perfect World Shanghai Major as well as be more expandible for other tournaments through the use of command line flags (not user facing)
