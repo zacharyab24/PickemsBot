@@ -67,6 +67,7 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	// respond to user message if it contains one of the following commands
 	switch {
 	case strings.Contains(message.Content, "$check"):
+		checkPredictions(discord, message)
 		discord.ChannelMessageSend(message.ChannelID, "this feature hasn't been implemented yet")
 	case strings.Contains(message.Content, "$help"):
 		discord.ChannelMessageSend(message.ChannelID, getHelpMessage())
@@ -81,6 +82,33 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	case strings.Contains(message.Content, "$hello"):
 		discord.ChannelMessageSend(message.ChannelID, "Hello World!")
 	}
+}
+
+// Function to check the current status of a user's predictions
+// Preconditions: Recieves pointer to the discordgo session and discordgo message
+// Postconditions: Sends the status of the users's predictions to the discord channel in the form Succeeded: {succeeded}, Failed: {failed}, Pending: {pending}"
+func checkPredictions(discord *discordgo.Session, message *discordgo.MessageCreate) {
+	//Check to see if the user has predicitons stored in the db, if not no point continuing
+	coll := Client.Database("user_pickems").Collection("swiss_predictions")
+
+	opts := options.FindOne()
+	var result bson.M
+	err := coll.FindOne(
+		context.TODO(),
+		bson.D{{Key: "userId", Value: message.Author.ID}},
+		opts,
+	).Decode(&result)
+	if err != nil {
+		// ErrNoDocuments means that the user does not have their predictions stored in the db
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("%s does not have any Pickems stored. Use $set to set your predictions", message.Author.Username))
+			return
+		}
+	}
+
+	// TODO: get current prediction scores
+	// IDEA: scrape liquipedia, cache results in db to reduce amount of times we have to scrape the web, especially useful for rapid fire solutions
+	// Maybe set timeout to be like 15mins. Alt we can check if there is an ongoing game, if not ttl can be hours instead of 15 mins
 }
 
 // Function to return the help message called by `$help`
@@ -197,6 +225,18 @@ func setPredictions(discord *discordgo.Session, message *discordgo.MessageCreate
 // Preconditions: LiquipediaURL is valid and the host is online
 // Postconditions: Returns string slice containing list of competing teams
 func getValidTeams() []string {
+	table := getOverviewTable()
+	rows := table.FindAll("tr")
+	//Iterate over each row in the table. We start from index 1 not 0 as the first row just contains th not td and not skipping it causes more issues than it solves
+	var teams []string
+	for _, row := range rows[1:] {
+		team := row.Find("span", "class", "team-template-text").Find("a").Text()
+		teams = append(teams, strings.ToLower(team))
+	}
+	return teams
+}
+
+func getOverviewTable() soup.Root {
 	url := LiquipediaURL
 	if Round == "opening" {
 		url += "/Opening_Stage"
@@ -214,14 +254,7 @@ func getValidTeams() []string {
 	}
 	page := soup.HTMLParse(res)
 	table := page.Find("table", "class", "swisstable").Find("tbody")
-	rows := table.FindAll("tr")
-	//Iterate over each row in the table. We start from index 1 not 0 as the first row just contains th not td and not skipping it causes more issues than it solves
-	var teams []string
-	for _, row := range rows[1:] {
-		team := row.Find("span", "class", "team-template-text").Find("a").Text()
-		teams = append(teams, strings.ToLower(team))
-	}
-	return teams
+	return table
 }
 
 // Function to check if a slice contains an input string
