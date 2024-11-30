@@ -88,6 +88,7 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	case startsWith(message.Content, "$help"):
 		discord.ChannelMessageSend(message.ChannelID, getHelpMessage())
 	case startsWith(message.Content, "$leaderboard"):
+		discord.ChannelMessageSend(message.ChannelID, getLeaderboard())
 		discord.ChannelMessageSend(message.ChannelID, "this feature hasn't been implemented yet")
 	case startsWith(message.Content, "$set"):
 		setPredictions(discord, message)
@@ -133,14 +134,19 @@ func getHelpMessage() string {
 	return message
 }
 
+func getLeaderboard() string {
+	response := ""
+	return response
+}
+
 // Function to return valid teams list to the
 // Preconditions: None
 // Postcondtions: Returns string to be sent in discord channel
 func getTeamsMessage() string {
 	validTeams := getValidTeams()
-	returnString := fmt.Sprintf("Valid teams for the %s stage are: ", Round)
+	returnString := fmt.Sprintf("Valid teams for the %s stage are:\n", Round)
 	for _, team := range validTeams {
-		returnString += fmt.Sprintf("%s, ", team)
+		returnString += fmt.Sprintf("- %s\n", team)
 	}
 	return returnString
 }
