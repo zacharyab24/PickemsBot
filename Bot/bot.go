@@ -13,6 +13,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 
 	"github.com/anaskhan96/soup"
@@ -28,7 +29,16 @@ var BotToken string
 var Format string
 var Round string
 var Client *mongo.Client
+var TournamentName string
 var LiquipediaURL string
+
+type UserPrediction struct {
+	UserId string `bson:"userId,omitempty"`
+	UserName string `bson:"userName,omitempty"`
+	Win [2]string `bson:"win,omitempty"`
+	Advance [6]string `bson:"advance,omitempty"`
+	Lose [2]string `bson:"lose,omitempty"`
+}
 
 func checkNilErr(e error) {
 	if e != nil {
@@ -68,7 +78,6 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	switch {
 	case strings.Contains(message.Content, "$check"):
 		checkPredictions(discord, message)
-		discord.ChannelMessageSend(message.ChannelID, "this feature hasn't been implemented yet")
 	case strings.Contains(message.Content, "$help"):
 		discord.ChannelMessageSend(message.ChannelID, getHelpMessage())
 	case strings.Contains(message.Content, "$leaderboard"):
@@ -89,27 +98,173 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 // Postconditions: Sends the status of the users's predictions to the discord channel in the form Succeeded: {succeeded}, Failed: {failed}, Pending: {pending}"
 func checkPredictions(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	//Check to see if the user has predicitons stored in the db, if not no point continuing
-	coll := Client.Database("user_pickems").Collection("swiss_predictions")
+	pred_coll := Client.Database("user_pickems").Collection(fmt.Sprintf("%s_%s_predictions", TournamentName, Round))
+	result_coll := Client.Database("user_pickems").Collection(fmt.Sprintf("%s_results", TournamentName))
 
-	opts := options.FindOne()
-	var result bson.M
-	err := coll.FindOne(
-		context.TODO(),
-		bson.D{{Key: "userId", Value: message.Author.ID}},
-		opts,
-	).Decode(&result)
+	user_opts := options.FindOne()
+	var result UserPrediction
+	err := pred_coll.FindOne(context.TODO(), bson.D{{Key: "userId", Value: message.Author.ID}},user_opts).Decode(&result)
 	if err != nil {
 		// ErrNoDocuments means that the user does not have their predictions stored in the db
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("%s does not have any Pickems stored. Use $set to set your predictions", message.Author.Username))
 			return
+		} else {
+			panic(err)
 		}
 	}
+	
+	//Iterate over each row in the table. We start from index 1 not 0 as the first row just contains th not td and not skipping it causes more issues than it solves
+	table := getOverviewTable()
+	rows := table.FindAll("tr")
+	teams := make(map[string]string)
+	for _, row := range rows[1:] {
+		team := row.Find("span", "class", "team-template-text").Find("a").Text()
+		team = strings.ToLower(team)
+		score := row.Find("b").Text()
+		if score == "-" {
+			score = "0-0"
+		}
+		teams[team] = score
+		//calc ttl
+	}
+	
+	//Convert map to Bson and update results in db
+	bsonTeams := bson.M{}
+	for key, value := range teams {
+		bsonTeams[key] = value
+	}
 
-	// TODO: get current prediction scores
-	// IDEA: scrape liquipedia, cache results in db to reduce amount of times we have to scrape the web, especially useful for rapid fire solutions
-	// Maybe set timeout to be like 15mins. Alt we can check if there is an ongoing game, if not ttl can be hours instead of 15 mins
+	//This block checks if a results document exists in the db. its horribly formatted and I never want to touch it again, but it works
+	results_opts := options.FindOne()
+	results_err := result_coll.FindOne(
+		context.TODO(),
+		bson.D{{Key: "Round", Value: Round}},
+		results_opts,
+	).Decode(&result)
+	if results_err != nil {
+		// ErrNoDocuments means that there are no results currently stored in the db
+		if errors.Is(results_err, mongo.ErrNoDocuments) {
+			res, err := result_coll.InsertOne(context.TODO(), bson.M{"Round": Round, "TTL": "NaN", "teams": bsonTeams})
+			if err != nil {
+				log.Panic(err)
+				discord.ChannelMessageSend(message.ChannelID, "An unexpected error has occured")
+				return
+			}
+			fmt.Printf("Results stored with ID %v\n", res.InsertedID)
+		} else {
+			discord.ChannelMessageSend(message.ChannelID, "An unexpected error has occured")
+			return
+		}
+	} else {
+		filter := bson.D{{Key: "Round", Value: Round}}
+		update := bson.D{{Key: "$set", Value: bson.D{{Key: "Round", Value: Round}, {Key: "TTL", Value: "NaN"}, {Key: "teams", Value: bsonTeams}}}}
+		res, err := result_coll.UpdateOne(context.TODO(), filter, update)
+		if err != nil {
+			discord.ChannelMessageSend(message.ChannelID, "An unexpected error has occured")
+			log.Panic(err)
+			return
+		}
+		fmt.Printf("Stored results updated with ID%v\n", res.UpsertedID)
+	}
+
+	//Actual comparisons for checks
+	//userPrediction, _ := bson.MarshalExtJSON(result, false, false)
+	// fmt.Println(string(userPrediction))
+	// fmt.Print(teams)
+
+	succeeded := 0
+    pending := 0
+    failed := 0
+
+	response := fmt.Sprintf("%s's picks are:\n", message.Author.Username)
+
+	//3-0 Calculation
+	response += "[3-0]\n"
+	for i := range result.Win {
+		team := result.Win[i]
+		score := teams[team]
+		wins, err := strconv.Atoi(string(score[0]))
+		if err != nil {
+			log.Panic(err)
+		}
+		loses, err := strconv.Atoi(string(score[2]))
+		if err != nil {
+			log.Panic(err)
+		}
+
+		var result string
+		if loses >= 1 {
+			result = "[Failed]"
+			failed += 1
+		} else if wins != 3 {
+			result = "[Pending]" 
+			pending += 1
+		} else {
+			result = "[Succeeded]"
+			succeeded += 1
+		}
+		response += fmt.Sprintf("%s: %s %s\n", team, score, result)
+	}
+
+	//3-1/2 Calculation
+	response += "[3-1, 3-2]\n"
+	for i := range result.Advance {
+		team := result.Advance[i]
+		score := teams[team]
+		wins, err := strconv.Atoi(string(score[0]))
+		if err != nil {
+			log.Panic(err)
+		}
+		loses, err := strconv.Atoi(string(score[2]))
+		if err != nil {
+			log.Panic(err)
+		}
+
+		var result string
+		if loses == 3 || (wins == 3 && loses == 0) {
+			result = "[Failed]"
+			failed += 1
+		} else if wins < 3 {
+			result = "[Pending]" 
+			pending += 1
+		} else {
+			result = "[Succeeded]"
+			succeeded += 1
+		}
+		response += fmt.Sprintf("%s: %s %s\n", team, score, result)
+	}
+		//0-3 Calculation
+	response += "[0-3]\n"
+	for i := range result.Lose {
+		team := result.Lose[i]
+		score := teams[team]
+		wins, err := strconv.Atoi(string(score[0]))
+		if err != nil {
+			log.Panic(err)
+		}
+		loses, err := strconv.Atoi(string(score[2]))
+		if err != nil {
+			log.Panic(err)
+		}
+
+		var result string
+		if wins >= 1 {
+			result = "[Failed]"
+			failed += 1
+		} else if loses != 3 {
+			result = "[Pending]" 
+			pending += 1
+		} else {
+			result = "[Succeeded]"
+			succeeded += 1
+		}
+		response += fmt.Sprintf("%s: %s %s\n", team, score, result)
+	}
+	response += fmt.Sprintf("\nSucceeded: %d, Failed: %d, Pending: %d", succeeded, failed, pending)
+	discord.ChannelMessageSend(message.ChannelID, response)
 }
+
 
 // Function to return the help message called by `$help`
 // Preconditions: None
@@ -184,7 +339,7 @@ func setPredictions(discord *discordgo.Session, message *discordgo.MessageCreate
 		advance[i] = msg[i+3]
 	}
 
-	coll := Client.Database("user_pickems").Collection("swiss_predictions")
+	coll := Client.Database("user_pickems").Collection(fmt.Sprintf("%s_%s_predictions", TournamentName, Round))
 
 	opts := options.FindOne()
 	var result bson.M

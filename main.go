@@ -27,6 +27,7 @@ func main() {
 	//Flags
 	formatPtr := flag.String("format", "swiss", "Style of tournament, e.g. swiss, finals, iem")
 	roundPtr := flag.String("round", "opening", "Round of tournament (opening, elimination, playoffs)")
+	tournamentNamePtr := flag.String("tournamentName", "ShanghaiMajor2024", "Tournament name, e.g. ShanghaiMajor2024")
 	urlPtr := flag.String("url", "https://liquipedia.net/counterstrike/Perfect_World/Major/2024/Shanghai", "Liquipedia Base URL: e.g. https://liquipedia.net/counterstrike/PGL/2024/Copenhagen")
 
 	flag.Parse()
@@ -62,6 +63,7 @@ func main() {
 		bot.BotToken = discord_token
 		bot.Format = *formatPtr
 		bot.Round = *roundPtr
+		bot.TournamentName = *tournamentNamePtr
 		bot.Client = client
 		bot.LiquipediaURL = *urlPtr
 		bot.Run()
