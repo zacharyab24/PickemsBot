@@ -15,6 +15,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/anaskhan96/soup"
 	"github.com/bwmarrin/discordgo"
@@ -38,6 +39,12 @@ type UserPrediction struct {
 	Win [2]string `bson:"win,omitempty"`
 	Advance [6]string `bson:"advance,omitempty"`
 	Lose [2]string `bson:"lose,omitempty"`
+}
+
+type Results struct {
+	Round string `bson:"Round,omitempty"`
+	TTL float64 `bson:"TTL,omitempty"`
+	Teams string `bson:"teams,omitempty"`
 }
 
 func checkNilErr(e error) {
@@ -113,65 +120,69 @@ func checkPredictions(discord *discordgo.Session, message *discordgo.MessageCrea
 			panic(err)
 		}
 	}
-	
-	//Iterate over each row in the table. We start from index 1 not 0 as the first row just contains th not td and not skipping it causes more issues than it solves
-	table := getOverviewTable()
-	rows := table.FindAll("tr")
-	teams := make(map[string]string)
-	for _, row := range rows[1:] {
-		team := row.Find("span", "class", "team-template-text").Find("a").Text()
-		team = strings.ToLower(team)
-		score := row.Find("b").Text()
-		if score == "-" {
-			score = "0-0"
-		}
-		teams[team] = score
-		//calc ttl
-	}
-	
-	//Convert map to Bson and update results in db
-	bsonTeams := bson.M{}
-	for key, value := range teams {
-		bsonTeams[key] = value
-	}
 
-	//This block checks if a results document exists in the db. its horribly formatted and I never want to touch it again, but it works
+	var teams map[string]string
+
+	//Check if there are results currently stored in the db, if there is, check if we need to update them
 	results_opts := options.FindOne()
+	var results Results
 	results_err := result_coll.FindOne(
 		context.TODO(),
 		bson.D{{Key: "Round", Value: Round}},
 		results_opts,
-	).Decode(&result)
+	).Decode(&results)
 	if results_err != nil {
 		// ErrNoDocuments means that there are no results currently stored in the db
-		if errors.Is(results_err, mongo.ErrNoDocuments) {
-			res, err := result_coll.InsertOne(context.TODO(), bson.M{"Round": Round, "TTL": "NaN", "teams": bsonTeams})
+		fmt.Println("No results for this round stored, adding to db")
+		teams = getTeams()
+		//Convert map to Bson and update results in db
+		bsonTeams := bson.M{}
+		for key, value := range teams {
+			bsonTeams[key] = value
+		}
+		res, err := result_coll.InsertOne(context.TODO(), bson.M{"Round": Round, "TTL": time.Now().Add(15 * time.Minute), "teams": bsonTeams})
+		if err != nil {
+			log.Panic(err)
+			discord.ChannelMessageSend(message.ChannelID, "An unexpected error has occured")
+			return
+		}
+		fmt.Printf("Results stored with ID %v\n", res.InsertedID)
+	} else {
+		//Check if the db needs updating
+		if results.TTL < float64(time.Now().Minute())  {
+			fmt.Println("Cache is outdated... updating")
+			// Update stored value
+			teams = getTeams()
+			//Convert map to Bson and update results in db
+			bsonTeams := bson.M{}
+			for key, value := range teams {
+				bsonTeams[key] = value
+			}
+			filter := bson.D{{Key: "Round", Value: Round}}
+			update := bson.D{
+				{Key: "$set", Value: bson.D{
+					{Key: "Round", Value: Round},
+					{Key: "TTL", Value: time.Now().Add(15 * time.Minute)},
+					{Key: "teams", Value: bsonTeams},
+				}},
+			}
+			res, err := result_coll.UpdateOne(context.TODO(), filter, update)
 			if err != nil {
-				log.Panic(err)
 				discord.ChannelMessageSend(message.ChannelID, "An unexpected error has occured")
+				log.Panic(err)
 				return
 			}
-			fmt.Printf("Results stored with ID %v\n", res.InsertedID)
+			fmt.Printf("Stored results updated with ID%v\n", res.UpsertedID)
 		} else {
-			discord.ChannelMessageSend(message.ChannelID, "An unexpected error has occured")
-			return
+			// Retrieve stored value
+			err := bson.Unmarshal([]byte(results.Teams), &teams)
+			if err != nil {
+				log.Panic(err)
+			}
 		}
-	} else {
-		filter := bson.D{{Key: "Round", Value: Round}}
-		update := bson.D{{Key: "$set", Value: bson.D{{Key: "Round", Value: Round}, {Key: "TTL", Value: "NaN"}, {Key: "teams", Value: bsonTeams}}}}
-		res, err := result_coll.UpdateOne(context.TODO(), filter, update)
-		if err != nil {
-			discord.ChannelMessageSend(message.ChannelID, "An unexpected error has occured")
-			log.Panic(err)
-			return
-		}
-		fmt.Printf("Stored results updated with ID%v\n", res.UpsertedID)
 	}
-
-	//Actual comparisons for checks
-	//userPrediction, _ := bson.MarshalExtJSON(result, false, false)
-	// fmt.Println(string(userPrediction))
-	// fmt.Print(teams)
+	
+	//Comparisons for checks
 
 	succeeded := 0
     pending := 0
@@ -410,6 +421,24 @@ func getOverviewTable() soup.Root {
 	page := soup.HTMLParse(res)
 	table := page.Find("table", "class", "swisstable").Find("tbody")
 	return table
+}
+
+func getTeams() map[string]string {
+	//Iterate over each row in the table. We start from index 1 not 0 as the first row just contains th not td and not skipping it causes more issues than it solves
+	table := getOverviewTable()
+	rows := table.FindAll("tr")
+	teams := make(map[string]string)
+	for _, row := range rows[1:] {
+		team := row.Find("span", "class", "team-template-text").Find("a").Text()
+		team = strings.ToLower(team)
+		score := row.Find("b").Text()
+		if score == "-" {
+			score = "0-0"
+		}
+		teams[team] = score
+	}
+	return teams
+
 }
 
 // Function to check if a slice contains an input string
