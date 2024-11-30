@@ -43,8 +43,8 @@ type UserPrediction struct {
 
 type Results struct {
 	Round string `bson:"Round,omitempty"`
-	TTL float64 `bson:"TTL,omitempty"`
-	Teams string `bson:"teams,omitempty"`
+	TTL time.Time `bson:"TTL,omitempty"`
+	Teams map[string]string `bson:"teams,omitempty"`
 }
 
 func checkNilErr(e error) {
@@ -83,19 +83,19 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 
 	// respond to user message if it contains one of the following commands
 	switch {
-	case strings.Contains(message.Content, "$check"):
+	case startsWith(message.Content, "$check"):
 		checkPredictions(discord, message)
-	case strings.Contains(message.Content, "$help"):
+	case startsWith(message.Content, "$help"):
 		discord.ChannelMessageSend(message.ChannelID, getHelpMessage())
-	case strings.Contains(message.Content, "$leaderboard"):
+	case startsWith(message.Content, "$leaderboard"):
 		discord.ChannelMessageSend(message.ChannelID, "this feature hasn't been implemented yet")
-	case strings.Contains(message.Content, "$set"):
+	case startsWith(message.Content, "$set"):
 		setPredictions(discord, message)
-	case strings.Contains(message.Content, "$teams"):
+	case startsWith(message.Content, "$teams"):
 		discord.ChannelMessageSend(message.ChannelID, getTeamsMessage())
-	case strings.Contains(message.Content, "$upcoming"):
+	case startsWith(message.Content, "$upcoming"):
 		discord.ChannelMessageSend(message.ChannelID, "this feature hasn't been implemented yet")
-	case strings.Contains(message.Content, "$hello"):
+	case startsWith(message.Content, "$hello"):
 		discord.ChannelMessageSend(message.ChannelID, "Hello World!")
 	}
 }
@@ -106,8 +106,7 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 func checkPredictions(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	//Check to see if the user has predicitons stored in the db, if not no point continuing
 	pred_coll := Client.Database("user_pickems").Collection(fmt.Sprintf("%s_%s_predictions", TournamentName, Round))
-	result_coll := Client.Database("user_pickems").Collection(fmt.Sprintf("%s_results", TournamentName))
-
+	
 	user_opts := options.FindOne()
 	var result UserPrediction
 	err := pred_coll.FindOne(context.TODO(), bson.D{{Key: "userId", Value: message.Author.ID}},user_opts).Decode(&result)
@@ -120,162 +119,11 @@ func checkPredictions(discord *discordgo.Session, message *discordgo.MessageCrea
 			panic(err)
 		}
 	}
-
-	var teams map[string]string
-
 	//Check if there are results currently stored in the db, if there is, check if we need to update them
-	results_opts := options.FindOne()
-	var results Results
-	results_err := result_coll.FindOne(
-		context.TODO(),
-		bson.D{{Key: "Round", Value: Round}},
-		results_opts,
-	).Decode(&results)
-	if results_err != nil {
-		// ErrNoDocuments means that there are no results currently stored in the db
-		fmt.Println("No results for this round stored, adding to db")
-		teams = getTeams()
-		//Convert map to Bson and update results in db
-		bsonTeams := bson.M{}
-		for key, value := range teams {
-			bsonTeams[key] = value
-		}
-		res, err := result_coll.InsertOne(context.TODO(), bson.M{"Round": Round, "TTL": time.Now().Add(15 * time.Minute), "teams": bsonTeams})
-		if err != nil {
-			log.Panic(err)
-			discord.ChannelMessageSend(message.ChannelID, "An unexpected error has occured")
-			return
-		}
-		fmt.Printf("Results stored with ID %v\n", res.InsertedID)
-	} else {
-		//Check if the db needs updating
-		if results.TTL < float64(time.Now().Minute())  {
-			fmt.Println("Cache is outdated... updating")
-			// Update stored value
-			teams = getTeams()
-			//Convert map to Bson and update results in db
-			bsonTeams := bson.M{}
-			for key, value := range teams {
-				bsonTeams[key] = value
-			}
-			filter := bson.D{{Key: "Round", Value: Round}}
-			update := bson.D{
-				{Key: "$set", Value: bson.D{
-					{Key: "Round", Value: Round},
-					{Key: "TTL", Value: time.Now().Add(15 * time.Minute)},
-					{Key: "teams", Value: bsonTeams},
-				}},
-			}
-			res, err := result_coll.UpdateOne(context.TODO(), filter, update)
-			if err != nil {
-				discord.ChannelMessageSend(message.ChannelID, "An unexpected error has occured")
-				log.Panic(err)
-				return
-			}
-			fmt.Printf("Stored results updated with ID%v\n", res.UpsertedID)
-		} else {
-			// Retrieve stored value
-			err := bson.Unmarshal([]byte(results.Teams), &teams)
-			if err != nil {
-				log.Panic(err)
-			}
-		}
-	}
-	
-	//Comparisons for checks
-
-	succeeded := 0
-    pending := 0
-    failed := 0
-
-	response := fmt.Sprintf("%s's picks are:\n", message.Author.Username)
-
-	//3-0 Calculation
-	response += "[3-0]\n"
-	for i := range result.Win {
-		team := result.Win[i]
-		score := teams[team]
-		wins, err := strconv.Atoi(string(score[0]))
-		if err != nil {
-			log.Panic(err)
-		}
-		loses, err := strconv.Atoi(string(score[2]))
-		if err != nil {
-			log.Panic(err)
-		}
-
-		var result string
-		if loses >= 1 {
-			result = "[Failed]"
-			failed += 1
-		} else if wins != 3 {
-			result = "[Pending]" 
-			pending += 1
-		} else {
-			result = "[Succeeded]"
-			succeeded += 1
-		}
-		response += fmt.Sprintf("%s: %s %s\n", team, score, result)
-	}
-
-	//3-1/2 Calculation
-	response += "[3-1, 3-2]\n"
-	for i := range result.Advance {
-		team := result.Advance[i]
-		score := teams[team]
-		wins, err := strconv.Atoi(string(score[0]))
-		if err != nil {
-			log.Panic(err)
-		}
-		loses, err := strconv.Atoi(string(score[2]))
-		if err != nil {
-			log.Panic(err)
-		}
-
-		var result string
-		if loses == 3 || (wins == 3 && loses == 0) {
-			result = "[Failed]"
-			failed += 1
-		} else if wins < 3 {
-			result = "[Pending]" 
-			pending += 1
-		} else {
-			result = "[Succeeded]"
-			succeeded += 1
-		}
-		response += fmt.Sprintf("%s: %s %s\n", team, score, result)
-	}
-		//0-3 Calculation
-	response += "[0-3]\n"
-	for i := range result.Lose {
-		team := result.Lose[i]
-		score := teams[team]
-		wins, err := strconv.Atoi(string(score[0]))
-		if err != nil {
-			log.Panic(err)
-		}
-		loses, err := strconv.Atoi(string(score[2]))
-		if err != nil {
-			log.Panic(err)
-		}
-
-		var result string
-		if wins >= 1 {
-			result = "[Failed]"
-			failed += 1
-		} else if loses != 3 {
-			result = "[Pending]" 
-			pending += 1
-		} else {
-			result = "[Succeeded]"
-			succeeded += 1
-		}
-		response += fmt.Sprintf("%s: %s %s\n", team, score, result)
-	}
-	response += fmt.Sprintf("\nSucceeded: %d, Failed: %d, Pending: %d", succeeded, failed, pending)
+	results := getResults(discord, message)
+	response, _ := calculateScore(result, results)
 	discord.ChannelMessageSend(message.ChannelID, response)
 }
-
 
 // Function to return the help message called by `$help`
 // Preconditions: None
@@ -303,7 +151,7 @@ func getTeamsMessage() string {
 func setPredictions(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	//Check if there is exactly 11 strings using a space delimiter in the message (command and 10 user picks)
 	//Note this could be reduced to 10 as we dont need to store the command in memory after this point, but the memory usage of one section of a slice is not a big concern for this application
-	spaceSplitter, _ := splitter.NewSplitter(' ', splitter.DoubleQuotes) //we use splitter here instead of go's build in splitter because now we can have team names that contain spaces e.g. "Faze Clan" recognised as one team not two
+	spaceSplitter, _ := splitter.NewSplitter(' ', splitter.DoubleQuotes, splitter.LeftRightDoubleDoubleQuotes) //we use splitter here instead of go's build in splitter because now we can have team names that contain spaces e.g. "Faze Clan" recognised as one team not two
 	msg, _ := spaceSplitter.Split(message.Content)
 
 	if len(msg) != 11 { //If there is not the required amount of words, return an error
@@ -318,6 +166,8 @@ func setPredictions(discord *discordgo.Session, message *discordgo.MessageCreate
 	//Convert user predictions to lower case as this is how they are stored in the db and makes checks easier
 	for i := 1; i < len(msg); i++ {
 		msg[i] = strings.ReplaceAll(msg[i], "\"", "")
+		msg[i] = strings.ReplaceAll(msg[i], "“", "")
+		msg[i] = strings.ReplaceAll(msg[i], "”", "")
 		msg[i] = strings.ToLower(msg[i])
 
 		if !contains(validTeams, msg[i]) {
@@ -402,6 +252,176 @@ func getValidTeams() []string {
 	return teams
 }
 
+//Function to check if the results stored in the db exist, are out of date, or fine to use
+//Preconditions: Recieves pointer to discordgo session and discordgo message
+//Postconditions: returns a Results struct and updates the results cache in db if required
+func getResults(discord *discordgo.Session, message *discordgo.MessageCreate) Results {
+	coll := Client.Database("user_pickems").Collection(fmt.Sprintf("%s_results", TournamentName))
+	opts := options.FindOne()
+	var teams map[string]string
+	var results Results
+
+	results_err := coll.FindOne(
+		context.TODO(),
+		bson.D{{Key: "Round", Value: Round}},
+		opts,
+	).Decode(&results)
+	if results_err != nil {
+		// ErrNoDocuments means that there is no results for this round stored in the db
+		if errors.Is(results_err, mongo.ErrNoDocuments) {
+			fmt.Println("No results for this round stored, adding to db")
+			teams = getTeams()
+			//Convert map to Bson and update results in db
+			bsonTeams := bson.M{}
+			for key, value := range teams {
+				bsonTeams[key] = value
+			}
+			res, err := coll.InsertOne(context.TODO(), bson.M{"Round": Round, "TTL": time.Now().Add(15 * time.Minute), "teams": bsonTeams})
+			if err != nil {
+				log.Panic(err)
+				discord.ChannelMessageSend(message.ChannelID, "An unexpected error has occured")
+			} else {
+				fmt.Printf("Results stored with ID %v\n", res.InsertedID)
+			}
+		} else {
+			log.Panic(results_err)
+			discord.ChannelMessageSend(message.ChannelID, "An unexpected error has occured")
+		}
+	} else {
+		//Check if the db needs updating
+		if results.TTL.Compare(time.Now()) == -1  {
+			fmt.Println("Cache is outdated... updating")
+			// Update stored value
+			teams = getTeams()
+			//Convert map to Bson and update results in db
+			bsonTeams := bson.M{}
+			for key, value := range teams {
+				bsonTeams[key] = value
+			}
+			filter := bson.D{{Key: "Round", Value: Round}}
+			update := bson.D{
+				{Key: "$set", Value: bson.D{
+					{Key: "Round", Value: Round},
+					{Key: "TTL", Value: time.Now().Add(15 * time.Minute)},
+					{Key: "teams", Value: bsonTeams},
+				}},
+			}
+			res, err := coll.UpdateOne(context.TODO(), filter, update)
+			if err != nil {
+				discord.ChannelMessageSend(message.ChannelID, "An unexpected error has occured")
+				log.Panic(err)
+			} else {
+				fmt.Printf("Stored results updated with ID%v\n", res.UpsertedID)
+			}
+			
+		}
+	}
+	return results
+}
+
+//Function that calculates a user's score and generates a response to be sent in discord
+//Preconditions: recieves UserPrediction struct of a player's predictions
+//Postconditions: returns a string containing the response message and int containing the player's score (successes - losses)
+func calculateScore(pred UserPrediction, results Results) (string, int) {
+	//Comparisons for checks
+	succeeded := 0
+    pending := 0
+    failed := 0
+
+	response := fmt.Sprintf("%s's picks are:\n", pred.UserName)
+
+	teams := results.Teams
+
+	//3-0 Calculation
+	response += "[3-0]\n"
+	for i := range pred.Win {
+		team := pred.Win[i]
+		score := teams[team]
+		wins, err := strconv.Atoi(string(score[0]))
+		if err != nil {
+			log.Panic(err)
+		}
+		loses, err := strconv.Atoi(string(score[2]))
+		if err != nil {
+			log.Panic(err)
+		}
+
+		var result string
+		if loses >= 1 {
+			result = "[Failed]"
+			failed += 1
+		} else if wins != 3 {
+			result = "[Pending]" 
+			pending += 1
+		} else {
+			result = "[Succeeded]"
+			succeeded += 1
+		}
+		response += fmt.Sprintf("%s: %s %s\n", team, score, result)
+	}
+
+	//3-1/2 Calculation
+	response += "[3-1, 3-2]\n"
+	for i := range pred.Advance {
+		team := pred.Advance[i]
+		score := teams[team]
+		wins, err := strconv.Atoi(string(score[0]))
+		if err != nil {
+			log.Panic(err)
+		}
+		loses, err := strconv.Atoi(string(score[2]))
+		if err != nil {
+			log.Panic(err)
+		}
+
+		var result string
+		if loses == 3 || (wins == 3 && loses == 0) {
+			result = "[Failed]"
+			failed += 1
+		} else if wins < 3 {
+			result = "[Pending]" 
+			pending += 1
+		} else {
+			result = "[Succeeded]"
+			succeeded += 1
+		}
+		response += fmt.Sprintf("%s: %s %s\n", team, score, result)
+	}
+		//0-3 Calculation
+	response += "[0-3]\n"
+	for i := range pred.Lose {
+		team := pred.Lose[i]
+		score := teams[team]
+		wins, err := strconv.Atoi(string(score[0]))
+		if err != nil {
+			log.Panic(err)
+		}
+		loses, err := strconv.Atoi(string(score[2]))
+		if err != nil {
+			log.Panic(err)
+		}
+
+		var result string
+		if wins >= 1 {
+			result = "[Failed]"
+			failed += 1
+		} else if loses != 3 {
+			result = "[Pending]" 
+			pending += 1
+		} else {
+			result = "[Succeeded]"
+			succeeded += 1
+		}
+		response += fmt.Sprintf("%s: %s %s\n", team, score, result)
+	}
+	response += fmt.Sprintf("\nSucceeded: %d, Failed: %d, Pending: %d", succeeded, failed, pending)
+	score := succeeded - failed
+	return response, score
+}
+
+//Function to scrape liquipedia and get the results table present on the tournament page
+//Preconditions: None
+//Postconditions: Returns Root pointer for a soup tree that points to the results table
 func getOverviewTable() soup.Root {
 	url := LiquipediaURL
 	if Round == "opening" {
@@ -423,6 +443,9 @@ func getOverviewTable() soup.Root {
 	return table
 }
 
+//Function to get a list of valid team names for this round of the tournament and each teams score
+//Preconditions: None
+//Postconditions: Returns a map of the form teamName : score
 func getTeams() map[string]string {
 	//Iterate over each row in the table. We start from index 1 not 0 as the first row just contains th not td and not skipping it causes more issues than it solves
 	table := getOverviewTable()
@@ -451,4 +474,21 @@ func contains(slice []string, inputString string) bool {
 		}
 	}
 	return false
+}
+
+//Function to check if a string starts with a given substring
+//Preconditions: Recieves an input string and a substring
+//Postconditions: Returns true if the substring is at the start of the string, else returns false
+func startsWith(inputString string, substring string) bool {
+	//Check if the substring is present in the input string
+	if !strings.Contains(inputString, substring) {
+		return false
+	}
+	strLength := len(substring)
+	for i := range(strLength) {
+		if inputString[i] != substring[i] {
+			return false
+		}
+	}
+	return true
 }
