@@ -42,10 +42,18 @@ type UserPrediction struct {
 	Lose [2]string `bson:"lose,omitempty"`
 }
 
+
 type Results struct {
 	Round string `bson:"Round,omitempty"`
 	TTL time.Time `bson:"TTL,omitempty"`
 	Teams map[string]string `bson:"teams,omitempty"`
+}
+
+type Match struct {
+	team1 string
+	team2 string
+	format string
+	timestamp int
 }
 
 func checkNilErr(e error) {
@@ -95,9 +103,10 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	case startsWith(message.Content, "$teams"):
 		discord.ChannelMessageSend(message.ChannelID, getTeamsMessage())
 	case startsWith(message.Content, "$upcoming"):
-		discord.ChannelMessageSend(message.ChannelID, "this feature hasn't been implemented yet")
+		getUpcomingMatches(discord, message)
 	case startsWith(message.Content, "$hello"):
-		discord.ChannelMessageSend(message.ChannelID, "Hello World!")
+		discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Hello %s!", message.Author.Username))
+		discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Hello %s!", message.Author.GlobalName))
 	}
 }
 
@@ -134,6 +143,9 @@ func getHelpMessage() string {
 	return message
 }
 
+// Function to calculate the leaderboard and send the leaderboard to a discord channel
+// Preconditions: Recieves pointer to the discordgo session and discordgo message
+// Postconditions: Generates leaderboard and posts leaderboard to same channel command was run
 func getLeaderboard(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	//Get all users predictions from db
 	coll := Client.Database("user_pickems").Collection(fmt.Sprintf("%s_%s_predictions", TournamentName, Round))
@@ -302,9 +314,9 @@ func getValidTeams() []string {
 	return teams
 }
 
-//Function to check if the results stored in the db exist, are out of date, or fine to use
-//Preconditions: Recieves pointer to discordgo session and discordgo message
-//Postconditions: returns a Results struct and updates the results cache in db if required
+// Function to check if the results stored in the db exist, are out of date, or fine to use
+// Preconditions: Recieves pointer to discordgo session and discordgo message
+// Postconditions: returns a Results struct and updates the results cache in db if required
 func getResults(discord *discordgo.Session, message *discordgo.MessageCreate) Results {
 	coll := Client.Database("user_pickems").Collection(fmt.Sprintf("%s_results", TournamentName))
 	opts := options.FindOne()
@@ -369,9 +381,9 @@ func getResults(discord *discordgo.Session, message *discordgo.MessageCreate) Re
 	return results
 }
 
-//Function that calculates a user's score and generates a response to be sent in discord
-//Preconditions: recieves UserPrediction struct of a player's predictions
-//Postconditions: returns a string containing the response message, int containing the players successes and int containing the player's losses
+// Function that calculates a user's score and generates a response to be sent in discord
+// Preconditions: recieves UserPrediction struct of a player's predictions
+// Postconditions: returns a string containing the response message, int containing the players successes and int containing the player's losses
 func calculateScore(pred UserPrediction, results Results) (string, int, int) {
 	//Comparisons for checks
 	succeeded := 0
@@ -468,9 +480,98 @@ func calculateScore(pred UserPrediction, results Results) (string, int, int) {
 	return response, succeeded, failed
 }
 
-//Function to scrape liquipedia and get the results table present on the tournament page
-//Preconditions: None
-//Postconditions: Returns Root pointer for a soup tree that points to the results table
+// Function to scrape the upcoming matches, filter for the selected tournament, and post the match details to the discord channel
+// Preconditions: recieves UserPrediction struct of a player's predictions
+// Postconditions: sends a message to the discord channel where the command was run containing the upcoming matches
+func getUpcomingMatches(discord *discordgo.Session, message *discordgo.MessageCreate) {
+	// The URL is the same for all matches since this is taken from the cs liquipedia home page
+	// Unfortunately the information scored here isnt present or at least easily available on the match page so theres some more filtering that needs to happen
+	URL := "https://liquipedia.net/counterstrike/Liquipedia:Matches"
+	res, err := soup.Get(URL)
+	if err != nil {
+		log.Panic(err)
+	}
+	page := soup.HTMLParse(res)
+	games := page.FindAll("table", "class", "infobox_matches_content")
+
+	var matches []Match
+	
+	// Iterate over each upcoming match and extract the teams playing, match format, tournament name and epoch time the match will occur
+	// If the match matches the tournament, add to matches slice
+	for _, game := range games {
+		team1 := game.Find("td", "class", "team-left")
+		vs := game.Find("td", "class", "versus")
+		team2 := game.Find("td", "class", "team-right")
+
+		team1Element := team1.Find("a")
+		team1Name := ""
+		if team1Element.Error == nil {
+			team1Name = team1Element.Text()
+		} else {
+			team1Name = "TBD"
+		}
+
+		team2Element := team2.Find("span", "class", "team-template-text").Find("a")
+		team2Name := ""
+		if team2Element.Error == nil {
+			team2Name = team2Element.Text()
+		} else {
+			team2Name = "TBD"
+		}
+		
+		format := vs.Find("abbr")
+		formatText := ""
+		if format.Error == nil {
+			formatText = format.Text()
+		} else {
+			formatText = "TBD"
+		}
+
+		timeUntil := game.Find("span", "class", "timer-object-countdown-only")
+		epochTimeStamp := 0
+		if timeUntil.Error == nil {
+			timestamp, exists := timeUntil.Attrs()["data-timestamp"]
+			if !exists {
+				log.Println("Timestamp not found")
+				continue
+			}
+						
+			// convert timestap to int so it can be used for epoch time  
+			i, err := strconv.Atoi(timestamp)
+			if err != nil {
+				log.Println("An error occured converting time stamp")
+				continue
+			}
+			epochTimeStamp = i
+		} 		
+		tournamentName := game.Find("div", "class", "text-nowrap").Find("a").Text()
+		if tournamentName == "PW Shanghai Major 2024" { // TODO: replace this hardcoded value
+			if formatText == "TBD" || epochTimeStamp == 0 {
+				continue
+			}
+			match := Match{team1: team1Name, team2: team2Name, format: formatText, timestamp: epochTimeStamp}
+			if containsMatch(matches, match) {
+				continue
+			}
+			matches = append(matches, match)
+		}
+	}
+
+	response := "Upcoming matches:\n"
+	if len(matches) == 0 {
+		response = "No Upcoming Matches"
+	} else {
+		// Iterate over each match and add it to the response
+		for _, match := range matches {
+			response += fmt.Sprintf("- %s VS %s (%s): <t:%d>\n", match.team1, match.team2, match.format, match.timestamp)
+		}
+	}
+	discord.ChannelMessageSend(message.ChannelID, response)
+}
+
+// Function to scrape liquipedia and get the results table present on the tournament page
+// Preconditions: None
+// Postconditions: Returns Root pointer for a soup tree that points to the results table
 func getOverviewTable() soup.Root {
 	url := LiquipediaURL
 	if Round == "opening" {
@@ -492,9 +593,9 @@ func getOverviewTable() soup.Root {
 	return table
 }
 
-//Function to get a list of valid team names for this round of the tournament and each teams score
-//Preconditions: None
-//Postconditions: Returns a map of the form teamName : score
+// Function to get a list of valid team names for this round of the tournament and each teams score
+// Preconditions: None
+// Postconditions: Returns a map of the form teamName : score
 func getTeams() map[string]string {
 	//Iterate over each row in the table. We start from index 1 not 0 as the first row just contains th not td and not skipping it causes more issues than it solves
 	table := getOverviewTable()
@@ -525,9 +626,9 @@ func contains(slice []string, inputString string) bool {
 	return false
 }
 
-//Function to check if a string starts with a given substring
-//Preconditions: Recieves an input string and a substring
-//Postconditions: Returns true if the substring is at the start of the string, else returns false
+// Function to check if a string starts with a given substring
+// Preconditions: Recieves an input string and a substring
+// Postconditions: Returns true if the substring is at the start of the string, else returns false
 func startsWith(inputString string, substring string) bool {
 	//Check if the substring is present in the input string
 	if !strings.Contains(inputString, substring) {
@@ -540,4 +641,16 @@ func startsWith(inputString string, substring string) bool {
 		}
 	}
 	return true
+}
+
+// Function to check if a slice of Match contains a specific match
+// Preconditions: Recieves a slice of Match and a Match
+// Postconditions: Returns true if the match is in the slice or false if it is not
+func containsMatch(matches []Match, match Match) bool {
+	for _, m := range matches {
+		if m.team1 == match.team1 && m.team2 == match.team2 && m.format == match.format && m.timestamp == match.timestamp {
+			return true
+		}
+	}
+	return false
 }
