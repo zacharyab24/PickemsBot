@@ -13,6 +13,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -88,8 +89,7 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	case startsWith(message.Content, "$help"):
 		discord.ChannelMessageSend(message.ChannelID, getHelpMessage())
 	case startsWith(message.Content, "$leaderboard"):
-		discord.ChannelMessageSend(message.ChannelID, getLeaderboard())
-		discord.ChannelMessageSend(message.ChannelID, "this feature hasn't been implemented yet")
+		getLeaderboard(discord, message)
 	case startsWith(message.Content, "$set"):
 		setPredictions(discord, message)
 	case startsWith(message.Content, "$teams"):
@@ -122,7 +122,7 @@ func checkPredictions(discord *discordgo.Session, message *discordgo.MessageCrea
 	}
 	//Check if there are results currently stored in the db, if there is, check if we need to update them
 	results := getResults(discord, message)
-	response, _ := calculateScore(result, results)
+	response, _, _ := calculateScore(result, results)
 	discord.ChannelMessageSend(message.ChannelID, response)
 }
 
@@ -134,9 +134,53 @@ func getHelpMessage() string {
 	return message
 }
 
-func getLeaderboard() string {
-	response := ""
-	return response
+func getLeaderboard(discord *discordgo.Session, message *discordgo.MessageCreate) {
+	//Get all users predictions from db
+	coll := Client.Database("user_pickems").Collection(fmt.Sprintf("%s_%s_predictions", TournamentName, Round))
+	opts := options.Find()
+
+	cursor, err := coll.Find(context.TODO(), opts)
+	if err != nil {
+		log.Panic(err)
+		discord.ChannelMessageSend(message.ChannelID, "An unexpected error has occured")
+		return
+	}
+	var results []UserPrediction
+	if err = cursor.All(context.TODO(), &results); err != nil {
+		log.Panic(err)
+		discord.ChannelMessageSend(message.ChannelID, "An unexpected error has occured")
+		return
+	}
+
+	//Struct that defines a user for the leaderboard
+	type User struct {
+		name string
+		succeeded int
+		failed int
+	}
+	
+	teamResults := getResults(discord, message)
+	var leaderboard []User
+
+	//Iterate through each user's predictions fetched from the db and append the required information to the leaderboard slice
+	for _, result := range results {
+		_, succeeded, failed := calculateScore(result, teamResults)	
+		leaderboard = append(leaderboard, User{name: result.UserName, succeeded: succeeded, failed: failed})
+	}
+
+	//Order the leaderboard in decesending order so that the user with the highest score appear at the top. Note score = successes - failures and there is no tie breaker
+	sort.Slice(leaderboard, func(i, j int) bool {
+		return (leaderboard[i].succeeded -  leaderboard[i].failed) > (leaderboard[j].succeeded -  leaderboard[j].failed)
+	})
+
+	//Generate response string
+	response := "The users with the best pickems are:\n"
+	for i, user := range leaderboard {
+		response += fmt.Sprintf("%d. %s, %d successes, %d failures\n", i, user.name, user.succeeded, user.failed)
+	}
+
+	//Finally we can send the response string to the discord channel
+	discord.ChannelMessageSend(message.ChannelID, response)
 }
 
 // Function to return valid teams list to the
@@ -327,8 +371,8 @@ func getResults(discord *discordgo.Session, message *discordgo.MessageCreate) Re
 
 //Function that calculates a user's score and generates a response to be sent in discord
 //Preconditions: recieves UserPrediction struct of a player's predictions
-//Postconditions: returns a string containing the response message and int containing the player's score (successes - losses)
-func calculateScore(pred UserPrediction, results Results) (string, int) {
+//Postconditions: returns a string containing the response message, int containing the players successes and int containing the player's losses
+func calculateScore(pred UserPrediction, results Results) (string, int, int) {
 	//Comparisons for checks
 	succeeded := 0
     pending := 0
@@ -421,8 +465,7 @@ func calculateScore(pred UserPrediction, results Results) (string, int) {
 		response += fmt.Sprintf("%s: %s %s\n", team, score, result)
 	}
 	response += fmt.Sprintf("\nSucceeded: %d, Failed: %d, Pending: %d", succeeded, failed, pending)
-	score := succeeded - failed
-	return response, score
+	return response, succeeded, failed
 }
 
 //Function to scrape liquipedia and get the results table present on the tournament page
