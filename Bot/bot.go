@@ -42,7 +42,6 @@ type UserPrediction struct {
 	Lose [2]string `bson:"lose,omitempty"`
 }
 
-
 type Results struct {
 	Round string `bson:"Round,omitempty"`
 	TTL time.Time `bson:"TTL,omitempty"`
@@ -53,6 +52,7 @@ type Match struct {
 	team1 string
 	team2 string
 	format string
+	link string
 	timestamp int
 }
 
@@ -544,12 +544,21 @@ func getUpcomingMatches(discord *discordgo.Session, message *discordgo.MessageCr
 			}
 			epochTimeStamp = i
 		} 		
+		
 		tournamentName := game.Find("div", "class", "text-nowrap").Find("a").Text()
 		if tournamentName == "PW Shanghai Major 2024" { // TODO: replace this hardcoded value
 			if formatText == "TBD" || epochTimeStamp == 0 {
 				continue
 			}
-			match := Match{team1: team1Name, team2: team2Name, format: formatText, timestamp: epochTimeStamp}
+			twitchStream := timeUntil.FindNextSibling()
+			link := ""
+			if twitchStream.Error == nil {
+				link = twitchStream.Attrs()["href"]
+				link = strings.Replace(link, "/counterstrike/Special:Stream/twitch", "", 1)
+				link = strings.ToLower(link)
+				link = "<https://www.twitch.tv" + link + ">"
+			}
+			match := Match{team1: team1Name, team2: team2Name, format: formatText, link: link, timestamp: epochTimeStamp}
 			if containsMatch(matches, match) {
 				continue
 			}
@@ -563,7 +572,7 @@ func getUpcomingMatches(discord *discordgo.Session, message *discordgo.MessageCr
 	} else {
 		// Iterate over each match and add it to the response
 		for _, match := range matches {
-			response += fmt.Sprintf("- %s VS %s (%s): <t:%d>\n", match.team1, match.team2, match.format, match.timestamp)
+			response += fmt.Sprintf("- %s VS %s (%s): <t:%d>: %s\n", match.team1, match.team2, match.format, match.timestamp, match.link)
 		}
 	}
 	discord.ChannelMessageSend(message.ChannelID, response)
