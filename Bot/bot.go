@@ -4,6 +4,9 @@
  * Last modified: November 24th, 2024
  */
 
+/* TODO:
+ * Update to work with finals bot
+ */
 package bot
 
 import (
@@ -333,12 +336,19 @@ func getResults(discord *discordgo.Session, message *discordgo.MessageCreate) Re
 		if errors.Is(results_err, mongo.ErrNoDocuments) {
 			fmt.Println("No results for this round stored, adding to db")
 			teams = getTeams()
+			TTL := time.Now().Add(15 * time.Minute)
+
+			//Update the results to be returned
+			results.Round = Round
+			results.TTL = TTL
+			results.Teams = teams
+
 			//Convert map to Bson and update results in db
 			bsonTeams := bson.M{}
 			for key, value := range teams {
 				bsonTeams[key] = value
 			}
-			res, err := coll.InsertOne(context.TODO(), bson.M{"Round": Round, "TTL": time.Now().Add(15 * time.Minute), "teams": bsonTeams})
+			res, err := coll.InsertOne(context.TODO(), bson.M{"Round": Round, "TTL": TTL, "teams": bsonTeams})
 			if err != nil {
 				log.Panic(err)
 				discord.ChannelMessageSend(message.ChannelID, "An unexpected error has occured")
@@ -355,6 +365,8 @@ func getResults(discord *discordgo.Session, message *discordgo.MessageCreate) Re
 			fmt.Println("Cache is outdated... updating")
 			// Update stored value
 			teams = getTeams()
+			//Update results to return
+			results.Teams = teams
 			//Convert map to Bson and update results in db
 			bsonTeams := bson.M{}
 			for key, value := range teams {
@@ -375,7 +387,6 @@ func getResults(discord *discordgo.Session, message *discordgo.MessageCreate) Re
 			} else {
 				fmt.Printf("Stored results updated with ID%v\n", res.UpsertedID)
 			}
-			
 		}
 	}
 	return results
@@ -546,7 +557,7 @@ func getUpcomingMatches(discord *discordgo.Session, message *discordgo.MessageCr
 		} 		
 		
 		tournamentName := game.Find("div", "class", "text-nowrap").Find("a").Text()
-		if tournamentName == "PW Shanghai Major 2024" { // TODO: replace this hardcoded value
+		if tournamentName == TournamentName { // TODO: replace this hardcoded value
 			if formatText == "TBD" || epochTimeStamp == 0 {
 				continue
 			}
@@ -588,7 +599,7 @@ func getOverviewTable() soup.Root {
 	} else if Round == "elimination" {
 		url += "/Elimination_Stage"
 	} else if Round == "playoffs" {
-		url += "Playoff_Stage"
+		url += "/Playoff_Stage"
 	} else {
 		fmt.Println("Invalid round specified. Input should be 'opening', 'elimination' or 'playoffs'")
 	}
