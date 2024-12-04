@@ -29,6 +29,7 @@ func main() {
 	roundPtr := flag.String("round", "opening", "Round of tournament (opening, elimination, playoffs)")
 	tournamentNamePtr := flag.String("tournamentName", "ShanghaiMajor2024", "Tournament name, e.g. ShanghaiMajor2024")
 	urlPtr := flag.String("url", "https://liquipedia.net/counterstrike/Perfect_World/Major/2024/Shanghai", "Liquipedia Base URL: e.g. https://liquipedia.net/counterstrike/PGL/2024/Copenhagen")
+	testPtr := flag.String("test", "false", "Use main or test bot: takes true or false as argument")
 
 	flag.Parse()
 
@@ -37,7 +38,15 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
-	discord_token := os.Getenv("DISCORD_PROD_TOKEN")
+	var discordToken string
+	if *testPtr == "false" { //Load production bot token
+		discordToken = os.Getenv("DISCORD_PROD_TOKEN")
+	} else if *testPtr == "true" {
+		discordToken = os.Getenv("DISCORD_BETA_TOKEN")
+	} else {
+		fmt.Println("Invalid \"test\" flag. Should be true or false")
+	}
+	
 	uri := os.Getenv("MONGO_PROD_URI")
 
 	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
@@ -60,7 +69,7 @@ func main() {
 
 	//Init bot and run for tournament style
 	if *formatPtr == "swiss" || *formatPtr == "finals" {
-		bot.BotToken = discord_token
+		bot.BotToken = discordToken
 		bot.Format = *formatPtr
 		bot.Round = *roundPtr
 		bot.TournamentName = *tournamentNamePtr

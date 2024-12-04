@@ -6,6 +6,8 @@
 
 /* TODO:
  * Update to work with finals bot
+ * Testing with check for finals. Can't test this as dont have the required data. Can check when finals teams become available
+ * Convert team names to lower before putting the the db or checking. Removed this from getValidTeams() so it looked nicer for user
  */
 package bot
 
@@ -26,6 +28,7 @@ import (
 	"github.com/go-andiamo/splitter"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -43,6 +46,9 @@ type UserPrediction struct {
 	Win [2]string `bson:"win,omitempty"`
 	Advance [6]string `bson:"advance,omitempty"`
 	Lose [2]string `bson:"lose,omitempty"`
+	Semi [4]string `bson:"semi,omitempty"`
+	Final [2]string `bson:"gf,omitempty"`
+	Winner string `bson:"winner,omitempty"`
 }
 
 type Results struct {
@@ -58,6 +64,13 @@ type Match struct {
 	link string
 	timestamp int
 }
+
+type FinalsMatch struct {
+	team1 string
+	team1Score int
+	team2 string
+	team2Score int
+} 
 
 func checkNilErr(e error) {
 	if e != nil {
@@ -219,13 +232,16 @@ func setPredictions(discord *discordgo.Session, message *discordgo.MessageCreate
 	spaceSplitter, _ := splitter.NewSplitter(' ', splitter.DoubleQuotes, splitter.LeftRightDoubleDoubleQuotes) //we use splitter here instead of go's build in splitter because now we can have team names that contain spaces e.g. "Faze Clan" recognised as one team not two
 	msg, _ := spaceSplitter.Split(message.Content)
 
-	if len(msg) != 11 { //If there is not the required amount of words, return an error
+	if (len(msg) != 11 && (Round == "opening" || Round == "elimination")) || (len(msg) != 8 && Round == "playoffs") { //If there is not the required amount of words, return an error
 		discord.ChannelMessageSend(message.ChannelID, "Incorrect number of teams were supplied. Please try again")
 		return
 	}
 
 	//Look up the teams that are competing in this round so we can validate a user has inputted valid team names
 	validTeams := getValidTeams()
+	for i := range(validTeams) {
+		validTeams[i] = strings.ToLower(validTeams[i])
+	}
 	var invalidTeams []string
 
 	//Convert user predictions to lower case as this is how they are stored in the db and makes checks easier
@@ -250,23 +266,50 @@ func setPredictions(discord *discordgo.Session, message *discordgo.MessageCreate
 		discord.ChannelMessageSend(message.ChannelID, returnString)
 		return
 	}
-
-	//Create lists for each section to be stored in the db
+	
+	//Declare variables for different round types
+	//There is probably a better solution for this, but thisis what we are doing for now
 	var win [2]string
-	win[0] = msg[1]
-	win[1] = msg[2]
-
 	var lose [2]string
-	lose[0] = msg[9]
-	lose[1] = msg[10]
-
 	var advance [6]string
-	for i := 0; i <= 5; i++ {
-		advance[i] = msg[i+3]
-	}
+	var semi [4]string
+	var gf [2]string
+	var winner string
 
 	coll := Client.Database("user_pickems").Collection(fmt.Sprintf("%s_%s_predictions", TournamentName, Round))
+	//Swiss style predictions
+	if Round == "opening" || Round == "elimination" {
+		//Create lists for each section to be stored in the db	
+		win[0] = msg[1]
+		win[1] = msg[2]
 
+		lose[0] = msg[9]
+		lose[1] = msg[10]
+
+		for i := 0; i <= 5; i++ {
+			advance[i] = msg[i+3]
+		}
+
+	// Finals ladder style predictions
+	} else if Round == "playoffs" {
+		// The format for this can be a bit confusing, thisis the system I came up with in the old bot
+		// Input should be $set [team1] [team2] ... [team7]
+		// teams 1-4: win the qf and make it to the semis: semi [4]string
+		// teams 5-6 win the semis and make it to the gf: gf [2]string 
+		// team 7 wins the tornament: winner string
+		for i := 0; i < 4; i++ {
+			semi[i] = msg[i+1]
+		}
+		gf[0] = msg[5]
+		gf[1] = msg[6]
+		winner = msg[7]
+	} else {
+		fmt.Println("Invalid round type")
+		discord.ChannelMessageSend(message.ChannelID, "An error has occured")
+		return
+	}		
+
+	//Check db
 	opts := options.FindOne()
 	var result bson.M
 	err := coll.FindOne(
@@ -277,7 +320,16 @@ func setPredictions(discord *discordgo.Session, message *discordgo.MessageCreate
 	if err != nil {
 		// ErrNoDocuments means that the user does not have their predictions stored in the db
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			res, err := coll.InsertOne(context.TODO(), bson.D{{Key: "userId", Value: message.Author.ID}, {Key: "userName", Value: message.Author.Username}, {Key: "win", Value: win}, {Key: "advance", Value: advance}, {Key: "lose", Value: lose}})
+			var data primitive.D
+
+			if (Round == "opening" || Round == "elimination") {
+				data = bson.D{{Key: "userId", Value: message.Author.ID}, {Key: "userName", Value: message.Author.Username}, {Key: "win", Value: win}, {Key: "advance", Value: advance}, {Key: "lose", Value: lose}}
+
+			} else if (Round == "playoffs") {
+				data = bson.D{{Key: "userId", Value: message.Author.ID}, {Key: "userName", Value: message.Author.Username}, {Key: "semi", Value: semi}, {Key: "gf", Value: gf}, {Key: "winner", Value: winner}}
+			}
+
+			res, err := coll.InsertOne(context.TODO(), data)
 			if err != nil {
 				log.Panic(err)
 				discord.ChannelMessageSend(message.ChannelID, "An unexpected error has occured")
@@ -291,7 +343,13 @@ func setPredictions(discord *discordgo.Session, message *discordgo.MessageCreate
 	} else {
 		// This means the user already has stored pickems, and we should update that record instead of inserting a new one
 		filter := bson.D{{Key: "userId", Value: message.Author.ID}}
-		update := bson.D{{Key: "$set", Value: bson.D{{Key: "win", Value: win}, {Key: "advance", Value: advance}, {Key: "lose", Value: lose}}}}
+		var data primitive.D
+		if (Round == "opening" || Round == "elimination") {
+			data = bson.D{{Key: "win", Value: win}, {Key: "advance", Value: advance}, {Key: "lose", Value: lose}}
+		} else if (Round == "playoffs") {
+			data = bson.D{{Key: "semi", Value: semi}, {Key: "gf", Value: gf}, {Key: "winner", Value: winner}}
+		}
+		update := bson.D{{Key: "$set", Value: data}}
 		res, err := coll.UpdateOne(context.TODO(), filter, update)
 		if err != nil {
 			discord.ChannelMessageSend(message.ChannelID, "An unexpected error has occured")
@@ -302,19 +360,32 @@ func setPredictions(discord *discordgo.Session, message *discordgo.MessageCreate
 	}
 }
 
+
 // Function to get a list of teams competing in the current round of the tournament
 // Preconditions: LiquipediaURL is valid and the host is online
 // Postconditions: Returns string slice containing list of competing teams
 func getValidTeams() []string {
-	table := getOverviewTable()
-	rows := table.FindAll("tr")
-	//Iterate over each row in the table. We start from index 1 not 0 as the first row just contains th not td and not skipping it causes more issues than it solves
 	var teams []string
-	for _, row := range rows[1:] {
-		team := row.Find("span", "class", "team-template-text").Find("a").Text()
-		teams = append(teams, strings.ToLower(team))
+	if Round == "opening" || Round == "elimination" {
+		table := getOverviewTable()
+		rows := table.FindAll("tr")
+		//Iterate over each row in the table. We start from index 1 not 0 as the first row just contains th not td and not skipping it causes more issues than it solves
+		for _, row := range rows[1:] {
+			team := row.Find("span", "class", "team-template-text").Find("a").Text()
+			teams = append(teams, team)
+		}
+		return teams
+	} else if Round == "playoffs" {
+		qf, _, _ := getFinalsResults()
+		for match := range qf {
+			teams = append(teams, qf[match].team1)
+			teams = append(teams, qf[match].team2)
+		}
+		return teams
+	} else {
+		fmt.Println("Invalid format specified")
 	}
-	return teams
+	return []string{}
 }
 
 // Function to check if the results stored in the db exist, are out of date, or fine to use
@@ -402,91 +473,165 @@ func calculateScore(pred UserPrediction, results Results) (string, int, int) {
     failed := 0
 
 	response := fmt.Sprintf("%s's picks are:\n", pred.UserName)
-
 	teams := results.Teams
 
-	//3-0 Calculation
-	response += "[3-0]\n"
-	for i := range pred.Win {
-		team := pred.Win[i]
-		score := teams[team]
-		wins, err := strconv.Atoi(string(score[0]))
-		if err != nil {
-			log.Panic(err)
-		}
-		loses, err := strconv.Atoi(string(score[2]))
-		if err != nil {
-			log.Panic(err)
+	if (Round == "opening" || Round == "elimination") {	
+		//3-0 Calculation
+		response += "[3-0]\n"
+		for i := range pred.Win {
+			team := pred.Win[i]
+			score := teams[team]
+			wins, err := strconv.Atoi(string(score[0]))
+			if err != nil {
+				log.Panic(err)
+			}
+			loses, err := strconv.Atoi(string(score[2]))
+			if err != nil {
+				log.Panic(err)
+			}
+
+			var result string
+			if loses >= 1 {
+				result = "[Failed]"
+				failed += 1
+			} else if wins != 3 {
+				result = "[Pending]" 
+				pending += 1
+			} else {
+				result = "[Succeeded]"
+				succeeded += 1
+			}
+			response += fmt.Sprintf("%s: %s %s\n", team, score, result)
 		}
 
-		var result string
-		if loses >= 1 {
-			result = "[Failed]"
-			failed += 1
-		} else if wins != 3 {
-			result = "[Pending]" 
-			pending += 1
+		//3-1/2 Calculation
+		response += "[3-1, 3-2]\n"
+		for i := range pred.Advance {
+			team := pred.Advance[i]
+			score := teams[team]
+			wins, err := strconv.Atoi(string(score[0]))
+			if err != nil {
+				log.Panic(err)
+			}
+			loses, err := strconv.Atoi(string(score[2]))
+			if err != nil {
+				log.Panic(err)
+			}
+
+			var result string
+			if loses == 3 || (wins == 3 && loses == 0) {
+				result = "[Failed]"
+				failed += 1
+			} else if wins < 3 {
+				result = "[Pending]" 
+				pending += 1
+			} else {
+				result = "[Succeeded]"
+				succeeded += 1
+			}
+			response += fmt.Sprintf("%s: %s %s\n", team, score, result)
+		}
+			//0-3 Calculation
+		response += "[0-3]\n"
+		for i := range pred.Lose {
+			team := pred.Lose[i]
+			score := teams[team]
+			wins, err := strconv.Atoi(string(score[0]))
+			if err != nil {
+				log.Panic(err)
+			}
+			loses, err := strconv.Atoi(string(score[2]))
+			if err != nil {
+				log.Panic(err)
+			}
+
+			var result string
+			if wins >= 1 {
+				result = "[Failed]"
+				failed += 1
+			} else if loses != 3 {
+				result = "[Pending]" 
+				pending += 1
+			} else {
+				result = "[Succeeded]"
+				succeeded += 1
+			}
+			response += fmt.Sprintf("%s: %s %s\n", team, score, result)
+		}
+	} else if Round == "playoffs" {
+		// teams is a freqency map of each team
+		// if frequency is 1, the team made it to the qf
+		// if frequency is 2, the team made it to the sf
+		// if frequency is 3, teh team made it to the gf
+		// need an additional check to check for gf winner
+
+		// user predictions are 1-4: semis, 5-6: gf, 7: winner
+		// success if freq [1-4] is >= 2
+		// success if freq [5-6] is == 3
+		// success if freq [7] is == 4
+		
+		//Keep track of the number of matches that have been played. Use this to see if a result is pending
+		freqTotal := 0
+		for i := range teams {
+			freq, err := strconv.Atoi(teams[i])
+			if err != nil {
+				log.Panic(err)
+			}
+			freqTotal += freq
+		}
+
+		for i := range pred.Semi {
+			response += fmt.Sprintf("%s to make it to the Semi Finals", pred.Semi[i])
+			freq, err := strconv.Atoi(teams[pred.Semi[i]])
+			if err != nil {
+				log.Panic(err)
+			}
+			if freq >= 2 {
+				succeeded++
+				response += " [Succeeded]\n"
+			} else if freqTotal < 12 {
+				pending++
+				response += " [Pending]\n"
+			} else {
+				failed++
+				response += " [Failed]\n"
+			}
+		}
+
+		for i := range pred.Final {
+			response += fmt.Sprintf("%s to make it to the Grand Final", pred.Final[i])
+			freq, err := strconv.Atoi(teams[pred.Final[i]])
+			if err != nil {
+				log.Panic(err)
+			}
+			if freq >= 3 {
+				succeeded++
+				response += " [Succeeded]\n"
+			} else if freqTotal < 14 {
+					pending++
+					response += " [Pending]\n"
+			} else {
+				failed++
+				response += " [Failed]\n"
+			}
+		}
+
+		response += fmt.Sprintf("%s to win %s", pred.Winner, TournamentName)
+		if teams[pred.Winner] == "4" {
+			succeeded++
+			response += " [Succeeded]\n"
+		} else if freqTotal < 15 {
+			pending++
+			response += " [Pending]\n"
 		} else {
-			result = "[Succeeded]"
-			succeeded += 1
-		}
-		response += fmt.Sprintf("%s: %s %s\n", team, score, result)
-	}
-
-	//3-1/2 Calculation
-	response += "[3-1, 3-2]\n"
-	for i := range pred.Advance {
-		team := pred.Advance[i]
-		score := teams[team]
-		wins, err := strconv.Atoi(string(score[0]))
-		if err != nil {
-			log.Panic(err)
-		}
-		loses, err := strconv.Atoi(string(score[2]))
-		if err != nil {
-			log.Panic(err)
+			failed++
+			response += " [Failed]\n"
 		}
 
-		var result string
-		if loses == 3 || (wins == 3 && loses == 0) {
-			result = "[Failed]"
-			failed += 1
-		} else if wins < 3 {
-			result = "[Pending]" 
-			pending += 1
-		} else {
-			result = "[Succeeded]"
-			succeeded += 1
-		}
-		response += fmt.Sprintf("%s: %s %s\n", team, score, result)
+	} else {
+		response = "An error has occured"
 	}
-		//0-3 Calculation
-	response += "[0-3]\n"
-	for i := range pred.Lose {
-		team := pred.Lose[i]
-		score := teams[team]
-		wins, err := strconv.Atoi(string(score[0]))
-		if err != nil {
-			log.Panic(err)
-		}
-		loses, err := strconv.Atoi(string(score[2]))
-		if err != nil {
-			log.Panic(err)
-		}
-
-		var result string
-		if wins >= 1 {
-			result = "[Failed]"
-			failed += 1
-		} else if loses != 3 {
-			result = "[Pending]" 
-			pending += 1
-		} else {
-			result = "[Succeeded]"
-			succeeded += 1
-		}
-		response += fmt.Sprintf("%s: %s %s\n", team, score, result)
-	}
+	
 	response += fmt.Sprintf("\nSucceeded: %d, Failed: %d, Pending: %d", succeeded, failed, pending)
 	return response, succeeded, failed
 }
@@ -598,10 +743,8 @@ func getOverviewTable() soup.Root {
 		url += "/Opening_Stage"
 	} else if Round == "elimination" {
 		url += "/Elimination_Stage"
-	} else if Round == "playoffs" {
-		url += "/Playoff_Stage"
 	} else {
-		fmt.Println("Invalid round specified. Input should be 'opening', 'elimination' or 'playoffs'")
+		fmt.Println("Invalid round specified. Input should be 'opening' or 'elimination'")
 	}
 
 	res, err := soup.Get(url)
@@ -613,25 +756,115 @@ func getOverviewTable() soup.Root {
 	return table
 }
 
+// Function to scrape the results ladder for the playoff stage
+// Preconditions: None
+// Postconditions: Returns three FinalsMatch slices: quarter finals, semi finals and grand final 
+func getFinalsResults() ([]FinalsMatch, []FinalsMatch, []FinalsMatch) {
+	url := LiquipediaURL + "/Playoff_Stage"
+	res, err := soup.Get(url)
+	if err != nil {
+		log.Panic(err)
+	}
+	page := soup.HTMLParse(res)
+	teamCode := page.FindAll("span", "class", "hidden-xs")
+	var teams []string 
+	var scores []string
+
+	scoresCode := page.FindAll("div", "class", "brkts-opponent-score-inner")
+	for team := range teamCode {
+		teams = append(teams, teamCode[team].Text())
+	}
+
+	for score := range scoresCode {
+		bTag := scoresCode[score].Find("b")
+		if bTag.Error == nil {
+			res = bTag.Text()
+			if res == "" {
+				res = "0"
+			}
+		} else {
+			res = scoresCode[score].Text()
+		}
+		scores = append(scores, res)
+	}
+
+	var qf []FinalsMatch
+	var sf []FinalsMatch
+	var gf []FinalsMatch
+
+	for i := range teams {
+		//Skip every second iteration
+		if i%2==1 {
+			continue
+		}
+		team1Score, _ := strconv.Atoi(scores[i])
+		team2Score, _ := strconv.Atoi(scores[i+1])
+		if contains([]string{"1", "2", "3", "4", "7", "8", "9", "10"}, strconv.Itoa(i+1)) {
+			qf = append(qf, FinalsMatch{team1: teams[i], team2: teams[i+1], team1Score: team1Score, team2Score: team2Score})
+		} else if contains([]string{"5", "6", "11", "12"}, strconv.Itoa(i+1)) {
+			sf = append(sf, FinalsMatch{team1: teams[i], team2: teams[i+1], team1Score: team1Score, team2Score: team2Score})
+		} else if contains([]string{"13", "14"}, strconv.Itoa(i+1)) {
+			gf = append(gf, FinalsMatch{team1: teams[i], team2: teams[i+1], team1Score: team1Score, team2Score: team2Score})
+		}
+	}
+	return qf, sf, gf
+}
+
 // Function to get a list of valid team names for this round of the tournament and each teams score
 // Preconditions: None
 // Postconditions: Returns a map of the form teamName : score
 func getTeams() map[string]string {
-	//Iterate over each row in the table. We start from index 1 not 0 as the first row just contains th not td and not skipping it causes more issues than it solves
-	table := getOverviewTable()
-	rows := table.FindAll("tr")
 	teams := make(map[string]string)
-	for _, row := range rows[1:] {
-		team := row.Find("span", "class", "team-template-text").Find("a").Text()
-		team = strings.ToLower(team)
-		score := row.Find("b").Text()
-		if score == "-" {
-			score = "0-0"
+	if Round == "opening" || Round == "elimination" {
+		fmt.Println("swiss")
+		table := getOverviewTable()
+		rows := table.FindAll("tr")
+		
+		//Iterate over each row in the table. We start from index 1 not 0 as the first row just contains th not td and not skipping it causes more issues than it solves
+		for _, row := range rows[1:] {
+			team := row.Find("span", "class", "team-template-text").Find("a").Text()
+			team = strings.ToLower(team)
+			score := row.Find("b").Text()
+			if score == "-" {
+				score = "0-0"
+			}
+			teams[team] = score
 		}
-		teams[team] = score
+	} else if Round == "playoffs" {
+		fmt.Println("playoffs")
+		qf, sf, gf := getFinalsResults()
+		freqMap := make(map[string] int)
+		for _, match := range qf {
+			freqMap[strings.ToLower(match.team1)]++
+			freqMap[strings.ToLower(match.team2)]++
+		}
+		for _, match := range sf {
+			freqMap[strings.ToLower(match.team1)]++
+			freqMap[strings.ToLower(match.team2)]++
+		}
+		for _, match := range gf {
+			freqMap[strings.ToLower(match.team1)]++
+			freqMap[strings.ToLower(match.team2)]++
+			
+			// If the match has finished, update the frequency map so the winner's frequency is 4
+			// Since the final match is bo3, we check if it has finished by summing the two scores and seeing if they are 3
+			if match.team1Score + match.team2Score == 3 {
+				if match.team1Score > match.team2Score {
+					freqMap[strings.ToLower(match.team1)]++
+				} else {
+					freqMap[strings.ToLower(match.team2)]++
+				}
+			}
+		}
+
+		for i := range freqMap {
+			teams[i] = strconv.Itoa(freqMap[i])
+		}
+	} else {
+		fmt.Println("other")
+		fmt.Println("In invalid round type has been given")
 	}
 	return teams
-
 }
 
 // Function to check if a slice contains an input string
