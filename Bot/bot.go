@@ -581,7 +581,7 @@ func calculateScore(pred UserPrediction, results Results) (string, int, int) {
 		}
 
 		for i := range pred.Semi {
-			response += fmt.Sprintf("%s to make it to the Semi Finals", pred.Semi[i])
+			response += fmt.Sprintf("- %s to make it to the Semi Finals", pred.Semi[i])
 			freq, err := strconv.Atoi(teams[pred.Semi[i]])
 			if err != nil {
 				log.Panic(err)
@@ -599,7 +599,7 @@ func calculateScore(pred UserPrediction, results Results) (string, int, int) {
 		}
 
 		for i := range pred.Final {
-			response += fmt.Sprintf("%s to make it to the Grand Final", pred.Final[i])
+			response += fmt.Sprintf("- %s to make it to the Grand Final", pred.Final[i])
 			freq, err := strconv.Atoi(teams[pred.Final[i]])
 			if err != nil {
 				log.Panic(err)
@@ -616,7 +616,7 @@ func calculateScore(pred UserPrediction, results Results) (string, int, int) {
 			}
 		}
 
-		response += fmt.Sprintf("%s to win %s", pred.Winner, TournamentName)
+		response += fmt.Sprintf("- %s to win %s", pred.Winner, TournamentName)
 		if teams[pred.Winner] == "4" {
 			succeeded++
 			response += " [Succeeded]\n"
