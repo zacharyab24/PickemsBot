@@ -14,8 +14,7 @@ The following are discord messages that the bot will respond to. These can be in
 `$upcoming`: shows todays live and upcoming matches
 
 ## Usage
-To run this bot, first install packages: `pip install -r requirements.txt` \
-Run the bot with `python bot.py` \
+Run the bot with `go run main.go -format="<format>" -url="<url>` \
 Alternatively use the docker image, this will provide a persistant bot so if you close the terminal the bot doesn't go offline. \
 Build the docker image with `docker build -t pickems-bot .` \
 Run the container with `docker run pickems-bot`  
@@ -30,3 +29,7 @@ Added error handling for incorrect inputs
 Added upcoming match support. This may still be broken. I have to wait for today's matches to be finished to check \
 Updated help command
 Updated formatting for check command
+
+### v2.0
+Updated the code base to use go instead of python.
+Updated to work with upcoming Perfect World Shanghai Major as well as be more expandible for other tournaments through the use of command line flags (not user facing)
