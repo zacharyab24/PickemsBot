@@ -378,7 +378,6 @@ import (
 		 return teams
 	 } else if Round == "playoffs" {
 		 qf, _, _ := getFinalsResults()
-		 fmt.Println(qf)
 		 for match := range qf {
 			 teams = append(teams, qf[match].team1)
 			 teams = append(teams, qf[match].team2)
@@ -823,7 +822,6 @@ import (
  
 	 for i := range teams {
 		 //Skip every second iteration
-		 fmt.Printf("%d: %s\n", i, teams[i])
 		 if i%2==1 {
 			 continue
 		 }
