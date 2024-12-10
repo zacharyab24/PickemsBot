@@ -578,6 +578,9 @@ import (
 			 if err != nil {
 				 log.Panic(err)
 			 }
+			 if i == "tbd" {
+				continue
+			 }
 			 freqTotal += freq
 		 }
  
