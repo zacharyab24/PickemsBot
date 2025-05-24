@@ -124,10 +124,12 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	//case startsWith(message.Content, "$hello"):
 	//	discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Hello %s!", message.Author.Username))
 	//	discord.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Hello %s!", message.Author.GlobalName))
-	case message.Author.Username == "manzy":
-		discord.ChannelMessageSend(message.ChannelID, "KYS")
-	case message.Author.Username == "dyslekixmokne":
-		discord.ChannelMessageSend(message.ChannelID, "Internal Server Error")
+	case startsWith(message.Content, "$"):
+		if message.Author.Username == "manzy" {
+			discord.ChannelMessageSend(message.ChannelID, "KYS")
+		} else if message.Author.Username == "dyslekixmokne" {
+			discord.ChannelMessageSend(message.ChannelID, "Internal Server Error")
+		}
 	}
 }
 
