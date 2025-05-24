@@ -129,6 +129,8 @@ func newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 			discord.ChannelMessageSend(message.ChannelID, "KYS")
 		} else if message.Author.Username == "dyslekixmokne" {
 			discord.ChannelMessageSend(message.ChannelID, "Internal Server Error")
+		} else {
+			discord.ChannelMessageSend(message.ChannelID, "The bot is currently under maintenance")
 		}
 	}
 }
