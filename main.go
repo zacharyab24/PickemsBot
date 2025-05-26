@@ -14,6 +14,7 @@ import (
 	"log"
 	"os"
 
+	"pickems-bot/Api"
 	bot "pickems-bot/Bot"
 
 	"github.com/joho/godotenv"
@@ -47,10 +48,14 @@ func main() {
 		fmt.Println("Invalid \"test\" flag. Should be true or false")
 	}
 	
-	uri := os.Getenv("MONGO_PROD_URI")
+	// API Testing
+	ApiTesting()
 
+	// MongoDB Stuff
+	uri := os.Getenv("MONGO_PROD_URI")
 	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
 	opts := options.Client().ApplyURI(uri).SetServerAPIOptions(serverAPI)
+	
 	// Create a new client and connect to the server
 	client, err := mongo.Connect(context.TODO(), opts)
 	if err != nil {
@@ -78,5 +83,30 @@ func main() {
 		bot.Run()
 	} else {
 		fmt.Println("Invalid tournament style... exiting")
+	}
+}
+
+func ApiTesting() {
+	liquipediaDBApiKey := os.Getenv("LIQUIDPEDIADB_API_KEY")
+	page := "PGL/2024/Copenhagen/Opening_Stage"
+	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw", page)
+	
+	wikitext, err := Api.GetWikitext(url)
+	if err != nil {
+		fmt.Println("An error occured whilst fetching match2bracketid data: ", err)
+		return
+	}
+	ids := Api.ExtractMatchListId(wikitext)
+	apiRequestString := "https://api.liquipedia.net/api/v3/match"
+	jsonRequest, err := Api.GetLiquipediaMatchData(liquipediaDBApiKey, ids, apiRequestString)
+	if err != nil {
+		fmt.Println("An error occured whilst fetching match data")
+	}
+	scores, err := Api.GetScoresFromJson(jsonRequest)
+	if err != nil {
+		fmt.Println("An error occured whilst parsing match data")
+	}
+	for _, team := range scores {
+		fmt.Printf("%s: %s\n", team, scores[team])
 	}
 }
