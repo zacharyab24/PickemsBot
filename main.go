@@ -90,6 +90,7 @@ func main() {
 
 // This provides a sample of how the api functions work and how they can be incorporated into bot
 func ApiTesting() {
+	// Match Results
 	result, err := Api.GetMatchData("BLAST/Major/2025/Austin/Stage_1", "")
 	if err != nil {
 		fmt.Println(err)
@@ -106,5 +107,15 @@ func ApiTesting() {
         fmt.Println("Elimination tournament results:")
         Api.PrintTreeLevelOrder(r.TreeRoot)
     }
+
+	// Upcoming Matches
+	matches, err := Api.GetUpcomingMatchData("BLAST/Major/2025/Austin/Stage_1", "")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	for _, match := range matches {
+		fmt.Printf("%s VS %s (Bo%s): %d: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, match.StreamUrl)
+	}
 
 }

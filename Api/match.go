@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Interface for MatchResults. Used to unify the return types of swiss and single-elimination for GetMatchData
@@ -49,9 +50,17 @@ type MatchNode struct {
 	Right *MatchNode
 }
 
+type UpcomingMatch struct {
+	Team1 string
+	Team2 string
+	EpochTime int64
+	BestOf string
+	StreamUrl string
+}
+
 // Function to get match data for a given liquipedia page. Note that the wiki is hard coded to counterstrike. This is the main run function of this file
 // Preconditions: Receives string containing liquipedia page (such as BLAST/Major/2025/Austin/Stage_1) and optional params (such as  &section=24 (this is not used in majors))
-// Postconditions: None at this stage. TODO: Change return type to be uniform so db can be updated with returned information 
+// Postconditions: MatchResult interface containing either []MatchNode or map[string]string depending on the execution path, or error if it occurs
 func GetMatchData(page string, optionalParams string) (MatchResult, error){
 	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", page, optionalParams)
 	
@@ -74,13 +83,14 @@ func GetMatchData(page string, optionalParams string) (MatchResult, error){
 		fmt.Println("An error occured whilst fetching match data")
 		return nil, fmt.Errorf("error fetching match data from liquipedia api: %w", err)
 	}
-	
+
 	// Get match nodes from jsonResponse
 	matchNodes, err := GetMatchNodesFromJson(jsonResponse)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing match data: %w", err)
 	}
 
+	// Get return values depending on tournament type
 	switch format {
 	case "swiss":
 		scores, err := CalculateSwissScores(matchNodes)
@@ -101,6 +111,41 @@ func GetMatchData(page string, optionalParams string) (MatchResult, error){
 		return nil, fmt.Errorf("unknown format type: %s", format)
 	}
 }
+
+// Function to get data about upcoming matches. Returns a slice where each element contains: team1name, team2name, epoch time for match start, bestOf and twitch url
+// Preconditions: Receives string containing liquipedia page (such as BLAST/Major/2025/Austin/Stage_1) and optional params (such as  &section=24 (this is not used in majors))
+// Postconditions: Returns slice of UpcomingMatch, or error if it occurs
+func GetUpcomingMatchData(page string, optionalParams string) ([]UpcomingMatch, error){
+	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", page, optionalParams)
+	
+	// Get wikitext from url
+	wikitext, err := GetWikitext(url)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching match2bracketid data: %w", err)
+	}
+
+	// Get match2bracketid's from wikitext
+	ids, _, err := ExtractMatchListId(wikitext)
+	if err != nil {
+		return nil, fmt.Errorf("error extracting match list: %w", err)
+	}
+
+	// Get JSON match data filtered by match2bracketid
+	liquipediaDBApiKey := os.Getenv("LIQUIDPEDIADB_API_KEY")
+	jsonResponse, err := GetLiquipediaMatchData(liquipediaDBApiKey, ids)
+	if err != nil {
+		fmt.Println("An error occured whilst fetching match data")
+		return nil, fmt.Errorf("error fetching match data from liquipedia api: %w", err)
+	}
+
+	// Get upcoming matches (if any) from jsonResponse
+	upcomingMatches, err := GetUpcomingMatchesFromJson(jsonResponse)
+	if err != nil {
+		return nil, err
+	}
+	return upcomingMatches, nil
+}
+
 
 // Function to fetch raw wikitext from a given URL. This function does not perform any parsing on the text
 // Preconditions: Receives string that contains URL for liquipedia page we wish to parse (e.g. https://liquipedia.net/counterstrike/PGL/2024/Copenhagen/Opening_Stage?action=raw)
@@ -320,6 +365,33 @@ func GetMatchNodesFromJson(matchData string) ([]MatchNode, error) {
 	return matchNodes, nil
 }
 
+// Function to parse liquipedia match data json and return a slice of UpcomingMatch
+// Preconditions: Receives string containing json match data
+// Postconditons: Returns a slice containing MatchNodes or a error that occurs
+func GetUpcomingMatchesFromJson(matchData string) ([]UpcomingMatch, error) {
+	var root map[string]interface{}
+	if err := json.Unmarshal([]byte(matchData), &root); err != nil {
+		return nil, fmt.Errorf("error parsing JSON: %w", err)
+	}
+
+	rawResults, ok := root["result"].([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("missing or invalid 'result' field")
+	}
+
+	// Iterate over all values in the results list
+	var upcomingMatches []UpcomingMatch
+	for _, result := range rawResults {
+		match, err := ParseUpcomingMatches(result)
+		if err != nil {
+			fmt.Println("Error creating match node:",err)
+			return nil, err
+		}
+		upcomingMatches = append(upcomingMatches, *match)	
+	}
+	return upcomingMatches, nil
+}
+
 // Function to create match nodes from json input
 // Preconditions: Receives result interface
 // Postconditions: Returns MatchNode pointer populated with match data, or error that occur
@@ -503,6 +575,93 @@ func extractRoundAndMatchIds(id string) (round int, match int, err error) {
 	round, _ = strconv.Atoi(matches[1])
 	match, _ = strconv.Atoi(matches[2])
 	return round, match, nil
+}
+
+// Function to get upcoming matches from json data
+// Preconditions: Receives interface containing json match data
+// Postconditons: Returns slice of UpcomingMatch or an error that occurs
+func ParseUpcomingMatches(result interface{}) (*UpcomingMatch, error) {
+	match, ok := result.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("error mapping match interface")
+	}
+
+	// Check if a match is finished
+	finishedStr, ok := match["finished"].(float64)
+	if !ok {
+		return nil, fmt.Errorf("error mapping finished interface")
+	}
+	
+	// If match has finished, return nil for this node
+	if finishedStr != 0 {
+		return nil, nil
+	} 
+
+	// Get match date
+	matchDateStr, ok := match["date"].(string)
+	if !ok {
+		return nil, fmt.Errorf("error mapping match2id interface")
+	}
+	// Match dates are in GMT, need to convert to epoch
+	layout := "2006-01-02 15:04:05" 
+	parsedTime, err := time.Parse(layout, matchDateStr)
+	if err != nil {
+		return nil, err
+	}
+	epoch := parsedTime.Unix()
+
+	// Get Twitch URL
+	streamMap, ok := match["stream"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("error mapping stream to map")
+	}
+
+	twitchUrlRaw, ok := streamMap["twitch"]
+	if !ok {
+		return nil, fmt.Errorf("twitch key not found in stream")
+	}
+
+	twitchUrl, ok := twitchUrlRaw.(string)
+	if !ok {
+		return nil, fmt.Errorf("twitch url is not a string")
+	}
+
+	// Get bestOf
+	bestOfFloat, ok := match["bestof"].(float64)
+	if !ok {
+		return nil, fmt.Errorf("bestof field is not a float64")
+	}
+	bestOf := strconv.FormatFloat(bestOfFloat, 'f', -1, 64)
+
+	// Get team names
+	var teams [2]string
+	opponentsRaw, ok := match["match2opponents"].([]interface{})
+	if !ok || len(opponentsRaw) != 2 {
+		return nil, fmt.Errorf("opponentsRaw requires exactly 2 values, recieved %d", len(opponentsRaw))
+	}
+	for i := range opponentsRaw {
+		team, ok := opponentsRaw[i].(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("error mapping team interface")
+		}
+		name, ok := team["name"].(string)
+		if !ok {
+			return nil, fmt.Errorf("error mapping team name interface")
+		}
+		if name == "" {
+			name = "TBD"
+		}
+		teams[i] = name
+	}
+	
+	return &UpcomingMatch{
+		Team1: teams[0],
+		Team2: teams[1],
+		EpochTime: epoch,
+		BestOf: bestOf,
+		StreamUrl: twitchUrl,
+	}, nil 
+
 }
 
 // PrintTreeLevelOrder prints the tree level by level (breadth-first)
