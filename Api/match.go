@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -27,25 +28,54 @@ type MatchNode struct {
 	Right *MatchNode
 }
 
-// Function to recursively build a tree using MatchNodes
-// Preconditions: Receives an int for the tree depth
-// Postcondtions: Returns a MatchNode pointer with left and right values as "TBD" for middle nodes, and nil for leaves
-func BuildMatchTree(depth int) *MatchNode {
-	// Exit condition
-	if depth <= 0 {
-		return nil
+// Function to get match data for a given liquipedia page. Note that the wiki is hard coded to counterstrike. This is the main run function of this file
+func GetMatchData(page string, optionalParams string) {
+	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", page, optionalParams)
+	wikitext, err := GetWikitext(url)
+
+	if err != nil {
+		fmt.Println("An error occured whilst fetching match2bracketid data: ", err)
+		return
 	}
 
-	// Recursively generate left and right branches
-	left := BuildMatchTree(depth - 1)
-	right := BuildMatchTree(depth - 1)
-	
-	return &MatchNode{
-		Team1: "TBD",
-		Team2: "TBD",
-		Winner: "TBD",
-		Left: left,
-		Right: right,
+	ids, format, err := ExtractMatchListId(wikitext)
+	if err != nil {
+		fmt.Println("An error occured:", err)
+		return
+	}
+
+	//Func to get JSON data
+	liquipediaDBApiKey := os.Getenv("LIQUIDPEDIADB_API_KEY")
+	apiRequestString := "https://api.liquipedia.net/api/v3/match"
+	jsonResponse, err := GetLiquipediaMatchData(liquipediaDBApiKey, ids, apiRequestString)
+	if err != nil {
+		fmt.Println("An error occured whilst fetching match data")
+		return
+	}
+	matchNodes, err := GetMatchNodesFromJson(jsonResponse)
+	if err != nil {
+		fmt.Println("An error parsing match data", err)
+		return
+	}
+
+	switch format {
+	case "swiss":
+		scores, err := CalculateSwissScores(matchNodes)
+		if err != nil {
+			fmt.Println("An error occured whilst parsing match data")
+		}
+		for _, team := range scores {
+			fmt.Printf("%s: %s\n", team, scores[team])
+		}
+	case "single-elimination":
+		tree, err := GetMatchTree(matchNodes)
+		if err != nil {
+			fmt.Println("An error occured whilst parsing match data:",err)
+			return
+		}
+		PrintTreeLevelOrder(tree)
+	default:
+		fmt.Println("unknown format type: ", format)
 	}
 }
 
@@ -103,8 +133,8 @@ func GetWikitext(url string) (string, error) {
 
 // Function to parse wiki text and extract `Matchlist` id
 // Preconditions: Receives string containing wiki text
-// Postconditions: Returns string slice containing id's present in input text, or error if an invalid tournament format is detected or no results are found
-func ExtractMatchListId(wikitext string) ([]string, error) {
+// Postconditions: Returns string slice containing id's present in input text and tournament format, or error if an invalid tournament format is detected or no results are found
+func ExtractMatchListId(wikitext string) ([]string, string, error) {
 	ids := []string{}
 	format := DetectTournamentFormat(wikitext)
 	var re *regexp.Regexp
@@ -116,7 +146,7 @@ func ExtractMatchListId(wikitext string) ([]string, error) {
 	case "single-elimination":
 		re = regexp.MustCompile(`(?s)\{\{\s*Bracket\s*\|([^}]*)\}\}`) // {{ShowBracket ...}} templates used in swiss tournaments
 	default:
-		return nil, fmt.Errorf("unknown tournament format detected")
+		return nil, "", fmt.Errorf("unknown tournament format detected")
 	}
 
 	// Find regex matches 
@@ -145,10 +175,9 @@ func ExtractMatchListId(wikitext string) ([]string, error) {
 	}
 
 	if len(ids) == 0 {
-		return nil, fmt.Errorf("no ids found")
+		return nil, "", fmt.Errorf("no ids found")
 	}
-
-	return ids, nil
+	return ids, format, nil
 }
 
 // Function to determine the format of a tournament from a given wiki text, e.g. swiss, single-elimination
@@ -220,13 +249,13 @@ func GetLiquipediaMatchData(apiKey string, bracketIds []string, tournamentUrl st
 	// Send request
 	response, err := client.Do(request)
 	if err != nil {
-		fmt.Println("Request failed: ", err)
+		return "", err
 	}
 	defer response.Body.Close()
 
 	// Check if we got a HTTP 200 response, if not an error has occured
 	if response.StatusCode != http.StatusOK {
-		fmt.Printf("Failed to fetch page. Status code: %d/n", response.StatusCode)
+		fmt.Printf("Failed to fetch page. Status code: %d\n", response.StatusCode)
 		return "", err
 	}
 
@@ -265,68 +294,6 @@ func GetMatchNodesFromJson(matchData string) ([]MatchNode, error) {
 		matchNodes = append(matchNodes, *node)	
 	}
 	return matchNodes, nil
-}
-
-// Function to process match nodes and calculate swiss score
-// Preconditions: Receives slice of match nodes
-// Postconditions: Returns map[string]string containing teams:scores
-func CalculateSwissScores(matchNodes []MatchNode) (map[string]string, error) {
-	var teams []string
-	wins := make(map[string]int)
-	loses := make(map[string]int)
-
-	for i := range matchNodes {
-		node := matchNodes[i]
-		
-		// Check if teams are in teams slice
-		if !slices.Contains(teams, node.Team1) {
-			teams = append(teams, node.Team1)
-		}
-		if ! slices.Contains(teams, node.Team2) {
-			teams = append(teams, node.Team2)
-		}
-
-		// Update win and loss maps
-		if node.Winner == "TBD" {
-			continue
-		}
-		if node.Winner == node.Team1 {
-			wins[node.Team1]++
-			loses[node.Team2]++
-		} else if node.Winner == node.Team2 {
-			wins[node.Team2]++
-			loses[node.Team1]++
-		} else {
-			// Unexpected winner value skip
-			continue
-		}
-	
-	}
-
-	scores := make(map[string]string)
-	for _, team := range teams {
-		scores[team] = fmt.Sprintf("%s: %d-%d", team, wins[team], loses[team])
-	}
-
-	return scores, nil
-}
-
-// Function to process match nodes and generate a binary tree for the single elim bracket
-// Preconditions: Receives slice of match nodes
-// Postconditions: Returns root node of the tree
-func GetMatchTree(matchNodes []MatchNode) (*MatchNode, error) {
-
-	// Generate MatchTree
-	// The tree will have len(rawResults) matches (numMatches), which is a depth of ⌈ log_2(numMatches) ⌉
-	treeDepth := int(math.Ceil(math.Log2(float64(len(matchNodes)))))
-	tree := BuildMatchTree(treeDepth)
-	
-	// Populate tree values
-	for _, node := range matchNodes {
-		fmt.Printf("Id: %s\nTeam1: %s\nTeam2: %s\nWinner: %s\n\n", node.Id, node.Team1, node.Team2, node.Winner)		
-	}
-
-	return tree, nil
 }
 
 // Function to create match nodes from json input
@@ -401,3 +368,151 @@ func ParseMatchData(result interface{}) (*MatchNode, error) {
 	}, nil
 }
 
+// Function to process match nodes and calculate swiss score
+// Preconditions: Receives slice of match nodes
+// Postconditions: Returns map[string]string containing teams:scores
+func CalculateSwissScores(matchNodes []MatchNode) (map[string]string, error) {
+	var teams []string
+	wins := make(map[string]int)
+	loses := make(map[string]int)
+
+	for i := range matchNodes {
+		node := matchNodes[i]
+		
+		// Check if teams are in teams slice
+		if !slices.Contains(teams, node.Team1) {
+			teams = append(teams, node.Team1)
+		}
+		if ! slices.Contains(teams, node.Team2) {
+			teams = append(teams, node.Team2)
+		}
+
+		// Update win and loss maps
+		if node.Winner == "TBD" {
+			continue
+		}
+		if node.Winner == node.Team1 {
+			wins[node.Team1]++
+			loses[node.Team2]++
+		} else if node.Winner == node.Team2 {
+			wins[node.Team2]++
+			loses[node.Team1]++
+		} else {
+			// Unexpected winner value skip
+			continue
+		}
+	
+	}
+
+	scores := make(map[string]string)
+	for _, team := range teams {
+		scores[team] = fmt.Sprintf("%s: %d-%d", team, wins[team], loses[team])
+	}
+
+	return scores, nil
+}
+
+// Function to process match nodes and generate a binary tree for the single elim bracket, where GF is the root node, and the first round matches are the leaves
+// Preconditions: Receives slice of match nodes
+// Postconditions: Returns root node of the tree, or an error that occurs
+func GetMatchTree(matchNodes []MatchNode) (*MatchNode, error) {
+	if len(matchNodes) == 0 {
+        return nil, fmt.Errorf("no match nodes provided")
+    }
+
+    // Map round of each node to its corresponding level in the tree ([1-N] rounds where 0 is the leaves and N is the root)
+    levelMap := make(map[int][]*MatchNode)
+    for i := range matchNodes {
+        round, _, err := extractRoundAndMatchIds(matchNodes[i].Id)
+        if err != nil {
+            return nil, err
+        }
+        levelMap[round] = append(levelMap[round], &matchNodes[i])
+    }
+
+    // Extract levels from levelMap and sort in decending order (Since we want to work from N to 1)
+    levels := make([]int, 0, len(levelMap))
+    for round := range levelMap {
+        levels = append(levels, round)
+    }
+    sort.Sort(sort.Reverse(sort.IntSlice(levels)))
+
+	// Iteratively map child nodes to their parents for every tree level
+    for i := range len(levels)-1 {
+        parents := levelMap[levels[i]]
+        children := levelMap[levels[i+1]]
+
+        if len(children) != len(parents)*2 {
+            return nil, fmt.Errorf("round %d has %d children, expected %d", 
+                levels[i+1], len(children), len(parents)*2)
+        }
+
+        for j, parent := range parents {
+            parent.Left = children[j*2]
+            parent.Right = children[j*2+1]
+        }
+    }
+
+    // Validate and return root
+    rootNodes := levelMap[levels[0]]
+    if len(rootNodes) != 1 {
+        return nil, fmt.Errorf("expected exactly one root match, got %d", len(rootNodes))
+    }
+    
+    return rootNodes[0], nil
+}
+
+// Helper function to get the round and match numbers from a MatchNode Id
+// Id is of the form <match2bracketid>_Rxx-Myyy (e.g. RSTxQ88PoQ_R03-M001)
+// Preconditions: Receives string containing match id
+// Postconditions: Returns round value and match value, or an error
+func extractRoundAndMatchIds(id string) (round int, match int, err error) {
+	re := regexp.MustCompile(`_R(\d+)-M(\d+)$`)
+	matches := re.FindStringSubmatch(id)
+	if len(matches) != 3 {
+		return 0, 0, fmt.Errorf("invalid ID format: %s", id)
+	}
+	round, _ = strconv.Atoi(matches[1])
+	match, _ = strconv.Atoi(matches[2])
+	return round, match, nil
+}
+
+// PrintTreeLevelOrder prints the tree level by level (breadth-first)
+func PrintTreeLevelOrder(root *MatchNode) {
+    if root == nil {
+        fmt.Println("Empty tree")
+        return
+    }
+    
+    fmt.Println("Tournament Tree (Level Order):")
+    fmt.Println(strings.Repeat("=", 60))
+    
+    queue := []*MatchNode{root}
+    level := 0
+    
+    for len(queue) > 0 {
+        levelSize := len(queue)
+        fmt.Printf("Round %d:\n", level+1)
+        
+        for i := 0; i < levelSize; i++ {
+            node := queue[0]
+            queue = queue[1:]
+            
+            winner := node.Winner
+            if winner == "" {
+                winner = "TBD"
+            }
+            
+            fmt.Printf("  %s vs %s (Winner: %s)\n", node.Team1, node.Team2, winner)
+            
+            if node.Left != nil {
+                queue = append(queue, node.Left)
+            }
+            if node.Right != nil {
+                queue = append(queue, node.Right)
+            }
+        }
+        fmt.Println()
+        level++
+    }
+}
