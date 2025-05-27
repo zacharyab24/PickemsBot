@@ -15,10 +15,31 @@ import (
 	"strings"
 )
 
+// Interface for MatchResults. Used to unify the return types of swiss and single-elimination for GetMatchData
+type MatchResult interface {
+	GetType() string
+}
+
+// Struct for swiss results
+type SwissResult struct {
+	Scores map[string]string
+}
+
+func (s SwissResult) GetType() string {
+	return "swiss"
+}
+
+// Struct for single elimination results
+type EliminationResult struct {
+    TreeRoot *MatchNode
+}
+
+func (e EliminationResult) GetType() string {
+    return "single-elimination"
+}
+
 // Struct for a binary tree node
 // This tree is used for the results of the finals section, or any other single elimination tournament
-// Since a tree is top down by design, but a tournament is bottom up, the tree needs to be initialised with placeholder values such as "TBD"
-// Then the data can be populated after
 type MatchNode struct {
 	Id string
 	Team1 string
@@ -31,53 +52,53 @@ type MatchNode struct {
 // Function to get match data for a given liquipedia page. Note that the wiki is hard coded to counterstrike. This is the main run function of this file
 // Preconditions: Receives string containing liquipedia page (such as BLAST/Major/2025/Austin/Stage_1) and optional params (such as  &section=24 (this is not used in majors))
 // Postconditions: None at this stage. TODO: Change return type to be uniform so db can be updated with returned information 
-func GetMatchData(page string, optionalParams string) {
+func GetMatchData(page string, optionalParams string) (MatchResult, error){
 	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", page, optionalParams)
+	
+	// Get wikitext from url
 	wikitext, err := GetWikitext(url)
-
 	if err != nil {
-		fmt.Println("An error occured whilst fetching match2bracketid data: ", err)
-		return
+		return nil, fmt.Errorf("error fetching match2bracketid data: %w", err)
 	}
 
+	// Get match2bracketid's from wikitext
 	ids, format, err := ExtractMatchListId(wikitext)
 	if err != nil {
-		fmt.Println("An error occured:", err)
-		return
+		return nil, fmt.Errorf("error extracting match list: %w", err)
 	}
 
-	//Func to get JSON data
+	// Get JSON match data filtered by match2bracketid
 	liquipediaDBApiKey := os.Getenv("LIQUIDPEDIADB_API_KEY")
-	apiRequestString := "https://api.liquipedia.net/api/v3/match"
-	jsonResponse, err := GetLiquipediaMatchData(liquipediaDBApiKey, ids, apiRequestString)
+	jsonResponse, err := GetLiquipediaMatchData(liquipediaDBApiKey, ids)
 	if err != nil {
 		fmt.Println("An error occured whilst fetching match data")
-		return
+		return nil, fmt.Errorf("error fetching match data from liquipedia api: %w", err)
 	}
+	
+	// Get match nodes from jsonResponse
 	matchNodes, err := GetMatchNodesFromJson(jsonResponse)
 	if err != nil {
-		fmt.Println("An error parsing match data", err)
-		return
+		return nil, fmt.Errorf("error parsing match data: %w", err)
 	}
 
 	switch format {
 	case "swiss":
 		scores, err := CalculateSwissScores(matchNodes)
 		if err != nil {
-			fmt.Println("An error occured whilst parsing match data")
+			return nil, fmt.Errorf("error calculating swiss scores: %w", err)
 		}
-		for _, team := range scores {
-			fmt.Printf("%s: %s\n", team, scores[team])
-		}
+		return SwissResult{Scores: scores}, nil
+
 	case "single-elimination":
-		tree, err := GetMatchTree(matchNodes)
+		rootNode, err := GetMatchTree(matchNodes)
 		if err != nil {
-			fmt.Println("An error occured whilst parsing match data:",err)
-			return
+			fmt.Println("An error occured whilst parsing match data: %w",err)
+			return nil, fmt.Errorf("error creating match tree: %w", err)
 		}
-		PrintTreeLevelOrder(tree)
+		return EliminationResult{TreeRoot: rootNode}, nil
+		
 	default:
-		fmt.Println("unknown format type: ", format)
+		return nil, fmt.Errorf("unknown format type: %s", format)
 	}
 }
 
@@ -104,7 +125,7 @@ func GetWikitext(url string) (string, error) {
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		fmt.Printf("Failed to fetch page. Status code: %d/n", response.StatusCode)
+		fmt.Printf("Failed to fetch page. Status code: %d\n", response.StatusCode)
 		return "", err
 	}
 
@@ -212,8 +233,9 @@ func DetectTournamentFormat(wikitext string) string {
 // e.g. For the URL https://liquipedia.net/counterstrike/PGL/2024/Copenhagen/Opening_Stage, we should be fetching the data for each of the matches in all 9 tables
 // Preconditions: Receives string containing liquipediadb api key, Receives url containing tournament page, receives string slice containing match2bracketid's
 // Postconditons: Returns the match data json as a string or errors
-func GetLiquipediaMatchData(apiKey string, bracketIds []string, tournamentUrl string) (string, error) {
-	
+func GetLiquipediaMatchData(apiKey string, bracketIds []string) (string, error) {
+	apiUrl := "https://api.liquipedia.net/api/v3/match"
+
 	// Format match2bracketids for URL params
 	var conditions []string
 	for _, id := range bracketIds {
@@ -222,7 +244,7 @@ func GetLiquipediaMatchData(apiKey string, bracketIds []string, tournamentUrl st
 	conditionString := strings.Join(conditions, " OR ")
 
 	// Convert tournalmentUrl string into url so we can add params
-	parsedUrl, err := url.Parse(tournamentUrl)
+	parsedUrl, err := url.Parse(apiUrl)
 	if err != nil {
 		fmt.Println("Invalid url:",err)
 		return "", err
@@ -408,7 +430,11 @@ func CalculateSwissScores(matchNodes []MatchNode) (map[string]string, error) {
 
 	scores := make(map[string]string)
 	for _, team := range teams {
-		scores[team] = fmt.Sprintf("%s: %d-%d", team, wins[team], loses[team])
+		//Skip any placeholder teams names
+		if team == "TBD" {
+			continue
+		}
+		scores[team] = fmt.Sprintf("%d-%d", wins[team], loses[team])
 	}
 
 	return scores, nil
