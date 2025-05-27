@@ -29,6 +29,8 @@ type MatchNode struct {
 }
 
 // Function to get match data for a given liquipedia page. Note that the wiki is hard coded to counterstrike. This is the main run function of this file
+// Preconditions: Receives string containing liquipedia page (such as BLAST/Major/2025/Austin/Stage_1) and optional params (such as  &section=24 (this is not used in majors))
+// Postconditions: None at this stage. TODO: Change return type to be uniform so db can be updated with returned information 
 func GetMatchData(page string, optionalParams string) {
 	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", page, optionalParams)
 	wikitext, err := GetWikitext(url)
