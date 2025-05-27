@@ -107,6 +107,7 @@ func ApiTesting() {
         fmt.Println("Elimination tournament results:")
         Api.PrintTreeLevelOrder(r.TreeRoot)
     }
+	fmt.Println()
 
 	// Upcoming Matches
 	matches, err := Api.GetUpcomingMatchData("BLAST/Major/2025/Austin/Stage_1", "")

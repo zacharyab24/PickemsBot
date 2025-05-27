@@ -143,6 +143,12 @@ func GetUpcomingMatchData(page string, optionalParams string) ([]UpcomingMatch, 
 	if err != nil {
 		return nil, err
 	}
+
+	// Sort slices by epoch time
+	sort.Slice(upcomingMatches, func(i, j int) bool {
+		return upcomingMatches[i].EpochTime < upcomingMatches[j].EpochTime
+	})
+
 	return upcomingMatches, nil
 }
 
