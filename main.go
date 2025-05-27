@@ -25,6 +25,10 @@ import (
 )
 
 func main() {
+	// API Testing
+	ApiTesting()
+	os.Exit(1)
+	
 	//Flags
 	formatPtr := flag.String("format", "swiss", "Style of tournament, e.g. swiss, finals, iem")
 	roundPtr := flag.String("round", "opening", "Round of tournament (opening, elimination, playoffs)")
@@ -47,9 +51,6 @@ func main() {
 	} else {
 		fmt.Println("Invalid \"test\" flag. Should be true or false")
 	}
-	
-	// API Testing
-	ApiTesting()
 
 	// MongoDB Stuff
 	uri := os.Getenv("MONGO_PROD_URI")
@@ -87,26 +88,60 @@ func main() {
 }
 
 func ApiTesting() {
-	liquipediaDBApiKey := os.Getenv("LIQUIDPEDIADB_API_KEY")
-	page := "PGL/2024/Copenhagen/Opening_Stage"
-	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw", page)
+	// page := "Galaxy_Battle/2025/Phase_2"
+	// param := "&section=24"
 	
-	wikitext, err := Api.GetWikitext(url)
+	// page := "Perfect_World/Major/2024/Shanghai/Opening_Stage"
+	// param := ""
+	// //page := "BLAST/Major/2025/Austin/Playoffs"
+	// url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", page, param)
+	
+	// wikitext, err := Api.GetWikitext(url)
+	// if err != nil {
+	// 	fmt.Println("An error occured whilst fetching match2bracketid data: ", err)
+	// 	return
+	// }
+
+	// ids, err := Api.ExtractMatchListId(wikitext)
+	// if err != nil {
+	// 	fmt.Println("An error occured:", err)
+	// 	return
+	// }
+
+	// //Func to get JSON data
+	// liquipediaDBApiKey := os.Getenv("LIQUIDPEDIADB_API_KEY")
+	// apiRequestString := "https://api.liquipedia.net/api/v3/match"
+	// jsonResponse, err := Api.GetLiquipediaMatchData(liquipediaDBApiKey, ids, apiRequestString)
+	// if err != nil {
+	// 	fmt.Println("An error occured whilst fetching match data")
+	// 	return
+	// }
+
+	// Load data from file instead of API request
+	data, err := os.ReadFile("Api/pw_response.json")
 	if err != nil {
-		fmt.Println("An error occured whilst fetching match2bracketid data: ", err)
+		fmt.Println("An error occured opening the file:",err)
 		return
 	}
-	ids := Api.ExtractMatchListId(wikitext)
-	apiRequestString := "https://api.liquipedia.net/api/v3/match"
-	jsonRequest, err := Api.GetLiquipediaMatchData(liquipediaDBApiKey, ids, apiRequestString)
+	jsonResponse := string(data)
+	matchNodes, err := Api.GetMatchNodesFromJson(jsonResponse)
 	if err != nil {
-		fmt.Println("An error occured whilst fetching match data")
+		fmt.Println("An error parsing match data", err)
+		return
 	}
-	scores, err := Api.GetScoresFromJson(jsonRequest)
+
+	// scores, err := Api.CalculateSwissScores(matchNodes)
+	// if err != nil {
+	// 	fmt.Println("An error occured whilst parsing match data")
+	// }
+	// for _, team := range scores {
+	// 	fmt.Printf("%s: %s\n", team, scores[team])
+	// }
+
+	tree, err := Api.GetMatchTree(matchNodes)
 	if err != nil {
 		fmt.Println("An error occured whilst parsing match data")
+		return
 	}
-	for _, team := range scores {
-		fmt.Printf("%s: %s\n", team, scores[team])
-	}
+	fmt.Println(tree)
 }
