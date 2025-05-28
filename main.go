@@ -2,7 +2,7 @@
  * The "main" method for running the bot. For details about the bot see `readme.md`
  * Usage: go run main.go -format="<format>" -url="<url>"
  * Authors: Zachary Bower
- * Last modified: November 24th, 2024
+ * Last modified: November 28/05/2025
  */
 
 package main
@@ -14,8 +14,9 @@ import (
 	"log"
 	"os"
 
-	"pickems-bot/Api"
 	bot "pickems-bot/Bot"
+	api "pickems-bot/api"
+	match "pickems-bot/api/match"
 
 	"github.com/joho/godotenv"
 
@@ -91,26 +92,26 @@ func main() {
 // This provides a sample of how the api functions work and how they can be incorporated into bot
 func ApiTesting() {
 	// Match Results
-	result, err := Api.GetMatchData("BLAST/Major/2025/Austin/Stage_1", "")
+	result, err := api.GetMatchData("BLAST/Major/2025/Austin/Stage_1", "")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	
 	switch r := result.(type) {
-    case Api.SwissResult:
+    case match.SwissResult:
         fmt.Println("Swiss tournament results:")
         for team, score := range r.Scores {
             fmt.Printf("%s: %s\n", team, score)
         }
-    case Api.EliminationResult:
+    case match.EliminationResult:
         fmt.Println("Elimination tournament results:")
-        Api.PrintTreeLevelOrder(r.TreeRoot)
+        match.PrintTreeLevelOrder(r.TreeRoot)
     }
 	fmt.Println()
 
 	// Upcoming Matches
-	matches, err := Api.GetUpcomingMatchData("BLAST/Major/2025/Austin/Stage_1", "")
+	matches, err := api.GetUpcomingMatchData("BLAST/Major/2025/Austin/Stage_1", "")
 	if err != nil {
 		fmt.Println(err)
 		return

@@ -1,4 +1,10 @@
-package Api
+/* external.go
+ * Contains the logic used to fetch data from the LiquipediaDB and MediaWiki apis
+ * Authors: Zachary Bower
+ * Last modified: 28/05/2025
+ */
+
+package match
 
 import (
 	"compress/gzip"
@@ -7,7 +13,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"slices"
 	"sort"
@@ -15,143 +20,6 @@ import (
 	"strings"
 	"time"
 )
-
-// Interface for MatchResults. Used to unify the return types of swiss and single-elimination for GetMatchData
-type MatchResult interface {
-	GetType() string
-}
-
-// Struct for swiss results
-type SwissResult struct {
-	Scores map[string]string
-}
-
-func (s SwissResult) GetType() string {
-	return "swiss"
-}
-
-// Struct for single elimination results
-type EliminationResult struct {
-    TreeRoot *MatchNode
-}
-
-func (e EliminationResult) GetType() string {
-    return "single-elimination"
-}
-
-// Struct for a binary tree node
-// This tree is used for the results of the finals section, or any other single elimination tournament
-type MatchNode struct {
-	Id string
-	Team1 string
-	Team2 string
-	Winner string
-	Left *MatchNode
-	Right *MatchNode
-}
-
-type UpcomingMatch struct {
-	Team1 string
-	Team2 string
-	EpochTime int64
-	BestOf string
-	StreamUrl string
-}
-
-// Function to get match data for a given liquipedia page. Note that the wiki is hard coded to counterstrike. This is the main run function of this file
-// Preconditions: Receives string containing liquipedia page (such as BLAST/Major/2025/Austin/Stage_1) and optional params (such as  &section=24 (this is not used in majors))
-// Postconditions: MatchResult interface containing either []MatchNode or map[string]string depending on the execution path, or error if it occurs
-func GetMatchData(page string, optionalParams string) (MatchResult, error){
-	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", page, optionalParams)
-	
-	// Get wikitext from url
-	wikitext, err := GetWikitext(url)
-	if err != nil {
-		return nil, fmt.Errorf("error fetching match2bracketid data: %w", err)
-	}
-
-	// Get match2bracketid's from wikitext
-	ids, format, err := ExtractMatchListId(wikitext)
-	if err != nil {
-		return nil, fmt.Errorf("error extracting match list: %w", err)
-	}
-
-	// Get JSON match data filtered by match2bracketid
-	liquipediaDBApiKey := os.Getenv("LIQUIDPEDIADB_API_KEY")
-	jsonResponse, err := GetLiquipediaMatchData(liquipediaDBApiKey, ids)
-	if err != nil {
-		fmt.Println("An error occured whilst fetching match data")
-		return nil, fmt.Errorf("error fetching match data from liquipedia api: %w", err)
-	}
-
-	// Get match nodes from jsonResponse
-	matchNodes, err := GetMatchNodesFromJson(jsonResponse)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing match data: %w", err)
-	}
-
-	// Get return values depending on tournament type
-	switch format {
-	case "swiss":
-		scores, err := CalculateSwissScores(matchNodes)
-		if err != nil {
-			return nil, fmt.Errorf("error calculating swiss scores: %w", err)
-		}
-		return SwissResult{Scores: scores}, nil
-
-	case "single-elimination":
-		rootNode, err := GetMatchTree(matchNodes)
-		if err != nil {
-			fmt.Println("An error occured whilst parsing match data: %w",err)
-			return nil, fmt.Errorf("error creating match tree: %w", err)
-		}
-		return EliminationResult{TreeRoot: rootNode}, nil
-		
-	default:
-		return nil, fmt.Errorf("unknown format type: %s", format)
-	}
-}
-
-// Function to get data about upcoming matches. Returns a slice where each element contains: team1name, team2name, epoch time for match start, bestOf and twitch url
-// Preconditions: Receives string containing liquipedia page (such as BLAST/Major/2025/Austin/Stage_1) and optional params (such as  &section=24 (this is not used in majors))
-// Postconditions: Returns slice of UpcomingMatch, or error if it occurs
-func GetUpcomingMatchData(page string, optionalParams string) ([]UpcomingMatch, error){
-	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", page, optionalParams)
-	
-	// Get wikitext from url
-	wikitext, err := GetWikitext(url)
-	if err != nil {
-		return nil, fmt.Errorf("error fetching match2bracketid data: %w", err)
-	}
-
-	// Get match2bracketid's from wikitext
-	ids, _, err := ExtractMatchListId(wikitext)
-	if err != nil {
-		return nil, fmt.Errorf("error extracting match list: %w", err)
-	}
-
-	// Get JSON match data filtered by match2bracketid
-	liquipediaDBApiKey := os.Getenv("LIQUIDPEDIADB_API_KEY")
-	jsonResponse, err := GetLiquipediaMatchData(liquipediaDBApiKey, ids)
-	if err != nil {
-		fmt.Println("An error occured whilst fetching match data")
-		return nil, fmt.Errorf("error fetching match data from liquipedia api: %w", err)
-	}
-
-	// Get upcoming matches (if any) from jsonResponse
-	upcomingMatches, err := GetUpcomingMatchesFromJson(jsonResponse)
-	if err != nil {
-		return nil, err
-	}
-
-	// Sort slices by epoch time
-	sort.Slice(upcomingMatches, func(i, j int) bool {
-		return upcomingMatches[i].EpochTime < upcomingMatches[j].EpochTime
-	})
-
-	return upcomingMatches, nil
-}
-
 
 // Function to fetch raw wikitext from a given URL. This function does not perform any parsing on the text
 // Preconditions: Receives string that contains URL for liquipedia page we wish to parse (e.g. https://liquipedia.net/counterstrike/PGL/2024/Copenhagen/Opening_Stage?action=raw)
@@ -529,7 +397,7 @@ func GetMatchTree(matchNodes []MatchNode) (*MatchNode, error) {
     // Map round of each node to its corresponding level in the tree ([1-N] rounds where 0 is the leaves and N is the root)
     levelMap := make(map[int][]*MatchNode)
     for i := range matchNodes {
-        round, _, err := extractRoundAndMatchIds(matchNodes[i].Id)
+        round, _, err := ExtractRoundAndMatchIds(matchNodes[i].Id)
         if err != nil {
             return nil, err
         }
@@ -572,7 +440,7 @@ func GetMatchTree(matchNodes []MatchNode) (*MatchNode, error) {
 // Id is of the form <match2bracketid>_Rxx-Myyy (e.g. RSTxQ88PoQ_R03-M001)
 // Preconditions: Receives string containing match id
 // Postconditions: Returns round value and match value, or an error
-func extractRoundAndMatchIds(id string) (round int, match int, err error) {
+func ExtractRoundAndMatchIds(id string) (round int, match int, err error) {
 	re := regexp.MustCompile(`_R(\d+)-M(\d+)$`)
 	matches := re.FindStringSubmatch(id)
 	if len(matches) != 3 {
@@ -668,44 +536,4 @@ func ParseUpcomingMatches(result interface{}) (*UpcomingMatch, error) {
 		StreamUrl: twitchUrl,
 	}, nil 
 
-}
-
-// PrintTreeLevelOrder prints the tree level by level (breadth-first)
-func PrintTreeLevelOrder(root *MatchNode) {
-    if root == nil {
-        fmt.Println("Empty tree")
-        return
-    }
-    
-    fmt.Println("Tournament Tree (Level Order):")
-    fmt.Println(strings.Repeat("=", 60))
-    
-    queue := []*MatchNode{root}
-    level := 0
-    
-    for len(queue) > 0 {
-        levelSize := len(queue)
-        fmt.Printf("Round %d:\n", level+1)
-        
-        for i := 0; i < levelSize; i++ {
-            node := queue[0]
-            queue = queue[1:]
-            
-            winner := node.Winner
-            if winner == "" {
-                winner = "TBD"
-            }
-            
-            fmt.Printf("  %s vs %s (Winner: %s)\n", node.Team1, node.Team2, winner)
-            
-            if node.Left != nil {
-                queue = append(queue, node.Left)
-            }
-            if node.Right != nil {
-                queue = append(queue, node.Right)
-            }
-        }
-        fmt.Println()
-        level++
-    }
 }
