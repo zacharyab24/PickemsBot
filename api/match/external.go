@@ -11,11 +11,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -386,55 +386,110 @@ func CalculateSwissScores(matchNodes []MatchNode) (map[string]string, error) {
 	return scores, nil
 }
 
-// Function to process match nodes and generate a binary tree for the single elim bracket, where GF is the root node, and the first round matches are the leaves
-// Preconditions: Receives slice of match nodes
-// Postconditions: Returns root node of the tree, or an error that occurs
-func GetMatchTree(matchNodes []MatchNode) (*MatchNode, error) {
+// Function to process a slice of match nodes and return a map of team name : TeamProgress. Used for processing of Elimination stage matches
+// Preconditions: Receives slice of match nodes. Limitation of upto 5 rounds of matches (best of 32 tournament) but can be easily extended
+// Postconditions: Returns map of team name to TeamProgress (stage and status)
+func GetEliminationResults(matchNodes []MatchNode) (map[string]TeamProgress, error) {
 	if len(matchNodes) == 0 {
-        return nil, fmt.Errorf("no match nodes provided")
-    }
+		return nil, fmt.Errorf("at least one match required, recieved 0")
+	}
+	
+	// Ordered slice of rounds where [0] is the last match (grand final), and [n] is the first. This is where the limitation of 32 comes from
+	rounds, err := getRoundNames(len(matchNodes))
+	if err != nil {
+		return nil, err
+	}
 
-    // Map round of each node to its corresponding level in the tree ([1-N] rounds where 0 is the leaves and N is the root)
-    levelMap := make(map[int][]*MatchNode)
-    for i := range matchNodes {
-        round, _, err := ExtractRoundAndMatchIds(matchNodes[i].Id)
-        if err != nil {
-            return nil, err
-        }
-        levelMap[round] = append(levelMap[round], &matchNodes[i])
-    }
+	results := make(map[string]TeamProgress)
 
-    // Extract levels from levelMap and sort in decending order (Since we want to work from N to 1)
-    levels := make([]int, 0, len(levelMap))
-    for round := range levelMap {
-        levels = append(levels, round)
-    }
-    sort.Sort(sort.Reverse(sort.IntSlice(levels)))
+	for _, match := range matchNodes {
+		roundNum, _, err := ExtractRoundAndMatchIds(match.Id)
+		if err != nil {
+			return nil, err
+		}
 
-	// Iteratively map child nodes to their parents for every tree level
-    for i := range len(levels)-1 {
-        parents := levelMap[levels[i]]
-        children := levelMap[levels[i+1]]
+		// Safely resolve stage and rank
+		round := fmt.Sprintf("Round %d", roundNum)
+		rank := -1
+		index := len(rounds) - roundNum
+		if index >= 0 && index < len(rounds) {
+			round = rounds[index]
+			rank = roundNum
+		}
+		// Assign initial progress (pending) for each team
+		for _, team := range []string{match.Team1, match.Team2} {
+			if team != "" {
+				existing, ok := results[team]
+				if !ok || rank > getRoundIndex(existing.Round, rounds) {
+					results[team] = TeamProgress{
+						Round:  round,
+						Status: "pending",
+					}
+				}
+			}
+		}
 
-        if len(children) != len(parents)*2 {
-            return nil, fmt.Errorf("round %d has %d children, expected %d", 
-                levels[i+1], len(children), len(parents)*2)
-        }
+		// If there's a winner, update winner/loser status
+		if match.Winner != "TBD" && match.Winner != "" {
+			results[match.Winner] = TeamProgress{
+				Round:  round,
+				Status: "advanced",
+			}
 
-        for j, parent := range parents {
-            parent.Left = children[j*2]
-            parent.Right = children[j*2+1]
-        }
-    }
-
-    // Validate and return root
-    rootNodes := levelMap[levels[0]]
-    if len(rootNodes) != 1 {
-        return nil, fmt.Errorf("expected exactly one root match, got %d", len(rootNodes))
-    }
-    
-    return rootNodes[0], nil
+			// Determine loser
+			var loser string
+			if match.Team1 == match.Winner {
+				loser = match.Team2
+			} else {
+				loser = match.Team1
+			}
+			if loser != "" {
+				results[loser] = TeamProgress{
+					Round:  round,
+					Status: "eliminated",
+				}
+			}
+		}
+	}
+	return results, nil
 }
+
+// Helper function to get the index of a round from its name. Used in GetEliminationResults 
+// Preconditions: Receives a string, and slice of strings
+// Postconditions: Returns the index of that string in the slice, or -1 if not found
+func getRoundIndex(round string, rounds []string) int {
+	for i, name := range rounds {
+		if name == round {
+			return len(rounds) - i
+		}
+	}
+	return -1 // Unknown stage
+}
+
+// Helper function to get the names of rounds for a single elim tournament, this is a hardcoded list with a limit of 32 matches
+// Preconditions Receives int containing number of matches in this tournament
+// Postconditions: Returns string slice containing round names, or error if it occurs
+func getRoundNames(numMatches int) ([]string, error){
+	// Find the number of rounds, this way we can make sure the name mapping is correct
+	// numRounds = log_2 (numMatches + 1) since there are always n-1 matches for a single elim tournament with n teams
+	numRounds := int(math.Ceil(math.Log2(float64(numMatches+1))))
+
+	// Hardcoded slice of round names
+	roundNames := []string{
+		"Grand Final",
+		"Semi Final",
+		"Quarter Final",
+		"Best of 16",
+		"Best of 32",
+	}
+
+	if numRounds > len(roundNames) {
+		return nil, fmt.Errorf("unsupported depth: only up to %d rounds supported", len(roundNames))
+	}
+
+	return roundNames[:numRounds], nil
+}
+
 
 // Helper function to get the round and match numbers from a MatchNode Id
 // Id is of the form <match2bracketid>_Rxx-Myyy (e.g. RSTxQ88PoQ_R03-M001)

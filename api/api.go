@@ -49,12 +49,12 @@ func GetMatchData(page string, optionalParams string) (match.MatchResult, error)
 		return match.SwissResult{Scores: scores}, nil
 
 	case "single-elimination":
-		rootNode, err := match.GetMatchTree(matchNodes)
+		progression, err := match.GetEliminationResults(matchNodes)
 		if err != nil {
 			fmt.Println("An error occured whilst parsing match data: %w",err)
 			return nil, fmt.Errorf("error creating match tree: %w", err)
 		}
-		return match.EliminationResult{TreeRoot: rootNode}, nil
+		return match.EliminationResult{Progression: progression}, nil
 		
 	default:
 		return nil, fmt.Errorf("unknown format type: %s", format)

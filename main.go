@@ -93,6 +93,7 @@ func main() {
 func ApiTesting() {
 	// Match Results
 	result, err := api.GetMatchData("BLAST/Major/2025/Austin/Stage_1", "")
+	//result, err := api.GetMatchData("Galaxy_Battle/2025/Phase_2", "&section=24")
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -106,18 +107,20 @@ func ApiTesting() {
         }
     case match.EliminationResult:
         fmt.Println("Elimination tournament results:")
-        match.PrintTreeLevelOrder(r.TreeRoot)
+        for team, progression := range r.Progression {
+            fmt.Printf("%s: %s[%s]\n", team, progression.Round, progression.Status)
+        }
     }
 	fmt.Println()
 
-	// Upcoming Matches
-	matches, err := api.GetUpcomingMatchData("BLAST/Major/2025/Austin/Stage_1", "")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	for _, match := range matches {
-		fmt.Printf("%s VS %s (Bo%s): %d: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, match.StreamUrl)
-	}
+	// // Upcoming Matches
+	// matches, err := api.GetUpcomingMatchData("BLAST/Major/2025/Austin/Stage_1", "")
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return
+	// }
+	// for _, match := range matches {
+	// 	fmt.Printf("%s VS %s (Bo%s): %d: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, match.StreamUrl)
+	// }
 
 }

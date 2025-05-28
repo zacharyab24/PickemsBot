@@ -1,5 +1,5 @@
-/* models.go
- * Contains the interfaces, structs and helper functions used by the api package
+/* matches.go
+ * Contains the interfaces, structs and helper functions used by the match package related to data fetching
  * Authors: Zachary Bower
  * Last modified: 28/05/2025
  */
@@ -25,9 +25,15 @@ func (s SwissResult) GetType() string {
 	return "swiss"
 }
 
+// Helper struct to track if the team has advanced past a round of the elim bracket, been eliminated or pending
+type TeamProgress struct {
+	Round string
+	Status string
+}
+
 // Struct for single elimination results
 type EliminationResult struct {
-    TreeRoot *MatchNode
+    Progression map[string]TeamProgress 
 }
 
 func (e EliminationResult) GetType() string {
@@ -53,7 +59,7 @@ type UpcomingMatch struct {
 	StreamUrl string
 }
 
-// PrintTreeLevelOrder prints the tree level by level (breadth-first)
+// Function to print teh EliminationResult tree by level (breadth-first)
 func PrintTreeLevelOrder(root *MatchNode) {
     if root == nil {
         fmt.Println("Empty tree")
@@ -68,7 +74,7 @@ func PrintTreeLevelOrder(root *MatchNode) {
     
     for len(queue) > 0 {
         levelSize := len(queue)
-        fmt.Printf("Round %d:\n", level+1)
+        fmt.Printf("Level %d:\n", level+1)
         
         for i := 0; i < levelSize; i++ {
             node := queue[0]
