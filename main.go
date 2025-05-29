@@ -15,22 +15,13 @@ import (
 	"os"
 
 	bot "pickems-bot/Bot"
-	api "pickems-bot/api"
 	match "pickems-bot/api/match"
 
 	"github.com/joho/godotenv"
-
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func main() {
 	err := godotenv.Load()
-	// API Testing
-	
-	ApiTesting()
-	os.Exit(1)
 	
 	//Flags
 	formatPtr := flag.String("format", "swiss", "Style of tournament, e.g. swiss, finals, iem")
@@ -56,24 +47,15 @@ func main() {
 
 	// MongoDB Stuff
 	uri := os.Getenv("MONGO_PROD_URI")
-	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
-	opts := options.Client().ApplyURI(uri).SetServerAPIOptions(serverAPI)
-	
-	// Create a new client and connect to the server
-	client, err := mongo.Connect(context.TODO(), opts)
-	if err != nil {
-		panic(err)
-	}
+	match.Init(uri)
 	defer func() {
-		if err = client.Disconnect(context.TODO()); err != nil {
+		if err = match.Client.Disconnect(context.TODO()); err != nil {
 			panic(err)
 		}
 	}()
-	// Send a ping to confirm a successful connection
-	if err := client.Database("admin").RunCommand(context.TODO(), bson.D{{Key: "ping", Value: 1}}).Err(); err != nil {
-		panic(err)
-	}
-	fmt.Println("Successfully connected to MongoDB!")
+
+	// API Testing
+	ApiTesting()
 
 	//Init bot and run for tournament style
 	if *formatPtr == "swiss" || *formatPtr == "finals" {
@@ -81,7 +63,7 @@ func main() {
 		bot.Format = *formatPtr
 		bot.Round = *roundPtr
 		bot.TournamentName = *tournamentNamePtr
-		bot.Client = client
+		bot.Client = match.Client
 		bot.LiquipediaURL = *urlPtr
 		bot.Run()
 	} else {
@@ -91,27 +73,27 @@ func main() {
 
 // This provides a sample of how the api functions work and how they can be incorporated into bot
 func ApiTesting() {
-	// Match Results
-	result, err := api.GetMatchData("BLAST/Major/2025/Austin/Stage_1", "")
-	//result, err := api.GetMatchData("Galaxy_Battle/2025/Phase_2", "&section=24")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+	// // Match Results
+	// result, err := api.GetMatchData("BLAST/Major/2025/Austin/Stage_1", "")
+	// //result, err := api.GetMatchData("Galaxy_Battle/2025/Phase_2", "&section=24")
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return
+	// }
 	
-	switch r := result.(type) {
-    case match.SwissResult:
-        fmt.Println("Swiss tournament results:")
-        for team, score := range r.Scores {
-            fmt.Printf("%s: %s\n", team, score)
-        }
-    case match.EliminationResult:
-        fmt.Println("Elimination tournament results:")
-        for team, progression := range r.Progression {
-            fmt.Printf("%s: %s[%s]\n", team, progression.Round, progression.Status)
-        }
-    }
-	fmt.Println()
+	// switch r := result.(type) {
+    // case match.SwissResult:
+    //     fmt.Println("Swiss tournament results:")
+    //     for team, score := range r.Scores {
+    //         fmt.Printf("%s: %s\n", team, score)
+    //     }
+    // case match.EliminationResult:
+    //     fmt.Println("Elimination tournament results:")
+    //     for team, progression := range r.Progression {
+    //         fmt.Printf("%s: %s[%s]\n", team, progression.Round, progression.Status)
+    //     }
+    // }
+	// fmt.Println()
 
 	// // Upcoming Matches
 	// matches, err := api.GetUpcomingMatchData("BLAST/Major/2025/Austin/Stage_1", "")
@@ -122,5 +104,18 @@ func ApiTesting() {
 	// for _, match := range matches {
 	// 	fmt.Printf("%s VS %s (Bo%s): %d: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, match.StreamUrl)
 	// }
+
+	// fmt.Println("Storing results in DB...")
+	// err = match.StoreMatchResults("test", "test", result, "test", matches)
+	// if err != nil {
+	// 	fmt.Printf("error storing results in db: %v", err)
+	// }
+	//Test db fetching
+	res, err := match.FetchMatchResultsFromDb("test", "test", "test")
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(res)
+
 
 }
