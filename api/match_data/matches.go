@@ -4,7 +4,7 @@
  * Last modified: 29/05/2025
  */
 
-package match
+package match_data
 
 // Interface for MatchResults. Used to unify the return types of swiss and single-elimination for GetMatchData
 type MatchResult interface {

@@ -1,17 +1,18 @@
 /* records.go
  * Contains the interfaces, structs and helper functions used by the match package related to the database
  * Authors: Zachary Bower
- * Last modified: 28/05/2025
+ * Last modified: 29/05/2025
  */
 
-package match
+package match_data
+
+import "fmt"
 
 type ResultRecord interface {
 	GetType() string
 	GetRound() string
 	GetTTL() int64
 	GetTeams() map[string]interface{}
-
 }
 
 // SwissResultRecord represents the way data will be stored in the DB for a swiss style bracket
@@ -71,4 +72,44 @@ func (e EliminationResultRecord) GetTeams() map[string]interface{} {
 type UpcomingMatchDoc struct {
 	Round string `bson:"round,omitempty"`
 	UpcomingMatches []UpcomingMatch `bson:"upcoming_matches,omitempty"`
+}
+
+// Function to convert RecordResult interface to MatchResult interface. Used when getting data from the db
+// Preconditions: none
+// Postconditions: Returns a MatchResult or error if it occurs 
+func ToMatchResult(r ResultRecord) (MatchResult, error) {
+	switch r.GetType() {
+	case "swiss":
+		scores := make(map[string]string)
+		for team, val := range r.GetTeams() {
+			strVal, ok := val.(string)
+			if !ok {
+				return nil, fmt.Errorf("invalid score for team %s", team)
+			}
+			scores[team] = strVal
+		}
+		return SwissResult{Scores: scores}, nil
+
+	case "single-elimination":
+	progression := make(map[string]TeamProgress)
+	for team, val := range r.GetTeams() {
+		raw, ok := val.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("invalid progression format for team %s", team)
+		}
+
+		var tp TeamProgress
+		if round, ok := raw["round"].(string); ok {
+			tp.Round = round
+		}
+		if status, ok := raw["status"].(string); ok {
+			tp.Status = status
+		}
+		progression[team] = tp
+	}
+	return EliminationResult{Progression: progression}, nil
+
+	default:
+		return nil, fmt.Errorf("unknown result type: %s", r.GetType())
+	}
 }

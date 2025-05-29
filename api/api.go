@@ -1,16 +1,26 @@
+/* api.go
+ * This file contains the high level logic for interacting with this package. For consistent results, fuctions should
+ * only be called from this file, not the sub packages for match and processing. For detauls about functionality see `api.md`
+ * Authors: Zachary Bower
+ * Last modified: 29/05/2025
+ */
 package api
 
 import (
+	"errors"
 	"fmt"
 	"os"
-	"pickems-bot/api/match"
+	match "pickems-bot/api/match_data"
 	"sort"
+	"time"
+
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // Function to get match data for a given liquipedia page. Note that the wiki is hard coded to counterstrike. This is the main run function of this file
 // Preconditions: Receives string containing liquipedia page (such as BLAST/Major/2025/Austin/Stage_1) and optional params (such as  &section=24 (this is not used in majors))
 // Postconditions: MatchResult interface containing either []MatchNode or map[string]string depending on the execution path, or error if it occurs
-func GetMatchData(page string, optionalParams string) (match.MatchResult, error){
+func fetchMatchData(page string, optionalParams string) (match.MatchResult, error){
 	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", page, optionalParams)
 	
 	// Get wikitext from url
@@ -64,7 +74,7 @@ func GetMatchData(page string, optionalParams string) (match.MatchResult, error)
 // Function to get data about upcoming matches. Returns a slice where each element contains: team1name, team2name, epoch time for match start, bestOf and twitch url
 // Preconditions: Receives string containing liquipedia page (such as BLAST/Major/2025/Austin/Stage_1) and optional params (such as  &section=24 (this is not used in majors))
 // Postconditions: Returns slice of UpcomingMatch, or error if it occurs
-func GetUpcomingMatchData(page string, optionalParams string) ([]match.UpcomingMatch, error){
+func FetchUpcomingMatches(page string, optionalParams string) ([]match.UpcomingMatch, error){
 	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", page, optionalParams)
 	
 	// Get wikitext from url
@@ -99,4 +109,78 @@ func GetUpcomingMatchData(page string, optionalParams string) ([]match.UpcomingM
 	})
 
 	return upcomingMatches, nil
+}
+
+// Function to get match results. Checks if the data in the db is outdated, if it is, makes api call to liquipediaDb api and updates local db
+// Precondtions: recieves string containing dbName, colName, round, page and params (all of these come from flags at start up)
+// Postconditions: Returns MatchResult containing the lastest match data, or an error if it occurs
+func GetMatchResults(dbName string, collName string, round string, page string, params string) (match.MatchResult, error) {
+	// Get results stored in our db
+	dbResults, err := match.FetchMatchResultsFromDb(dbName, collName, round)
+	var shouldRefresh bool
+	if err != nil {
+		// If this is triggered, there are no match results currently saved in the db
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			shouldRefresh = true
+		} else {
+			return nil, err
+		}
+	} else if dbResults.GetTTL() < time.Now().Unix() {
+		shouldRefresh = true
+	}
+	
+	
+	// Run if we need to refresh the data stored in the db (either there is no data stored or the TTL has experied)
+	if shouldRefresh {
+		fmt.Println("updating match results stored in db...")
+		// Get data from LiquipediaDB api
+		externalResults, err := fetchMatchData(page, params)
+		if err != nil {
+			return nil, err
+		}
+		
+		// Validate liquipedia data
+		switch externalResults.GetType() {
+		case "swiss":
+			swissResult, ok := externalResults.(match.SwissResult)
+			if !ok {
+				return nil, fmt.Errorf("could not assert MatchResult to SwissResult")
+			}
+			if len(swissResult.Scores) == 0 {
+				return nil, fmt.Errorf("no result returned from liquipediadb")
+			}
+		case "single-elimination":
+			elimResult, ok := externalResults.(match.EliminationResult)
+			if !ok {
+				return nil, fmt.Errorf("could not assert MatchResult to EliminationResult")
+			}
+			if len(elimResult.Progression) == 0 {
+				return nil, fmt.Errorf("no result returned from liquipediadb")
+			}
+		default:
+			return nil, fmt.Errorf("unknown format type returned from liquipediadb")
+		}
+
+		// Get upcoming matches from db
+		upcomingMatches, err := match.FetchUpcomingMatchesFromDb(dbName, "upcoming_matches", round)
+		if err != nil {
+			return nil, err
+		}
+
+		// Update match results in db
+		err = match.StoreMatchResults(dbName, collName, externalResults, round, upcomingMatches)
+		if err != nil {
+			return nil, err
+		}
+
+		return externalResults, nil
+	}
+
+	// Else we can return the cached data
+
+	matchResult, err := match.ToMatchResult(dbResults) 
+	if err != nil {
+		return nil, err
+	}
+	return matchResult, nil
 }

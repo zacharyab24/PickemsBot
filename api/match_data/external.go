@@ -4,7 +4,7 @@
  * Last modified: 28/05/2025
  */
 
-package match
+package match_data
 
 import (
 	"compress/gzip"

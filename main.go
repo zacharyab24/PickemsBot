@@ -2,7 +2,7 @@
  * The "main" method for running the bot. For details about the bot see `readme.md`
  * Usage: go run main.go -format="<format>" -url="<url>"
  * Authors: Zachary Bower
- * Last modified: November 29/05/2025
+ * Last modified: 29/05/2025
  */
 
 package main
@@ -16,7 +16,7 @@ import (
 
 	bot "pickems-bot/Bot"
 	"pickems-bot/api"
-	match "pickems-bot/api/match"
+	match "pickems-bot/api/match_data"
 
 	"github.com/joho/godotenv"
 )
@@ -74,52 +74,32 @@ func main() {
 
 // This provides a sample of how the api functions work and how they can be incorporated into bot
 func ApiTesting() {
-	// Get Upcoming Matches
+	page := "BLAST/Major/2025/Austin/Stage_1"
+	params := ""
+	dbName := "test"
+	round := "stage_1"
+	
+	// Get Matches for this stage (this should be run on app start up)
 	fmt.Println("Getting upcoming matches from LiquipediaDB Api")
-	matches, err := api.GetUpcomingMatchData("BLAST/Major/2025/Austin/Stage_1", "")
+	upcomingMatches, err := api.FetchUpcomingMatches(page, params)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	// Store Upcoming Matches in DB
+	// Store Matches in DB (this should be run on startup)
 	fmt.Println("Storing upcoming matches in db")
-	err = match.StoreUpcomingMatches("test", "upcoming_matches", "stage_1", matches)
+	err = match.StoreUpcomingMatches(dbName, "upcoming_matches", round, upcomingMatches)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	// Get Match Results
-	fmt.Println("Getting match data from LiquipediaDB Api")
-	result, err := api.GetMatchData("BLAST/Major/2025/Austin/Stage_1", "")
-	//result, err := api.GetMatchData("Galaxy_Battle/2025/Phase_2", "&section=24")
+	fmt.Println("Running `GetMatchResults`")
+	results, err := api.GetMatchResults(dbName, "test", round, page, params)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-
-	// Store Match results in db
-	fmt.Println("Storing match results in db")
-	err = match.StoreMatchResults("test", "test", result, "test", matches)
-	if err != nil {
-		fmt.Printf("error storing results in db: %v", err)
-	}
-
-	// Test fetching upcoming matches from db
-	fmt.Println("Fetching upcoming matches from db")
-	upcomingMatches, err := match.FetchUpcomingMatchesFromDb("test", "upcoming_matches", "stage_1")
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println(upcomingMatches)
-	fmt.Println()
-
-	// Test fetching matches results from db
-	fmt.Println("Fetching match results from db")
-	dbMatchResults, err := match.FetchMatchResultsFromDb("test", "test", "test")
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println(dbMatchResults)
+	fmt.Println(results)
 }

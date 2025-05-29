@@ -4,7 +4,7 @@
  * Last modified: 29/05/2025
  */
 
-package match
+package match_data
 
 import (
 	"context"
@@ -35,7 +35,6 @@ func Init(uri string) error {
 	Client = client
 	return nil
 }
-
 
 // Function used to store match results in the db
 // Preconditions: Receives name of database as a string (e.g. user_pickems), receives name of collection as a string,
@@ -112,7 +111,7 @@ func StoreMatchResults(dbName string, collectionName string, matchResult MatchRe
 // Preconditions: Receives name of database as a string (e.g. user_pickems), receives name of collection as a string,
 // (e.g. PW Shanghai Major 2024_results, and round as string (e.g. stage_1)
 // Postconditions: Returns MatchResult interface if the operation was successful, or an error if it was not
-func FetchMatchResultsFromDb(dbName string, collectionName string, round string) (MatchResult, error) {
+func FetchMatchResultsFromDb(dbName string, collectionName string, round string) (ResultRecord, error) {
 	coll := Client.Database(dbName).Collection(collectionName)
 	opts := options.FindOne()
 	
@@ -122,7 +121,7 @@ func FetchMatchResultsFromDb(dbName string, collectionName string, round string)
 	err := coll.FindOne(context.TODO(), bson.D{{Key: "round", Value: round}}, opts).Decode(&raw)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, fmt.Errorf("no results found in db")
+			return nil, err
 		}
 		return nil, fmt.Errorf("error fetching results from db: %w", err)
 	}
