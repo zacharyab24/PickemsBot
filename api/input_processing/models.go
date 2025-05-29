@@ -29,3 +29,8 @@ type TeamProgress struct {
 	Round string `bson:"round,omitempty"` // e.g. "semifinal", "grandfinal"
 	Status string `bson:"status,omitempty"` // "advanced", "eliminated"
 }
+
+type User struct {
+	UserId string
+	Username string
+}

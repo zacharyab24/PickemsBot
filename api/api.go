@@ -186,11 +186,11 @@ func GetMatchResults(dbName string, collName string, round string, page string, 
 // create and maintain a new collection that will require more api calls
 // Preconditions: Receives db name, collection name and round strings
 // Postconditions: Returns string slice containing valid team names for the round, or returns error if an issue occurs 
-func GetValidTeams(dbName string, collName string, round string) ([]string, error) {
+func GetValidTeams(dbName string, collName string, round string) ([]string, string, error) {
 	// Get results stored in our db
 	dbResults, err := match.FetchMatchResultsFromDb(dbName, collName, round)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
  	var teamNames []string
@@ -208,8 +208,8 @@ func GetValidTeams(dbName string, collName string, round string) ([]string, erro
             teamNames = append(teamNames, teamName)
         }
     default:
-        return nil, fmt.Errorf("unknown result record type: %T", result)
+        return nil, "", fmt.Errorf("unknown result record type: %T", result)
     }
 
-    return teamNames, nil
+    return teamNames,dbResults.GetType(), nil
 }

@@ -12,10 +12,12 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"os"
 
 	bot "pickems-bot/Bot"
 	"pickems-bot/api"
+	processing "pickems-bot/api/input_processing"
 	match "pickems-bot/api/match_data"
 
 	"github.com/joho/godotenv"
@@ -76,43 +78,101 @@ func main() {
 func ApiTesting() {
 	//page := "BLAST/Major/2025/Austin/Stage_1"
 	//params := ""
-	page := "Perfect_World/Major/2024/Shanghai/Playoff_Stage"
-	params := ""
+	// page := "Perfect_World/Major/2024/Shanghai/Playoff_Stage"
+	// params := ""
 	
 	dbName := "test"
-	round := "Playoff_stage"
+	round := "test"
 	
-	// Get Matches for this stage (this should be run on app start up)
-	fmt.Println("Getting upcoming matches from LiquipediaDB Api")
-	upcomingMatches, err := api.FetchUpcomingMatches(page, params)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+	// // Get Matches for this stage (this should be run on app start up)
+	// fmt.Println("Getting upcoming matches from LiquipediaDB Api")
+	// upcomingMatches, err := api.FetchUpcomingMatches(page, params)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return
+	// }
 
-	// Store Matches in DB (this should be run on startup)
-	fmt.Println("Storing upcoming matches in db")
-	err = match.StoreUpcomingMatches(dbName, "upcoming_matches", round, upcomingMatches)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+	// // Store Matches in DB (this should be run on startup)
+	// fmt.Println("Storing upcoming matches in db")
+	// err = match.StoreUpcomingMatches(dbName, "upcoming_matches", round, upcomingMatches)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return
+	// }
 
-	// Get Match Results from DB
-	fmt.Println("Running `GetMatchResults`")
-	results, err := api.GetMatchResults(dbName, "test", round, page, params)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Println(results)
+	// // Get Match Results from DB
+	// fmt.Println("Running `GetMatchResults`")
+	// results, err := api.GetMatchResults(dbName, "test", round, page, params)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return
+	// }
+	// fmt.Println(results)
 
 	// Valid team name lookup
 	fmt.Println("Running `GetValidTeams`")
-	teams, err := api.GetValidTeams(dbName, "test", round)
+	teams, format, err := api.GetValidTeams(dbName, "test", round)
 	if err != nil {
 		fmt.Println(err)
 		return
+	} 
+
+	var requiredPredictions int
+	switch format {
+	case "swiss":
+		requiredPredictions = 10
+	case "single-elimination" :
+		T := len(teams)
+		rounds := int(math.Log2(float64(T)))
+		requiredPredictions = (1 << rounds) - 1
+	default:
+		requiredPredictions = 0
+		fmt.Errorf("unknown tournament format: %w", format)
 	}
-	fmt.Println(teams)
+
+	// Input teams:
+	input := []string{
+		"FQ",
+		"Chinggis",
+		"Gaming",
+		"Fluxo",
+		"Vitality",
+		"BetBoom Team",
+		"tyloo",
+		"NRG",
+		"Complexity",
+		"HEROIC",
+	}
+
+	fmt.Println("Checking if input teams are valid")
+	invalidTeams := processing.CheckTeamNames(input, teams)
+	if invalidTeams == nil {
+		fmt.Println("All team names are valid")
+	} else {
+		fmt.Println("The following team names are invalid:")
+		for i := range invalidTeams {
+			fmt.Println(invalidTeams[i])
+		}
+		return
+	}
+
+	// Test prediction store and lookup
+	// User hard coded to my discord user for testing
+	user := processing.User{UserId: "x", Username: "x"}
+	fmt.Println("Generating prediction")
+	prediction, err := processing.GeneratePrediction(user, format, round, input, requiredPredictions)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	// Insert prediction into db
+	fmt.Println("Inserting prediction to db")
+	err = processing.StoreUserPrediction("test", "test_user_predictions", user.UserId, prediction)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	// Fetch prediction from db
+	//fmt.Println("Fetching prediction to db")
+	
 }
