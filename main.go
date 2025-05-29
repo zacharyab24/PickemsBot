@@ -51,6 +51,7 @@ func main() {
 	// MongoDB Stuff
 	uri := os.Getenv("MONGO_PROD_URI")
 	match.Init(uri)
+	processing.Init(uri)
 	defer func() {
 		if err = match.Client.Disconnect(context.TODO()); err != nil {
 			panic(err)
@@ -134,9 +135,9 @@ func ApiTesting() {
 	input := []string{
 		"FQ",
 		"Chinggis",
-		"Gaming",
+		"Nemiga Gaming",
 		"Fluxo",
-		"Vitality",
+		"Legacy",
 		"BetBoom Team",
 		"tyloo",
 		"NRG",
@@ -164,6 +165,7 @@ func ApiTesting() {
 	if err != nil {
 		fmt.Println(err)
 	}
+	fmt.Println(prediction)
 
 	// Insert prediction into db
 	fmt.Println("Inserting prediction to db")

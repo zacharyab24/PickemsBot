@@ -73,8 +73,8 @@ func GeneratePrediction(user User, format string, round string, teams []string, 
 // Postconditions: Returns 3 string slices (win, advance, lose) according to format defined above
 func setSwissPredictions(teams []string) ([]string, []string, []string){
 	win := teams[0:2]
-	advance := teams[2:7]
-	lose := teams[8:9]
+	advance := teams[2:8]
+	lose := teams[8:10]
 
 	return win, advance, lose
 }
