@@ -39,7 +39,6 @@ func fetchMatchData(page string, optionalParams string) (match.MatchResult, erro
 	liquipediaDBApiKey := os.Getenv("LIQUIDPEDIADB_API_KEY")
 	jsonResponse, err := match.GetLiquipediaMatchData(liquipediaDBApiKey, ids)
 	if err != nil {
-		fmt.Println("An error occured whilst fetching match data")
 		return nil, fmt.Errorf("error fetching match data from liquipedia api: %w", err)
 	}
 
@@ -61,7 +60,6 @@ func fetchMatchData(page string, optionalParams string) (match.MatchResult, erro
 	case "single-elimination":
 		progression, err := match.GetEliminationResults(matchNodes)
 		if err != nil {
-			fmt.Println("An error occured whilst parsing match data: %w",err)
 			return nil, fmt.Errorf("error creating match tree: %w", err)
 		}
 		return match.EliminationResult{Progression: progression}, nil
@@ -93,7 +91,6 @@ func FetchUpcomingMatches(page string, optionalParams string) ([]match.UpcomingM
 	liquipediaDBApiKey := os.Getenv("LIQUIDPEDIADB_API_KEY")
 	jsonResponse, err := match.GetLiquipediaMatchData(liquipediaDBApiKey, ids)
 	if err != nil {
-		fmt.Println("An error occured whilst fetching match data")
 		return nil, fmt.Errorf("error fetching match data from liquipedia api: %w", err)
 	}
 
@@ -123,12 +120,11 @@ func GetMatchResults(dbName string, collName string, round string, page string, 
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			shouldRefresh = true
 		} else {
-			return nil, err
+			return nil, fmt.Errorf("error occured getting match results from db: %w", err)
 		}
 	} else if dbResults.GetTTL() < time.Now().Unix() {
 		shouldRefresh = true
 	}
-	
 	
 	// Run if we need to refresh the data stored in the db (either there is no data stored or the TTL has experied)
 	if shouldRefresh {
@@ -183,4 +179,37 @@ func GetMatchResults(dbName string, collName string, round string, page string, 
 		return nil, err
 	}
 	return matchResult, nil
+}
+
+// Helper function to get valid team names used in setting user predictions. We are going to grab the valid team names
+// from the results table as this already contains a list of names, and lets us filter by round without needing to
+// create and maintain a new collection that will require more api calls
+// Preconditions: Receives db name, collection name and round strings
+// Postconditions: Returns string slice containing valid team names for the round, or returns error if an issue occurs 
+func GetValidTeams(dbName string, collName string, round string) ([]string, error) {
+	// Get results stored in our db
+	dbResults, err := match.FetchMatchResultsFromDb(dbName, collName, round)
+	if err != nil {
+		return nil, err
+	}
+
+ 	var teamNames []string
+
+    // Type assertion to determine the concrete type and extract team names
+    switch result := dbResults.(type) {
+    case match.SwissResultRecord:
+        // For Swiss format, Teams is map[string]string
+        for teamName := range result.Teams {
+			teamNames = append(teamNames, teamName)
+        }
+    case match.EliminationResultRecord:
+        // For Elimination format, Progression is map[string]*TeamProgress
+        for teamName := range result.Teams {
+            teamNames = append(teamNames, teamName)
+        }
+    default:
+        return nil, fmt.Errorf("unknown result record type: %T", result)
+    }
+
+    return teamNames, nil
 }

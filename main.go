@@ -98,6 +98,7 @@ func ApiTesting() {
 		return
 	}
 
+	// Get Match Results from DB
 	fmt.Println("Running `GetMatchResults`")
 	results, err := api.GetMatchResults(dbName, "test", round, page, params)
 	if err != nil {
@@ -105,4 +106,13 @@ func ApiTesting() {
 		return
 	}
 	fmt.Println(results)
+
+	// Valid team name lookup
+	fmt.Println("Running `GetValidTeams`")
+	teams, err := api.GetValidTeams(dbName, "test", round)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(teams)
 }

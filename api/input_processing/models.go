@@ -4,7 +4,7 @@
  * Last modified: 29/05/2025
  */
 
-package processor
+package input_processing
 
 import "go.mongodb.org/mongo-driver/bson/primitive"
 
@@ -12,8 +12,9 @@ type Prediction struct {
 	// Generic attributes
 	Id primitive.ObjectID  `bson:"_id,omitempty"`
 	UserId string `bson:"userid,omitempty"`
-	Username string `bson:"username,ommitempty"`
-	Format string `bson:"format,ommitempty"` // "swiss" or "single-elimination"
+	Username string `bson:"username,omitempty"`
+	Format string `bson:"format,omitempty"` // "swiss" or "single-elimination"
+	Round string `bson:"round,omitempty"`
 
 	// Swiss-specific attributes
 	Win []string `bson:"win,omitempty"`
