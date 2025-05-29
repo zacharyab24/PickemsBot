@@ -67,3 +67,8 @@ func (e EliminationResultRecord) GetTeams() map[string]interface{} {
 	}
 	return result
 }
+
+type UpcomingMatchDoc struct {
+	Round string `bson:"round,omitempty"`
+	UpcomingMatches []UpcomingMatch `bson:"upcoming_matches,omitempty"`
+}

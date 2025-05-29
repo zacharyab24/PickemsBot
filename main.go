@@ -2,7 +2,7 @@
  * The "main" method for running the bot. For details about the bot see `readme.md`
  * Usage: go run main.go -format="<format>" -url="<url>"
  * Authors: Zachary Bower
- * Last modified: November 28/05/2025
+ * Last modified: November 29/05/2025
  */
 
 package main
@@ -15,6 +15,7 @@ import (
 	"os"
 
 	bot "pickems-bot/Bot"
+	"pickems-bot/api"
 	match "pickems-bot/api/match"
 
 	"github.com/joho/godotenv"
@@ -73,49 +74,51 @@ func main() {
 
 // This provides a sample of how the api functions work and how they can be incorporated into bot
 func ApiTesting() {
-	// // Match Results
-	// result, err := api.GetMatchData("BLAST/Major/2025/Austin/Stage_1", "")
-	// //result, err := api.GetMatchData("Galaxy_Battle/2025/Phase_2", "&section=24")
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
-	
-	// switch r := result.(type) {
-    // case match.SwissResult:
-    //     fmt.Println("Swiss tournament results:")
-    //     for team, score := range r.Scores {
-    //         fmt.Printf("%s: %s\n", team, score)
-    //     }
-    // case match.EliminationResult:
-    //     fmt.Println("Elimination tournament results:")
-    //     for team, progression := range r.Progression {
-    //         fmt.Printf("%s: %s[%s]\n", team, progression.Round, progression.Status)
-    //     }
-    // }
-	// fmt.Println()
+	// Get Upcoming Matches
+	fmt.Println("Getting upcoming matches from LiquipediaDB Api")
+	matches, err := api.GetUpcomingMatchData("BLAST/Major/2025/Austin/Stage_1", "")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	// // Upcoming Matches
-	// matches, err := api.GetUpcomingMatchData("BLAST/Major/2025/Austin/Stage_1", "")
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
-	// for _, match := range matches {
-	// 	fmt.Printf("%s VS %s (Bo%s): %d: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, match.StreamUrl)
-	// }
+	// Store Upcoming Matches in DB
+	fmt.Println("Storing upcoming matches in db")
+	err = match.StoreUpcomingMatches("test", "upcoming_matches", "stage_1", matches)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	// fmt.Println("Storing results in DB...")
-	// err = match.StoreMatchResults("test", "test", result, "test", matches)
-	// if err != nil {
-	// 	fmt.Printf("error storing results in db: %v", err)
-	// }
-	//Test db fetching
-	res, err := match.FetchMatchResultsFromDb("test", "test", "test")
+	// Get Match Results
+	fmt.Println("Getting match data from LiquipediaDB Api")
+	result, err := api.GetMatchData("BLAST/Major/2025/Austin/Stage_1", "")
+	//result, err := api.GetMatchData("Galaxy_Battle/2025/Phase_2", "&section=24")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	// Store Match results in db
+	fmt.Println("Storing match results in db")
+	err = match.StoreMatchResults("test", "test", result, "test", matches)
+	if err != nil {
+		fmt.Printf("error storing results in db: %v", err)
+	}
+
+	// Test fetching upcoming matches from db
+	upcomingMatches, err := match.FetchUpcomingMatchesFromDb("test", "upcoming_matches", "stage_1")
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println(res)
+	fmt.Println(upcomingMatches)
+
+	// Test fetching matches results from db
+	matches, err := match.FetchMatchResultsFromDb("test", "test", "test")
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(matches)
 
 
 }

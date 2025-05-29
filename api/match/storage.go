@@ -1,7 +1,7 @@
 /* repository.go
  * Contains the logic for interacting with the database (MongoDB)
  * Authors: Zachary Bower
- * Last modified: 28/05/2025
+ * Last modified: 29/05/2025
  */
 
 package match
@@ -19,9 +19,11 @@ import (
 )
 
 var Client *mongo.Client
-//var upcomingMatches []UpcomingMatch // Keep an in memory copy of upcoming matches to reduce DB lookups
 
 // Function to init DB connection from main
+// Preconditions: Receives string containing mongodb uri
+// Postconditions: Establishes connection to db located at uri and updates the global value Client to be the DB connection
+// or returns an error if it occurs
 func Init(uri string) error {
 	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(uri))
 	if err != nil {
@@ -37,8 +39,8 @@ func Init(uri string) error {
 
 // Function used to store match results in the db
 // Preconditions: Receives name of database as a string (e.g. user_pickems), receives name of collection as a string,
-// (e.g. PW Shanghai Major 2024_elimination_predictions, and MatchResult inferface containing the data to be stored
-// Postconditions: Returns boolean for if the operation was successful, and an error message if it was not
+// (e.g. PW Shanghai Major 2024_results, MatchResult inferface containing the data to be stored, and round as a string (e.g. stage_1)
+// Postconditions: Updates the data stored in the db, returns error message if the operation was unsuccessful
 func StoreMatchResults(dbName string, collectionName string, matchResult MatchResult, round string, upcomingMatches []UpcomingMatch) error {
 	coll := Client.Database(dbName).Collection(collectionName)
 
@@ -107,8 +109,9 @@ func StoreMatchResults(dbName string, collectionName string, matchResult MatchRe
 }
 
 // Function to retrieve match results from the DB
-// Preconditions:
-// Postconditions:
+// Preconditions: Receives name of database as a string (e.g. user_pickems), receives name of collection as a string,
+// (e.g. PW Shanghai Major 2024_results, and round as string (e.g. stage_1)
+// Postconditions: Returns MatchResult interface if the operation was successful, or an error if it was not
 func FetchMatchResultsFromDb(dbName string, collectionName string, round string) (MatchResult, error) {
 	coll := Client.Database(dbName).Collection(collectionName)
 	opts := options.FindOne()
@@ -152,6 +155,67 @@ func FetchMatchResultsFromDb(dbName string, collectionName string, round string)
 	default:
 		return nil, fmt.Errorf("unknown match result type: %s", resultType)
 	}
+}
+
+// Function used to store upcoming matches in the db
+// Preconditions: Receives name of database as string (e.g. user_pickems), recieves name of collection as a string
+// (e.g. upcoming_matches), round as a string (e.g. stage_1) and slice up UpcomingMatch that will be stored
+// Postconditions: Updates the data stored in the db, returns error message if the operation was unsuccessful
+func StoreUpcomingMatches(dbName string, collectionName string, round string, upcomingMatches []UpcomingMatch) error {
+	coll := Client.Database(dbName).Collection(collectionName)
+
+	// Attempt to find an existing document
+	var raw bson.M
+	err := coll.FindOne(context.TODO(), bson.M{"round": round}).Decode(&raw)
+	notFound := err == mongo.ErrNoDocuments
+
+	if err != nil && !notFound {
+		return fmt.Errorf("lookup for existing record failed: %w", err)
+	}
+
+	// Create bson document that contains round and upcoming matches
+	filter := bson.M{"round": round}
+	document := bson.M{
+		"round": round,
+		"upcoming_matches": upcomingMatches,
+	}
+
+	// Perform insert or update
+	if notFound {
+		_, err := coll.InsertOne(context.TODO(), document)
+		if err != nil {
+			return fmt.Errorf("failed to insert upcoming matches: %w", err)
+		}
+		return nil
+	}
+
+	_, err = coll.UpdateOne(context.TODO(), filter, document)
+	if err != nil {
+		return fmt.Errorf("failed to update upcoming matches: %w", err)
+	}
+
+	return nil
+}
+
+// Function used to fetch upcoming matches from db
+// Preconditions: Receives name of database as string (e.g. user_pickems), recieves name of collection as a string
+// (e.g. upcoming_matches) and round as a string (e.g. stage_1)
+// Postconditions: Returns slice of upcoming matches or error message if the operation was unsuccessful
+func FetchUpcomingMatchesFromDb(dbName string, collectionName string, round string) ([]UpcomingMatch, error){
+	coll := Client.Database(dbName).Collection(collectionName)
+	opts := options.FindOne()
+	
+	// Get UpcomingMatchDoc result from db
+	var res UpcomingMatchDoc
+	err := coll.FindOne(context.TODO(), bson.D{{Key: "round", Value: round}}, opts).Decode(&res)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, fmt.Errorf("no results found in db")
+		}
+		return nil, fmt.Errorf("error fetching results from db: %w", err)
+	}
+
+	return res.UpcomingMatches, nil
 }
 
 // Function for calculating TTL for result caching. If there are ongoing matches this is shortTTL, else normalTTL. These
