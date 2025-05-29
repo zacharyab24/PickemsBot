@@ -42,8 +42,6 @@ type MatchNode struct {
 	Team1 string
 	Team2 string
 	Winner string
-	Left *MatchNode
-	Right *MatchNode
 }
 
 type UpcomingMatch struct {

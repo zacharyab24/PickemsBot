@@ -1,5 +1,5 @@
 /* repository.go
- * Contains the logic for interacting with the database (MongoDB)
+ * Contains the logic for interacting with the database (MongoDB) within the match_data package
  * Authors: Zachary Bower
  * Last modified: 29/05/2025
  */

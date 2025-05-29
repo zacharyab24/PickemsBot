@@ -1,5 +1,5 @@
-/* records.go
- * Contains the interfaces, structs and helper functions used by the match package related to the database
+/* models.go
+ * Contains the interfaces, structs and helper functions used by the match_data package related to the database
  * Authors: Zachary Bower
  * Last modified: 29/05/2025
  */
