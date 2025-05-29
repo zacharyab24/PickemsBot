@@ -12,7 +12,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math"
 	"os"
 
 	bot "pickems-bot/Bot"
@@ -83,7 +82,7 @@ func ApiTesting() {
 	// params := ""
 	
 	dbName := "test"
-	round := "test"
+	round := "Playoff_stage"
 	
 	// // Get Matches for this stage (this should be run on app start up)
 	// fmt.Println("Getting upcoming matches from LiquipediaDB Api")
@@ -124,8 +123,7 @@ func ApiTesting() {
 		requiredPredictions = 10
 	case "single-elimination" :
 		T := len(teams)
-		rounds := int(math.Log2(float64(T)))
-		requiredPredictions = (1 << rounds) - 1
+		requiredPredictions = T / 2
 	default:
 		requiredPredictions = 0
 		fmt.Errorf("unknown tournament format: %w", format)
@@ -133,16 +131,7 @@ func ApiTesting() {
 
 	// Input teams:
 	input := []string{
-		"FQ",
-		"Chinggis",
-		"Nemiga Gaming",
-		"Fluxo",
-		"Legacy",
-		"BetBoom Team",
-		"tyloo",
-		"NRG",
-		"Complexity",
-		"HEROIC",
+		"Mouz", "G2", "Faze", "Spirit",
 	}
 
 	fmt.Println("Checking if input teams are valid")
@@ -159,11 +148,12 @@ func ApiTesting() {
 
 	// Test prediction store and lookup
 	// User hard coded to my discord user for testing
-	user := processing.User{UserId: "x", Username: "x"}
+	user := processing.User{UserId: "211703039931711488", Username: "sirbowerbird"}
 	fmt.Println("Generating prediction")
 	prediction, err := processing.GeneratePrediction(user, format, round, input, requiredPredictions)
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
 	fmt.Println(prediction)
 
