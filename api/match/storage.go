@@ -173,23 +173,22 @@ func StoreUpcomingMatches(dbName string, collectionName string, round string, up
 		return fmt.Errorf("lookup for existing record failed: %w", err)
 	}
 
-	// Create bson document that contains round and upcoming matches
+	// Create bson UpcomingMatchDoc
 	filter := bson.M{"round": round}
-	document := bson.M{
-		"round": round,
-		"upcoming_matches": upcomingMatches,
-	}
+	update := bson.M{"$set": UpcomingMatchDoc {
+		Round: round,
+		UpcomingMatches: upcomingMatches,
+	}}
 
 	// Perform insert or update
 	if notFound {
-		_, err := coll.InsertOne(context.TODO(), document)
+		_, err := coll.InsertOne(context.TODO(), UpcomingMatchDoc{Round: round, UpcomingMatches: upcomingMatches})
 		if err != nil {
 			return fmt.Errorf("failed to insert upcoming matches: %w", err)
 		}
 		return nil
 	}
-
-	_, err = coll.UpdateOne(context.TODO(), filter, document)
+	_, err = coll.UpdateOne(context.TODO(), filter, update)
 	if err != nil {
 		return fmt.Errorf("failed to update upcoming matches: %w", err)
 	}

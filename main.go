@@ -107,18 +107,19 @@ func ApiTesting() {
 	}
 
 	// Test fetching upcoming matches from db
+	fmt.Println("Fetching upcoming matches from db")
 	upcomingMatches, err := match.FetchUpcomingMatchesFromDb("test", "upcoming_matches", "stage_1")
 	if err != nil {
 		fmt.Println(err)
 	}
 	fmt.Println(upcomingMatches)
+	fmt.Println()
 
 	// Test fetching matches results from db
-	matches, err := match.FetchMatchResultsFromDb("test", "test", "test")
+	fmt.Println("Fetching match results from db")
+	dbMatchResults, err := match.FetchMatchResultsFromDb("test", "test", "test")
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println(matches)
-
-
+	fmt.Println(dbMatchResults)
 }
