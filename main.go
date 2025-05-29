@@ -148,7 +148,7 @@ func ApiTesting() {
 
 	// Test prediction store and lookup
 	// User hard coded to my discord user for testing
-	user := processing.User{UserId: "211703039931711488", Username: "sirbowerbird"}
+	user := processing.User{UserId: "x", Username: "x"}
 	fmt.Println("Generating prediction")
 	prediction, err := processing.GeneratePrediction(user, format, round, input, requiredPredictions)
 	if err != nil {

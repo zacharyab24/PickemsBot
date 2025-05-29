@@ -40,6 +40,11 @@ func Init(uri string) error {
 func StoreUserPrediction(dbName string, collectionName string, userId string, userPrediction Prediction) error {
 	coll := Client.Database(dbName).Collection(collectionName)
 
+	// TODO: Update this function so that it seperates based upon round
+	// Currently it only checks if a userId exists, not a round
+	// So it will override values for a user for different rounds (e.g. Stage_1, Stage_2) and across formats (Swiss and Elim)
+
+
 	// Attempt to find an existing document
 	var result Prediction
 	err := coll.FindOne(context.TODO(), bson.M{"userid": userId}).Decode(&result)
