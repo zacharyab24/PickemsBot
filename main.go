@@ -74,10 +74,13 @@ func main() {
 
 // This provides a sample of how the api functions work and how they can be incorporated into bot
 func ApiTesting() {
-	page := "BLAST/Major/2025/Austin/Stage_1"
+	//page := "BLAST/Major/2025/Austin/Stage_1"
+	//params := ""
+	page := "Perfect_World/Major/2024/Shanghai/Playoff_Stage"
 	params := ""
+	
 	dbName := "test"
-	round := "stage_1"
+	round := "Playoff_stage"
 	
 	// Get Matches for this stage (this should be run on app start up)
 	fmt.Println("Getting upcoming matches from LiquipediaDB Api")

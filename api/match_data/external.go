@@ -261,6 +261,11 @@ func GetUpcomingMatchesFromJson(matchData string) ([]UpcomingMatch, error) {
 			fmt.Println("Error creating match node:",err)
 			return nil, err
 		}
+		// Match and error will only ever be both nil if there is no upcoming match
+		if match == nil {
+			continue
+		}
+		
 		upcomingMatches = append(upcomingMatches, *match)	
 	}
 	return upcomingMatches, nil
