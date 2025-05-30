@@ -76,40 +76,40 @@ func main() {
 
 // This provides a sample of how the api functions work and how they can be incorporated into bot
 func ApiTesting() {
-	//page := "BLAST/Major/2025/Austin/Stage_1"
-	//params := ""
-	// page := "Perfect_World/Major/2024/Shanghai/Playoff_Stage"
+	// page := "BLAST/Major/2025/Austin/Stage_1"
 	// params := ""
+	page := "Perfect_World/Major/2024/Shanghai/Elimination_Stage"
+	params := ""
 	
 	dbName := "test"
-	round := "Playoff_stage"
+	round := "Elimination_Stage"
 	
-	// // Get Matches for this stage (this should be run on app start up)
-	// fmt.Println("Getting upcoming matches from LiquipediaDB Api")
-	// upcomingMatches, err := api.FetchUpcomingMatches(page, params)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
+	// Get Matches for this stage (this should be run on app start up)
+	fmt.Println("Getting upcoming matches from LiquipediaDB Api")
+	upcomingMatches, err := api.FetchUpcomingMatches(page, params)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	// // Store Matches in DB (this should be run on startup)
-	// fmt.Println("Storing upcoming matches in db")
-	// err = match.StoreUpcomingMatches(dbName, "upcoming_matches", round, upcomingMatches)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
+	// Store Matches in DB (this should be run on startup)
+	fmt.Println("Storing upcoming matches in db")
+	err = match.StoreUpcomingMatches(dbName, "upcoming_matches", round, upcomingMatches)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	// // Get Match Results from DB
-	// fmt.Println("Running `GetMatchResults`")
-	// results, err := api.GetMatchResults(dbName, "test", round, page, params)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
-	// fmt.Println(results)
+	// Get Match Results from DB
+	fmt.Println("Running `GetMatchResults`")
+	results, err := api.GetMatchResults(dbName, "test", round, page, params)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	//fmt.Println(results)
 
-	// Valid team name lookup
+	//Valid team name lookup
 	fmt.Println("Running `GetValidTeams`")
 	teams, format, err := api.GetValidTeams(dbName, "test", round)
 	if err != nil {
@@ -126,28 +126,30 @@ func ApiTesting() {
 		requiredPredictions = T / 2
 	default:
 		requiredPredictions = 0
-		fmt.Errorf("unknown tournament format: %w", format)
+		fmt.Printf("unknown tournament format: %s\n", format)
 	}
 
-	// Input teams:
+	// // // Input teams:
+	// // input := []string{
+	// // 	"MOUZ", "G2", "FaZe", "Team Spirit",
+	// // }
 	input := []string{
-		"Mouz", "G2", "Faze", "Vitality",
+		"natus vincere",
+		"team vitality",
+		"team spirit",
+		"mouz",
+		"faze clan",
+		"g2 esports",
+		"team liquid",
+		"the mongolz",
+		"3dmax",
+		"gamerlegion",
 	}
-	// input := []string{
-	// 	"FQ",
-	// 	"Chinggis",
-	// 	"Nemiga Gaming",
-	// 	"Fluxo",
-	// 	"Legacy",
-	// 	"BetBoom Team",
-	// 	"tyloo",
-	// 	"NRG",
-	// 	"Complexity",
-	// 	"HEROIC",
-	// }
+
+	//fmt.Println(teams)
 
 	fmt.Println("Checking if input teams are valid")
-	invalidTeams := processing.CheckTeamNames(input, teams)
+	validTeams, invalidTeams := processing.CheckTeamNames(input, teams)
 	if invalidTeams == nil {
 		fmt.Println("All team names are valid")
 	} else {
@@ -158,11 +160,13 @@ func ApiTesting() {
 		return
 	}
 
+	// Need to make sure that what we pass into GeneratePrediction is the actual team name, not the fuzzy matched name
+
 	// Test prediction store and lookup
 	// User hard coded to my discord user for testing
 	user := processing.User{UserId: "123", Username: "123x"}
 	fmt.Println("Generating prediction")
-	prediction, err := processing.GeneratePrediction(user, format, round, input, requiredPredictions)
+	prediction, err := processing.GeneratePrediction(user, format, round, validTeams, requiredPredictions)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -177,6 +181,30 @@ func ApiTesting() {
 	}
 
 	// Fetch prediction from db
-	//fmt.Println("Fetching prediction to db")
 	
+	// Test fetching prediction from db:
+	fmt.Println("Fetching a single prediction document from db")
+	doc, err := processing.GetUserPrediction("test", "test_user_predictions", "123", round)
+	if err != nil {
+		fmt.Println(err)
+	}
+	//fmt.Println(doc)
+
+	// Test calculate user score:
+	fmt.Println("Checking user score")
+	score, err := processing.CalculateUserScore(doc, results)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Printf("Results for %s: Successes: %d, Failures: %d, Pending: %d\n", user.Username, score.Successes, score.Failed, score.Pending)
+
+	// fmt.Println("Fetching all documents for round")
+	// newDoc, err := processing.GetAllUserPredictions("test", "test_user_predictions", round)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// }
+	// for i := range newDoc {
+	// 	fmt.Println(newDoc[i])
+	// }
+
 }

@@ -34,3 +34,9 @@ type User struct {
 	UserId string
 	Username string
 }
+
+type ScoreResult struct {
+	Successes int
+	Pending int
+	Failed int
+}

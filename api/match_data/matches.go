@@ -22,32 +22,32 @@ func (s SwissResult) GetType() string {
 
 // Helper struct to track if the team has advanced past a round of the elim bracket, been eliminated or pending
 type TeamProgress struct {
-	Round string
+	Round  string
 	Status string
 }
 
 // Struct for single elimination results
 type EliminationResult struct {
-    Progression map[string]TeamProgress 
+	Progression map[string]TeamProgress
 }
 
 func (e EliminationResult) GetType() string {
-    return "single-elimination"
+	return "single-elimination"
 }
 
 // Struct for a binary tree node
 // This tree is used for the results of the finals section, or any other single elimination tournament
 type MatchNode struct {
-	Id string
-	Team1 string
-	Team2 string
+	Id     string
+	Team1  string
+	Team2  string
 	Winner string
 }
 
 type UpcomingMatch struct {
-	Team1 string
-	Team2 string
+	Team1     string
+	Team2     string
 	EpochTime int64
-	BestOf string
+	BestOf    string
 	StreamUrl string
 }

@@ -77,13 +77,13 @@ func StoreUserPrediction(dbName string, collectionName string, userId string, us
 // Function to do DB lookup and get prediction for a user
 // Preconditions: receives strings containing db name, collection name and userId
 // Postconditions: returns a user's prediction if it exists, or an error if it occurs
-func GetUserPrediction(dbName string, collectionName string, userId string) (Prediction, error) {
+func GetUserPrediction(dbName string, collectionName string, userId string, round string) (Prediction, error) {
 	coll := Client.Database(dbName).Collection(collectionName)
 	opts := options.FindOne()
 
 	var result Prediction
 
-	err := coll.FindOne(context.TODO(), bson.D{{Key: "userid", Value: userId}}, opts).Decode(&result)
+	err := coll.FindOne(context.TODO(), bson.M{"userid": userId, "round": round}, opts).Decode(&result)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return Prediction{}, err
