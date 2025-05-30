@@ -124,15 +124,30 @@ func GetLeaderboard() (string, error) {
 }
 
 // Function to get a list of all valid team names
-// Preconditions: None
+// Preconditions: The valid teams list is initalised in db
 // Postconditions: Returns a string slice containing all valid teams for this round
-func GetTeams() ([]string, error) {
-	return nil, nil
+func (a *API) GetTeams() ([]string, error) {
+	// Get valid team names
+	validTeams, _, err := a.Store.GetValidTeams()
+	if err != nil {
+		return nil, err
+	} 
+	
+	return validTeams, nil
 }
 
 // Function to get the upcoming matches for this round of the tournament
 // Preconditions: None
 // Postconditions: Returns a string slice containing all upcoming matches in this round
-func GetUpcomingMatches() ([]string, error) {
-	return nil, nil
+func (a *API) GetUpcomingMatches() ([]string, error) {
+	upcomingMatches, err := a.Store.FetchUpcomingMatchesFromDb()
+	if err != nil {
+		return nil, err
+	}
+
+	var matches []string
+	for _, match := range upcomingMatches {
+		matches = append(matches, fmt.Sprintf("-%s VS %s (%s): <t:%d>: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, match.StreamUrl))
+	}
+	return matches, nil
 }
