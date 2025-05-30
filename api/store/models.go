@@ -1,12 +1,34 @@
 /* models.go
- * Contains the interfaces, structs and helper functions used by the match_data package related to the database
+ * This file contain the interfaces, structs and helper functions that relate to DB objects
  * Authors: Zachary Bower
- * Last modified: 29/05/2025
  */
 
-package match_data
+package store
 
-import "fmt"
+import (
+	"fmt"
+	"pickems-bot/api/external"
+	"pickems-bot/api/shared"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
+
+type Prediction struct {
+	// Generic attributes
+	Id       primitive.ObjectID `bson:"_id,omitempty"`
+	UserId   string             `bson:"userid,omitempty"`
+	Username string             `bson:"username,omitempty"`
+	Format   string             `bson:"format,omitempty"` // "swiss" or "single-elimination"
+	Round    string             `bson:"round,omitempty"`
+
+	// Swiss-specific attributes
+	Win     []string `bson:"win,omitempty"`
+	Advance []string `bson:"advance,omitempty"`
+	Lose    []string `bson:"lose,omitempty"`
+
+	// Elimination specific attributes
+	Progression map[string]shared.TeamProgress `bson:"progression,omitempty"`
+}
 
 type ResultRecord interface {
 	GetType() string
@@ -18,7 +40,7 @@ type ResultRecord interface {
 // SwissResultRecord represents the way data will be stored in the DB for a swiss style bracket
 type SwissResultRecord struct {
 	Round string            `bson:"round,omitempty"`
-	TTL   int64         	`bson:"ttl,omitempty"`
+	TTL   int64             `bson:"ttl,omitempty"`
 	Teams map[string]string `bson:"teams,omitempty"`
 }
 
@@ -44,9 +66,9 @@ func (s SwissResultRecord) GetTeams() map[string]interface{} {
 
 // EliminationRecordResult represents the way data will be stored in the DB for a single-elimination bracket
 type EliminationResultRecord struct {
-    Round string `bson:"round,omitempty"`
-    TTL int64 `bson:"ttl,omitempty"`
-	Teams map[string]TeamProgress `bson:"teams,omitempty"`
+	Round string                  `bson:"round,omitempty"`
+	TTL   int64                   `bson:"ttl,omitempty"`
+	Teams map[string]shared.TeamProgress `bson:"teams,omitempty"`
 }
 
 func (e EliminationResultRecord) GetType() string {
@@ -64,25 +86,26 @@ func (e EliminationResultRecord) GetTTL() int64 {
 func (e EliminationResultRecord) GetTeams() map[string]interface{} {
 	result := make(map[string]interface{}, len(e.Teams))
 	for k, v := range e.Teams {
-        // Convert TeamProgress struct to map[string]interface{}
-        teamData := map[string]interface{}{
-            "round":  v.Round,
-            "status": v.Status,
-        }
-        result[k] = teamData
-    }
-    return result
+		// Convert TeamProgress struct to map[string]interface{}
+		teamData := map[string]interface{}{
+			"round":  v.Round,
+			"status": v.Status,
+		}
+		result[k] = teamData
+	}
+	return result
 }
 
+// Upcoming Match Document struct
 type UpcomingMatchDoc struct {
 	Round string `bson:"round,omitempty"`
-	UpcomingMatches []UpcomingMatch `bson:"upcoming_matches,omitempty"`
+	UpcomingMatches []external.UpcomingMatch `bson:"upcoming_matches,omitempty"`
 }
 
 // Function to convert RecordResult interface to MatchResult interface. Used when getting data from the db
 // Preconditions: none
 // Postconditions: Returns a MatchResult or error if it occurs 
-func ToMatchResult(r ResultRecord) (MatchResult, error) {
+func ToMatchResult(r ResultRecord) (external.MatchResult, error) {
     switch r.GetType() {
     case "swiss":
         scores := make(map[string]string)
@@ -93,9 +116,9 @@ func ToMatchResult(r ResultRecord) (MatchResult, error) {
             }
             scores[team] = strVal
         }
-        return SwissResult{Scores: scores}, nil
+        return external.SwissResult{Scores: scores}, nil
     case "single-elimination":
-        progression := make(map[string]TeamProgress)
+        progression := make(map[string]shared.TeamProgress)
         for team, val := range r.GetTeams() {
             raw, ok := val.(map[string]interface{})
             if !ok {
@@ -103,7 +126,7 @@ func ToMatchResult(r ResultRecord) (MatchResult, error) {
             }
             
             // Initialize TeamProgress struct
-            tp := TeamProgress{}
+            tp := shared.TeamProgress{}
             
             if round, ok := raw["round"].(string); ok {
                 tp.Round = round
@@ -113,8 +136,14 @@ func ToMatchResult(r ResultRecord) (MatchResult, error) {
             }
             progression[team] = tp
         }
-        return EliminationResult{Progression: progression}, nil
+        return external.EliminationResult{Progression: progression}, nil
     default:
         return nil, fmt.Errorf("unknown result type: %s", r.GetType())
     }
+}
+
+type ScoreResult struct {
+	Successes int
+	Pending int
+	Failed int
 }
