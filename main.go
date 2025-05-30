@@ -131,8 +131,20 @@ func ApiTesting() {
 
 	// Input teams:
 	input := []string{
-		"Mouz", "G2", "Faze", "Spirit",
+		"Mouz", "G2", "Faze", "Vitality",
 	}
+	// input := []string{
+	// 	"FQ",
+	// 	"Chinggis",
+	// 	"Nemiga Gaming",
+	// 	"Fluxo",
+	// 	"Legacy",
+	// 	"BetBoom Team",
+	// 	"tyloo",
+	// 	"NRG",
+	// 	"Complexity",
+	// 	"HEROIC",
+	// }
 
 	fmt.Println("Checking if input teams are valid")
 	invalidTeams := processing.CheckTeamNames(input, teams)
@@ -148,7 +160,7 @@ func ApiTesting() {
 
 	// Test prediction store and lookup
 	// User hard coded to my discord user for testing
-	user := processing.User{UserId: "x", Username: "x"}
+	user := processing.User{UserId: "123", Username: "123x"}
 	fmt.Println("Generating prediction")
 	prediction, err := processing.GeneratePrediction(user, format, round, input, requiredPredictions)
 	if err != nil {
