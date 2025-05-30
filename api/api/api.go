@@ -13,6 +13,7 @@ import (
 	"pickems-bot/api/shared"
 	"pickems-bot/api/store"
 	"strings"
+	"time"
 )
 
 type API struct {
@@ -147,6 +148,11 @@ func (a *API) GetUpcomingMatches() ([]string, error) {
 
 	var matches []string
 	for _, match := range upcomingMatches {
+		// upcomingMatches contains all matches for a round in tournament, not just future ones, however in this function
+		// we only care about the ones in the future, so if the start time is before now, don't add it to the response
+		if match.EpochTime < time.Now().Unix() {
+			continue
+		}
 		matches = append(matches, fmt.Sprintf("-%s VS %s (%s): <t:%d>: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, match.StreamUrl))
 	}
 	return matches, nil
