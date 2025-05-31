@@ -14,8 +14,8 @@ import (
 	"log"
 	"os"
 
-	bot "pickems-bot/Bot"
 	api "pickems-bot/api/api"
+	bot "pickems-bot/bot"
 
 	"github.com/joho/godotenv"
 )

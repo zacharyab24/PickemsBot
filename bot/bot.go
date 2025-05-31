@@ -95,7 +95,7 @@ func (b *Bot) helpMessage(discord *discordgo.Session, message *discordgo.Message
 	var res strings.Builder
 	res.WriteString("PickEms Bot v3.0\n") 
 	res.WriteString("`details`: Get information about the tournament including name, round, format, and number of required teams for setting prediction\n") 
-	res.WriteString("`$set team1 ... teamN`: Sets your Pick'Ems")
+	res.WriteString("`$set team1 ... teamN`: Sets your Pick'Ems\n")
 	res.WriteString("For a swiss tournament, 10 teams are required: 1 & 2 are the 3-0 teams, 3-8 are the 3-1 / 3-2 teams and 9-10 are the 0-3 teams.\n")
 	res.WriteString("For a single elimination tournament, 4 teams are required: 1 & 2 are the teams that place 3rd and 4th in the tournament, 3 is the team that places 2nd and 4 is the team that places first\n")
 	res.WriteString("There is fuzzy matching on names, however you should try and have a close match for the best results. Names that contain two or more words need to be encase in \" (e.g. \"The MongolZ\")\n") 
