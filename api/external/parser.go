@@ -1,5 +1,5 @@
-/* liquipedia.go
- * Contains the logic used to fetch data LiquipediaDB api and process the results
+/* parser.go
+ * Contains the logic used in processing results from external apis and parsing data into formats that other functions can use
  * Authors: Zachary Bower
  */
 
@@ -8,10 +8,7 @@ package external
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
-	"net/http"
-	"net/url"
 	"pickems-bot/api/shared"
 	"regexp"
 	"slices"
@@ -19,70 +16,6 @@ import (
 	"strings"
 	"time"
 )
-
-// Function to get match data from liquipediaDB filtered by `match2bracketid`. Each match2bracketid should give a table in the "Detailed Results" section for a round of a tournament
-// e.g. For the URL https://liquipedia.net/counterstrike/PGL/2024/Copenhagen/Opening_Stage, we should be fetching the data for each of the matches in all 9 tables
-// Preconditions: Receives string containing liquipediadb api key, Receives url containing tournament page, receives string slice containing match2bracketid's
-// Postconditons: Returns the match data json as a string or errors
-func GetLiquipediaMatchData(apiKey string, bracketIds []string) (string, error) {
-	apiUrl := "https://api.liquipedia.net/api/v3/match"
-
-	// Format match2bracketids for URL params
-	var conditions []string
-	for _, id := range bracketIds {
-		conditions = append(conditions, fmt.Sprintf("[[match2bracketid::%s]]", id))
-	}
-	conditionString := strings.Join(conditions, " OR ")
-
-	// Convert tournalmentUrl string into url so we can add params
-	parsedUrl, err := url.Parse(apiUrl)
-	if err != nil {
-		fmt.Println("Invalid url:",err)
-		return "", err
-	}
-
-	// Set URL parameters
-	params := parsedUrl.Query()
-	params.Set("limit", "100")
-	params.Set("wiki", "counterstrike")
-	params.Set("conditions", conditionString)
-	params.Set("rawstreams", "false")
-	params.Set("streamurls", "false")
-	parsedUrl.RawQuery = params.Encode()
-
-	// Create HTTP Request
-	client := &http.Client{}
-	request, err :=  http.NewRequest("GET", parsedUrl.String(), nil)
-	if err != nil {
-		fmt.Println("Failed to create request", err)
-		return "", err;
-	}
-
-	// Apply auth header to request
-	request.Header.Set("Authorization", fmt.Sprintf("Apikey %s", apiKey))
-
-	// Send request
-	response, err := client.Do(request)
-	if err != nil {
-		return "", err
-	}
-	defer response.Body.Close()
-
-	// Check if we got a HTTP 200 response, if not an error has occured
-	if response.StatusCode != http.StatusOK {
-		fmt.Printf("Failed to fetch page. Status code: %d\n", response.StatusCode)
-		return "", err
-	}
-
-	// Extract body from reponse and return it
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		fmt.Println("Failed to read body response:", err)
-		return "", err
-	}
-
-	return string(body), nil
-}
 
 // Function to parse liquipedia match data json and return a slice of MatchNodes
 // Preconditions: Receives string containing json match data
@@ -114,7 +47,7 @@ func GetMatchNodesFromJson(matchData string) ([]MatchNode, error) {
 // Function to parse liquipedia match data json and return a slice of UpcomingMatch
 // Preconditions: Receives string containing json match data
 // Postconditons: Returns a slice containing MatchNodes or a error that occurs
-func GetUpcomingMatchesFromJson(matchData string) ([]UpcomingMatch, error) {
+func GetScheduledMatchesFromJson(matchData string) ([]ScheduledMatch, error) {
 	var root map[string]interface{}
 	if err := json.Unmarshal([]byte(matchData), &root); err != nil {
 		return nil, fmt.Errorf("error parsing JSON: %w", err)
@@ -126,9 +59,9 @@ func GetUpcomingMatchesFromJson(matchData string) ([]UpcomingMatch, error) {
 	}
 
 	// Iterate over all values in the results list
-	var upcomingMatches []UpcomingMatch
+	var upcomingMatches []ScheduledMatch
 	for _, result := range rawResults {
-		match, err := ParseUpcomingMatches(result)
+		match, err := ParseScheduledMatches(result)
 		if err != nil {
 			fmt.Println("Error creating match node:",err)
 			return nil, err
@@ -382,25 +315,29 @@ func ExtractRoundAndMatchIds(id string) (round int, match int, err error) {
 	return round, match, nil
 }
 
-// Function to get upcoming matches from json data
+// Function to get scheduled matches from json data
 // Preconditions: Receives interface containing json match data
-// Postconditons: Returns slice of UpcomingMatch or an error that occurs
-func ParseUpcomingMatches(result interface{}) (*UpcomingMatch, error) {
+// Postconditons: Returns slice of ScheduledMatch or an error that occurs
+func ParseScheduledMatches(result interface{}) (*ScheduledMatch, error) {
 	match, ok := result.(map[string]interface{})
 	if !ok {
 		return nil, fmt.Errorf("error mapping match interface")
 	}
 
 	// Check if a match is finished
-	finishedStr, ok := match["finished"].(float64)
+	finishedRes, ok := match["finished"].(float64)
 	if !ok {
 		return nil, fmt.Errorf("error mapping finished interface")
 	}
+	if finishedRes != 0 && finishedRes != 1 {
+		return nil, fmt.Errorf("unexpected value for 'finished': %v (expected 0 or 1)", finishedRes)
+	}
+	isFinished := finishedRes == 1
 	
-	// If match has finished, return nil for this node
-	if finishedStr != 0 {
-		return nil, nil
-	} 
+	// // If match has finished, return nil for this node
+	// if finishedStr != 0 {
+	// 	return nil, nil
+	// } 
 
 	// Get match date
 	matchDateStr, ok := match["date"].(string)
@@ -459,12 +396,88 @@ func ParseUpcomingMatches(result interface{}) (*UpcomingMatch, error) {
 		teams[i] = name
 	}
 	
-	return &UpcomingMatch{
+	return &ScheduledMatch{
 		Team1: teams[0],
 		Team2: teams[1],
 		EpochTime: epoch,
 		BestOf: bestOf,
 		StreamUrl: twitchUrl,
+		Finished: isFinished,
 	}, nil 
 
+}
+
+// Function to parse wiki text and extract `Matchlist` id
+// Preconditions: Receives string containing wiki text
+// Postconditions: Returns string slice containing id's present in input text and tournament format, or error if an invalid tournament format is detected or no results are found
+func ExtractMatchListId(wikitext string) ([]string, string, error) {
+	ids := []string{}
+	format := DetectTournamentFormat(wikitext)
+	var re *regexp.Regexp
+
+	// Set regex for tournament format
+	switch format {
+	case "swiss":
+		re = regexp.MustCompile(`(?s)\{\{\s*Matchlist\s*\|([^}]*)\}\}`) // {{Matchlist ...}} templates used in swiss tournaments
+	case "single-elimination":
+		re = regexp.MustCompile(`(?s)\{\{\s*Bracket\s*\|([^}]*)\}\}`) // {{ShowBracket ...}} templates used in swiss tournaments
+	default:
+		return nil, "", fmt.Errorf("unknown tournament format detected")
+	}
+
+	// Find regex matches 
+	matches := re.FindAllStringSubmatch(wikitext, -1)
+	for _, match := range matches {
+		paramsText := match[1]
+
+		// Parse pipe ("|") seperated key value pairs from template
+		parts := strings.Split(paramsText, "|")
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(part, "id=") {
+				id := strings.TrimSpace(strings.TrimPrefix(part, "id="))
+				
+				// Remove trailing html comments (some times occurs in single elim data)
+				reComment := regexp.MustCompile(`<!--.*?-->`)
+				id = reComment.ReplaceAllString(id, "")
+				id = strings.TrimSpace(id)
+				
+				if id != "" {
+					ids = append(ids, id)
+				}
+				break // No need to parse more params
+			}
+		}
+	}
+
+	if len(ids) == 0 {
+		return nil, "", fmt.Errorf("no ids found")
+	}
+	return ids, format, nil
+}
+
+// Function to determine the format of a tournament from a given wiki text, e.g. swiss, single-elimination
+// Preconditions: Receives string containing the raw wikitext
+// Preconditions: Returns string containing the format of the tournament
+func DetectTournamentFormat(wikitext string) string {
+
+	// Regex to find ==Format== section in wikitext
+	re := regexp.MustCompile(`(?s)==\s*Format\s*==\s*(.*)`)
+	results := re.FindStringSubmatch(wikitext)
+
+	if len(results) > 1 {
+		formatSection := results[1] // format is listed on the second line of the format section in wikitext
+		switch {
+		case strings.Contains(strings.ToLower(formatSection), "swiss") && strings.Contains(strings.ToLower(formatSection), "single-elimination"):
+		// This case occurs when both styles are on a singular page. This doesnt occur during the major and is just here for testing
+			return "single-elimination"
+		case strings.Contains(strings.ToLower(formatSection), "swiss"):
+			return "swiss"
+		case strings.Contains(strings.ToLower(formatSection), "single-elimination"):
+			return "single-elimination"
+		default:
+			return "unknown"
+		}
+	}
+	return "unknown"
 }

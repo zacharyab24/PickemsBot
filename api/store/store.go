@@ -24,7 +24,7 @@ type Store struct {
 	Collections struct {
 		Predictions     *mongo.Collection
 		MatchResults    *mongo.Collection
-		UpcomingMatches *mongo.Collection
+		MatchSchedule *mongo.Collection
 	}
 }
 
@@ -51,11 +51,11 @@ func NewStore(dbName string, mongoURI string, page string, params string, round 
 		Collections: struct {
 			Predictions     *mongo.Collection
 			MatchResults    *mongo.Collection
-			UpcomingMatches *mongo.Collection
+			MatchSchedule *mongo.Collection
 		}{
 			Predictions:     db.Collection("user_predictions"),
 			MatchResults:    db.Collection("match_results"),
-			UpcomingMatches: db.Collection("upcoming_matches"),
+			MatchSchedule: db.Collection("scheduled_matches"),
 		},
 	}, nil
 }

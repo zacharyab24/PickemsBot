@@ -37,10 +37,11 @@ type MatchNode struct {
 	Winner string
 }
 
-type UpcomingMatch struct {
+type ScheduledMatch struct {
 	Team1     string
 	Team2     string
 	EpochTime int64
 	BestOf    string
 	StreamUrl string
+	Finished bool
 }

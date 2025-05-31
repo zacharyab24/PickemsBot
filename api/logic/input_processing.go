@@ -188,23 +188,24 @@ func calculateEliminationScore(prediction store.Prediction, results map[string]s
 
 	for team, predictedProgress := range prediction.Progression {
 		resultProgress, ok := results[team]
-		if !ok {
-			// Predicted team is not in result team map
-			failed ++
-			continue
+
+		if predictedProgress.Round == "Grand Final" && predictedProgress.Status == "advanced" {
+			response.WriteString(fmt.Sprintf("- %s to win the %s", team, predictedProgress.Round))
+		} else {
+			response.WriteString(fmt.Sprintf("- %s to make it to the %s", team, predictedProgress.Round))
 		}
-		response.WriteString(fmt.Sprintf("- %s to make it to the %s", team, predictedProgress.Round))
+		
 		// Check if prediction was correct
-		if predictedProgress.Round == resultProgress.Round {
+		if predictedProgress.Round == resultProgress.Round && ok {
 			if predictedProgress.Status == resultProgress.Status {
-				response.WriteString("[Succeeded]\n")
+				response.WriteString(" [Succeeded]\n")
 				succeeded++
 			} else if resultProgress.Status == "pending" {
-				response.WriteString("[Pending]\n")
+				response.WriteString(" [Pending]\n")
 				pending++
 			}
 		} else {
-			response.WriteString("[Failed]\n")
+			response.WriteString(" [Failed]\n")
 			failed++
 		}
 	}

@@ -118,7 +118,7 @@ func (s *Store) GetMatchResults() (external.MatchResult, error) {
 		}
 
 		// Get upcoming matches from db
-		upcomingMatches, err := s.FetchUpcomingMatchesFromDb()
+		upcomingMatches, err := s.FetchMatchSchedule()
 		if err != nil {
 			return nil, err
 		}
@@ -197,7 +197,7 @@ func (s *Store) fetchMatchDataFromExternal() (external.MatchResult, error){
 // Preconditions: Receives name of database as a string (e.g. user_pickems), receives name of collection as a string, (e.g.)
 // PW Shanghai Major 2024_results, MatchResult inferface containing the data to be stored, and round as a string (e.g. stage_1)
 // Postconditions: Updates the data stored in the db, returns error message if the operation was unsuccessful
-func (s *Store) StoreMatchResults(matchResult external.MatchResult, upcomingMatches []external.UpcomingMatch) error {
+func (s *Store) StoreMatchResults(matchResult external.MatchResult, upcomingMatches []external.ScheduledMatch) error {
 	
 	// Attempt to find an existing document
 	var raw bson.M
@@ -267,7 +267,7 @@ func (s *Store) StoreMatchResults(matchResult external.MatchResult, upcomingMatc
 // values are defined in a const within the function
 // Preconditions: Receives slice of UpcomingMatch which contains information about the match
 // Postconditions: Returns time.Duration with the value for the TTL
-func DetermineTTL(matches []external.UpcomingMatch) int64 {
+func DetermineTTL(matches []external.ScheduledMatch) int64 {
 	now := time.Now().Unix()
 
 	const (

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	bot "pickems-bot/Bot"
 	api "pickems-bot/api/api"
@@ -45,8 +46,8 @@ func main() {
 	} else {
 		fmt.Println("Invalid \"test\" flag. Should be true or false")
 	}
-
-	api, err := api.NewAPI("test", os.Getenv("MONGO_PROD_URI"), "Perfect_World/Major/2024/Shanghai/Elimination_Stage", "", "Elimination_Stage")
+	api, err := api.NewAPI("test", os.Getenv("MONGO_PROD_URI"), "BLAST/Major/2025/Austin/Stage_1", "", "Stage_1")
+	//api, err := api.NewAPI("test", os.Getenv("MONGO_PROD_URI"), "Perfect_World/Major/2024/Shanghai/Playoff_Stage", "", "Playoff_Stage")
 	if err != nil {
 		log.Fatalf("failed to initialize API: %v", err)
 	}	
@@ -76,30 +77,74 @@ func main() {
 // This provides a sample of how the api functions work and how they can be incorporated into bot
 func ApiTesting(api *api.API) {
 	user := shared.User{UserId: "123", Username: "123x"}
-	userPreds := []string{
-		"Natus Vincere",
-		"Team Vitality",
-		"Team Spirit",
-		"MOUZ",
-		"FaZe Clan",
-		"G2 Esports",
-		"Team Liquid",
-		"The MongolZ",
-		"3DMAX",
-		"GamerLegion",
+	// userPreds := []string{
+	// 	"Natus Vincere",
+	// 	"Team Vitality",
+	// 	"Team Spirit",
+	// 	"MOUZ",
+	// 	"FaZe Clan",
+	// 	"G2 Esports",
+	// 	"Team Liquid",
+	// 	"The MongolZ",
+	// 	"3DMAX",
+	// 	"GamerLegion",
+	// }
+	userPreds := []string {
+		"Mouz",
+		"G2",
+		"faze",
+		"vitality",
 	}
 
-	err := api.SetUserPrediction(user, userPreds ,api.Store.Round)
+
+	fmt.Println("Populating scheduled matches")
+	err := api.PopulateMatches()
 	if err != nil {
-		fmt.Println("here")
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println("Getting teams list")
+	teams, err := api.GetTeams()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(teams)
+
+	fmt.Println("Getting upcoming matches")
+	matches, err := api.GetUpcomingMatches()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	if len(matches) == 0 {
+		fmt.Println("No upcoming matches")
+	} else {
+		for _,match := range matches {
+			if strings.Contains(match, "TBD") {
+				continue
+			}
+			fmt.Print(match)
+		}
+	}
+
+	fmt.Println("Setting user prediction")
+	err = api.SetUserPrediction(user, userPreds ,api.Store.Round)
+	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	
+	fmt.Println("Checking user prediction")
 	report, err := api.CheckPrediction(user)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	fmt.Println(report)
+
+	fmt.Println("Getting leaderboard")
+
+
 }
