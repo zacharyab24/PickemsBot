@@ -20,6 +20,7 @@ import (
 	"pickems-bot/api/shared"
 
 	"github.com/joho/godotenv"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func main() {
@@ -46,8 +47,8 @@ func main() {
 	} else {
 		fmt.Println("Invalid \"test\" flag. Should be true or false")
 	}
-	api, err := api.NewAPI("test", os.Getenv("MONGO_PROD_URI"), "BLAST/Major/2025/Austin/Stage_1", "", "Stage_1")
-	//api, err := api.NewAPI("test", os.Getenv("MONGO_PROD_URI"), "Perfect_World/Major/2024/Shanghai/Playoff_Stage", "", "Playoff_Stage")
+	//api, err := api.NewAPI("test", os.Getenv("MONGO_PROD_URI"), "BLAST/Major/2025/Austin/Stage_1", "", "Stage_1")
+	api, err := api.NewAPI("test", os.Getenv("MONGO_PROD_URI"), "Perfect_World/Major/2024/Shanghai/Playoff_Stage", "", "Playoff_Stage")
 	if err != nil {
 		log.Fatalf("failed to initialize API: %v", err)
 	}	
@@ -76,7 +77,7 @@ func main() {
 
 // This provides a sample of how the api functions work and how they can be incorporated into bot
 func ApiTesting(api *api.API) {
-	user := shared.User{UserId: "123", Username: "123x"}
+	user := shared.User{UserId: "321asdf", Username: "321yasdf"}
 	// userPreds := []string{
 	// 	"Natus Vincere",
 	// 	"Team Vitality",
@@ -93,26 +94,31 @@ func ApiTesting(api *api.API) {
 		"Mouz",
 		"G2",
 		"faze",
-		"vitality",
+		"spirit",
 	}
 
 
-	fmt.Println("Populating scheduled matches")
+	fmt.Println("[Populating scheduled matches]")
 	err := api.PopulateMatches()
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+	fmt.Println()
 
-	fmt.Println("Getting teams list")
+	fmt.Println("[Getting teams list]")
 	teams, err := api.GetTeams()
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println(teams)
-
-	fmt.Println("Getting upcoming matches")
+	fmt.Println("Valid teams for this stage are:")
+	for _, team := range teams {
+		fmt.Printf("- %s\n", team)
+	}
+	fmt.Println()
+	
+	fmt.Println("[Getting upcoming matches]")
 	matches, err := api.GetUpcomingMatches()
 	if err != nil {
 		fmt.Println(err)
@@ -121,6 +127,7 @@ func ApiTesting(api *api.API) {
 	if len(matches) == 0 {
 		fmt.Println("No upcoming matches")
 	} else {
+		fmt.Println("Upcoming matches:")
 		for _,match := range matches {
 			if strings.Contains(match, "TBD") {
 				continue
@@ -128,23 +135,41 @@ func ApiTesting(api *api.API) {
 			fmt.Print(match)
 		}
 	}
+	fmt.Println()
 
-	fmt.Println("Setting user prediction")
+	fmt.Println("[Setting user prediction]")
 	err = api.SetUserPrediction(user, userPreds ,api.Store.Round)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+	fmt.Printf("%s's Pickems have been updated\n", user.Username)
+	fmt.Println()
 	
-	fmt.Println("Checking user prediction")
+	fmt.Println("[Checking user prediction]")
 	report, err := api.CheckPrediction(user)
+	dontPrint := false
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			dontPrint = true
+		} else {
+			fmt.Println(err)
+			return
+		}
+	}
+	if dontPrint {
+		fmt.Printf("%s does not have any Pickems stored. Use $set to set your predictions\n", user.Username)
+	} else {
+		fmt.Println(report)
+	}
+	fmt.Println()
+
+	fmt.Println("[Getting leaderboard]")
+	leaderboard, err := api.GetLeaderboard() 
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println(report)
-
-	fmt.Println("Getting leaderboard")
-
+	fmt.Println(leaderboard)
 
 }

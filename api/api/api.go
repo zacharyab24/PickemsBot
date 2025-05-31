@@ -14,8 +14,11 @@ import (
 	"pickems-bot/api/logic"
 	"pickems-bot/api/shared"
 	"pickems-bot/api/store"
+	"sort"
 	"strings"
 	"time"
+
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type API struct {
@@ -99,7 +102,7 @@ func (a *API) SetUserPrediction(user shared.User, inputTeams []string, round str
 }
 
 // Function that contains the logic required to check a prediction
-// Preconditions: Receives a user struct
+// Preconditions: Receives a user struct and receiver pointer to api
 // Postconditions: Returns a string containing the results of the user's predictions, or an error if it occurs
 func (a *API) CheckPrediction(user shared.User) (string, error) {
 	err := a.Store.EnsureScheduledMatches()
@@ -109,31 +112,73 @@ func (a *API) CheckPrediction(user shared.User) (string, error) {
 	// Fetch prediction from db
 	doc, err := a.Store.GetUserPrediction(user.UserId)
 	if err != nil {
-		fmt.Println("foo")
 		return "", err
 	}
 
 	// Fetch match results from db
 	results, err := a.Store.GetMatchResults()
 	if err != nil {
-		fmt.Println("bar")
 		return "", err
 	}
 
 	// Evaluate scores
 	_, report, err := logic.CalculateUserScore(doc, results)
 	if err != nil {
-		fmt.Println("deez")
 		return "", err
 	}
 	return report, nil
 }
 
 // Function that contains the logic required to get the leaderboard results
-// Preconditions: None
+// Preconditions: Receives receiver pointer to api 
 // Postconditions: Returns a string containing the leaderboard for the tournament
-func GetLeaderboard() (string, error) {
-	return "", nil
+func (a *API) GetLeaderboard() (string, error) {
+	// Check if results have been initialised
+	err := a.Store.EnsureScheduledMatches()
+	if err != nil {
+		return "", err
+	}
+
+	// Fetch match results from db
+	results, err := a.Store.GetMatchResults()
+	if err != nil {
+		return "", err
+	}
+
+	// Fetch all predictions
+	preds, err := a.Store.GetAllUserPredictions()
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return "There are no user predictions currently stored", nil
+		} else {
+			return "", err
+		}		
+	}
+
+	var leaderboard []LeaderboardEntry
+
+	// Iterate over each user's predictions and calculate their score
+	for _, pred := range preds {
+		scores, _, err := logic.CalculateUserScore(pred, results)
+		if err != nil {
+			return "", err
+		}
+		leaderboard = append(leaderboard, LeaderboardEntry{Username: pred.Username, Succeeded: scores.Successes, Failed: scores.Failed})
+	}
+	
+	// Order the leaderboard in decesending order so that the user with the highest score appear at the top. Note score = successes - failures and there is no tie breaker
+	sort.Slice(leaderboard, func(i, j int) bool {
+		return (leaderboard[i].Succeeded - leaderboard[i].Failed) > (leaderboard[j].Succeeded - leaderboard[j].Failed)
+	})
+
+	// Generate Responnse stirng
+	var response strings.Builder
+	response.WriteString("The users with the best pickems are:\n")
+	for i, user := range leaderboard {
+		response.WriteString(fmt.Sprintf("%d. %s, %d successes, %d failures\n", i+1, user.Username, user.Succeeded, user.Failed))
+	}
+	
+	return response.String(), nil
 }
 
 // Function to get a list of all valid team names

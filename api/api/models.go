@@ -10,3 +10,9 @@ type ScoreResult struct {
 	Pending   int
 	Failed    int
 }
+
+type LeaderboardEntry struct {
+	Username string
+	Succeeded int
+	Failed int
+}
