@@ -27,11 +27,11 @@ func main() {
 	err := godotenv.Load()
 	
 	//Flags
-	formatPtr := flag.String("format", "swiss", "Style of tournament, e.g. swiss, finals, iem")
-	roundPtr := flag.String("round", "opening", "Round of tournament (opening, elimination, playoffs)")
-	tournamentNamePtr := flag.String("tournamentName", "ShanghaiMajor2024", "Tournament name, e.g. ShanghaiMajor2024")
-	urlPtr := flag.String("url", "https://liquipedia.net/counterstrike/Perfect_World/Major/2024/Shanghai", "Liquipedia Base URL: e.g. https://liquipedia.net/counterstrike/PGL/2024/Copenhagen")
-	testPtr := flag.String("test", "false", "Use main or test bot: takes true or false as argument")
+	roundPtr := flag.String("round", "Stage_1", "Round of tournament (Stage_1, Opening, Playoffs, etc)")
+	tournamentNamePtr := flag.String("tournamentName", "AustinMajor2025", "Tournament name, e.g. AustinMajor2025")
+	pagePtr := flag.String("tournamentPage", "BLAST/Major/2025/Austin", "Liquipedia Wiki Page: e.g. BLAST/Major/2025/Austin")
+	paramsPtr := flag.String("optionalParams", "", "Optional params required by some tournament format, if unsure leave empty")
+	testPtr := flag.String("test", "false", "Use release or beta bot: takes true or false as argument")
 
 	flag.Parse()
 	
@@ -39,6 +39,27 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
+	// Init API
+	page := fmt.Sprintf("%s/%s", *pagePtr, *roundPtr) 
+	apiInstance, err := api.NewAPI(*tournamentNamePtr, os.Getenv("MONGO_PROD_URI"), page, *paramsPtr, *roundPtr)
+	
+	if err != nil {
+		log.Fatalf("failed to initialize API: %v", err)
+	}	
+	defer func() {
+		if err = apiInstance.Store.Client.Disconnect(context.TODO()); err != nil {
+			panic(err)
+		}
+	}()
+	err = apiInstance.PopulateMatches()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// API Testing
+	ApiTesting(apiInstance)
+
+	//Init bot
 	var discordToken string
 	if *testPtr == "false" { //Load production bot token
 		discordToken = os.Getenv("DISCORD_PROD_TOKEN")
@@ -47,32 +68,9 @@ func main() {
 	} else {
 		fmt.Println("Invalid \"test\" flag. Should be true or false")
 	}
-	//api, err := api.NewAPI("test", os.Getenv("MONGO_PROD_URI"), "BLAST/Major/2025/Austin/Stage_1", "", "Stage_1")
-	api, err := api.NewAPI("test", os.Getenv("MONGO_PROD_URI"), "Perfect_World/Major/2024/Shanghai/Playoff_Stage", "", "Playoff_Stage")
-	if err != nil {
-		log.Fatalf("failed to initialize API: %v", err)
-	}	
-	defer func() {
-		if err = api.Store.Client.Disconnect(context.TODO()); err != nil {
-			panic(err)
-		}
-	}()
-
-	// API Testing
-	ApiTesting(api)
-
-	//Init bot and run for tournament style
-	if *formatPtr == "swiss" || *formatPtr == "finals" {
-		bot.BotToken = discordToken
-		bot.Format = *formatPtr
-		bot.Round = *roundPtr
-		bot.TournamentName = *tournamentNamePtr
-		bot.Client = api.Store.Client
-		bot.LiquipediaURL = *urlPtr
-		bot.Run()
-	} else {
-		fmt.Println("Invalid tournament style... exiting")
-	}
+	
+	botInstance, err := bot.NewBot(discordToken, apiInstance)
+	botInstance.Run()
 }
 
 // This provides a sample of how the api functions work and how they can be incorporated into bot
