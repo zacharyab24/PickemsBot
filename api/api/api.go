@@ -229,7 +229,7 @@ func (a *API) GetUpcomingMatches() ([]string, error) {
 		if match.EpochTime < time.Now().Unix() || match.Finished {
 			continue
 		}
-		matches = append(matches, fmt.Sprintf("- %s VS %s (%s): <t:%d>: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, match.StreamUrl))
+		matches = append(matches, fmt.Sprintf("- %s VS %s (bo%s): <t:%d>: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, match.StreamUrl))
 	}
 	return matches, nil
 }
