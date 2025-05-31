@@ -68,6 +68,9 @@ func (b *Bot) newMessage(discord *discordgo.Session, message *discordgo.MessageC
 	case startsWith(message.Content, "$help"):
 		b.helpMessage(discord, message)
 
+	case startsWith(message.Content, "$details"):
+		b.details(discord, message)
+
 	case startsWith(message.Content, "$set"):
 		b.setPredictions(discord, message)
 
@@ -85,12 +88,13 @@ func (b *Bot) newMessage(discord *discordgo.Session, message *discordgo.MessageC
 	}
 }
 
-// Function to return the help message called by `$help`
+// Function to prints the help message called by `$help` to a discord channel
 // Preconditions: None
-// Postconditions: Returns a string containing the entire help messages
+// Postconditions: Help message is sent to the discord channel
 func (b *Bot) helpMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	var res strings.Builder
 	res.WriteString("PickEms Bot v3.0\n") 
+	res.WriteString("`details`: Get information about the tournament including name, round, format, and number of required teams for setting prediction\n") 
 	res.WriteString("`$set team1 ... teamN`: Sets your Pick'Ems")
 	res.WriteString("For a swiss tournament, 10 teams are required: 1 & 2 are the 3-0 teams, 3-8 are the 3-1 / 3-2 teams and 9-10 are the 0-3 teams.\n")
 	res.WriteString("For a single elimination tournament, 4 teams are required: 1 & 2 are the teams that place 3rd and 4th in the tournament, 3 is the team that places 2nd and 4 is the team that places first\n")
@@ -100,6 +104,23 @@ func (b *Bot) helpMessage(discord *discordgo.Session, message *discordgo.Message
 	res.WriteString("`$leaderboard`: shows which users have the best pickems in the current stage. This is sorted by number of successful picks. There is no tie breaker in the event two users have the same number of successes\n")
 	res.WriteString("`$upcoming`: shows the upcoming matches for this round of the tournament with confirmed teams\n") 
 	discord.ChannelMessageSend(message.ChannelID, res.String())
+}
+
+// Function that prints the `$details` message in a discord channel
+// Preconditions: Recieves pointer to discordgo session and discordgo message
+// Postconditions: User predictions are updated if data is valid, else an error message is sent to the discord channel
+func (b *Bot) details(discord *discordgo.Session, message *discordgo.MessageCreate) {
+	info, err := b.ApiPtr.GetTournamentInfo()
+	if err != nil {
+		fmt.Println(err)
+		discord.ChannelMessageSend(message.ChannelID, "An unexpected error occured")
+	}
+	var res strings.Builder
+	for i := range info {
+		res.WriteString(fmt.Sprintf("%s\n",info[i]))
+	}
+	discord.ChannelMessageSend(message.ChannelID, res.String())
+	
 }
 
 // Function that processes the user input for `$set` message, validates the picks are correct and updates the values stored in the db

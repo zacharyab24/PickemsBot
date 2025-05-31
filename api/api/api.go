@@ -234,6 +234,41 @@ func (a *API) GetUpcomingMatches() ([]string, error) {
 	return matches, nil
 }
 
+// Function to get the following information about the tournament: Tournament Name, Round, Format, RequiredPredictions
+// Preconditions: None
+// Postconditions: Returns a string slice with the contents attribute : value containing the information listed above
+func (a *API) GetTournamentInfo() ([]string, error) {
+	err := a.Store.EnsureScheduledMatches()
+	if err != nil {
+		return nil, err
+	}
+	
+	// Get valid team names
+	validTeams, format, err := a.Store.GetValidTeams()
+	if err != nil {
+		return nil, err
+	} 
+
+	// Get number of required teams
+	var requiredPredictions int
+	switch format {
+	case "swiss":
+		requiredPredictions = 10
+	case "single-elimination" :
+		T := len(validTeams)
+		requiredPredictions = T / 2
+	default:
+		requiredPredictions = 0
+	}
+
+	var values []string
+	values = append(values, fmt.Sprintf("Tournament Name: %s", a.Store.Database.Name()))
+	values = append(values, fmt.Sprintf("Round: %s", a.Store.Round))
+	values = append(values, fmt.Sprintf("Format: %s", format))
+	values = append(values, fmt.Sprintf("Number of required teams: %d", requiredPredictions))
+	return values, nil
+}
+
 // Function to fetch scheduled match data and store it in the DB. Needs to be run before other functions in this package will work properly
 // Preconditions: Receives receiver pointer to API
 // Postconditions: Returns nil, or an error if it occurs
