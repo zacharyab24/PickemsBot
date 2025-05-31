@@ -35,12 +35,15 @@ func CheckTeamNames(predictionTeams []string, validTeams []string) ([]string, []
 	// Match team names
 	for _, team := range predictionTeams {	
 		lowerTeam := strings.ToLower(team)
-		fuzzyResults := fuzzy.Find(lowerTeam, validTeamsLower)
-		if len(fuzzyResults) == 1 {
-			formattedTeamNames = append(formattedTeamNames, lookup[fuzzyResults[0]]) // Append the original team name, not the lowercase one	
-		} else {
+		fuzzyResults := fuzzy.RankFind(lowerTeam, validTeamsLower)
+		
+		// If there is no valid team name, add it to the invalid teams list
+		if len(fuzzyResults) == 0 {
 			invalidTeams = append(invalidTeams, team)
-		}
+			continue
+				
+		} 
+		formattedTeamNames = append(formattedTeamNames, lookup[fuzzyResults[0].Target]) // Append the original team name, not the lowercase one
 	}
 	return formattedTeamNames, invalidTeams
 }

@@ -75,6 +75,13 @@ func (a *API) SetUserPrediction(user shared.User, inputTeams []string, round str
 		return fmt.Errorf("incorrect number of teams arguments, expected %d but got %d", requiredPredictions, len(inputTeams))
 	}
 
+	// Fix formatting on input teams
+	for i := range inputTeams {
+		inputTeams[i] = strings.ReplaceAll(inputTeams[i], "\"", "")
+		inputTeams[i] = strings.ReplaceAll(inputTeams[i], "“", "")
+		inputTeams[i] = strings.ReplaceAll(inputTeams[i], "”", "")
+	}
+
 	// Validate input teams
 	teams, invalidTeams := logic.CheckTeamNames(inputTeams, validTeams)
 	if len(invalidTeams) > 0 {

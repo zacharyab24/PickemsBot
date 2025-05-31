@@ -13,14 +13,11 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
 
 	bot "pickems-bot/Bot"
 	api "pickems-bot/api/api"
-	"pickems-bot/api/shared"
 
 	"github.com/joho/godotenv"
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func main() {
@@ -56,9 +53,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// API Testing
-	ApiTesting(apiInstance)
-
 	//Init bot
 	var discordToken string
 	if *testPtr == "false" { //Load production bot token
@@ -68,106 +62,11 @@ func main() {
 	} else {
 		fmt.Println("Invalid \"test\" flag. Should be true or false")
 	}
-	
 	botInstance, err := bot.NewBot(discordToken, apiInstance)
-	botInstance.Run()
-}
-
-// This provides a sample of how the api functions work and how they can be incorporated into bot
-func ApiTesting(api *api.API) {
-	user := shared.User{UserId: "321asdf", Username: "321yasdf"}
-	// userPreds := []string{
-	// 	"Natus Vincere",
-	// 	"Team Vitality",
-	// 	"Team Spirit",
-	// 	"MOUZ",
-	// 	"FaZe Clan",
-	// 	"G2 Esports",
-	// 	"Team Liquid",
-	// 	"The MongolZ",
-	// 	"3DMAX",
-	// 	"GamerLegion",
-	// }
-	userPreds := []string {
-		"Mouz",
-		"G2",
-		"faze",
-		"spirit",
-	}
-
-
-	fmt.Println("[Populating scheduled matches]")
-	err := api.PopulateMatches()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Println()
-
-	fmt.Println("[Getting teams list]")
-	teams, err := api.GetTeams()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Println("Valid teams for this stage are:")
-	for _, team := range teams {
-		fmt.Printf("- %s\n", team)
-	}
-	fmt.Println()
 	
-	fmt.Println("[Getting upcoming matches]")
-	matches, err := api.GetUpcomingMatches()
+	// Run bot
+	err = botInstance.Run()
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatal(fmt.Errorf("an unrecoverable error occured whilst running the bot: %w", err))
 	}
-	if len(matches) == 0 {
-		fmt.Println("No upcoming matches")
-	} else {
-		fmt.Println("Upcoming matches:")
-		for _,match := range matches {
-			if strings.Contains(match, "TBD") {
-				continue
-			}
-			fmt.Print(match)
-		}
-	}
-	fmt.Println()
-
-	fmt.Println("[Setting user prediction]")
-	err = api.SetUserPrediction(user, userPreds ,api.Store.Round)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Printf("%s's Pickems have been updated\n", user.Username)
-	fmt.Println()
-	
-	fmt.Println("[Checking user prediction]")
-	report, err := api.CheckPrediction(user)
-	dontPrint := false
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			dontPrint = true
-		} else {
-			fmt.Println(err)
-			return
-		}
-	}
-	if dontPrint {
-		fmt.Printf("%s does not have any Pickems stored. Use $set to set your predictions\n", user.Username)
-	} else {
-		fmt.Println(report)
-	}
-	fmt.Println()
-
-	fmt.Println("[Getting leaderboard]")
-	leaderboard, err := api.GetLeaderboard() 
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Println(leaderboard)
-
 }
