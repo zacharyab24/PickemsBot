@@ -9,6 +9,9 @@ jobs:
     name: build and deploy
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        
       - name: Setup Tailscale
         uses: tailscale/github-action@v2
         with:
