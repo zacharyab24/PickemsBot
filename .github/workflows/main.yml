@@ -9,6 +9,14 @@ jobs:
     name: build and deploy
     runs-on: ubuntu-latest
     steps:
+      - name: Debug secrets presence
+        run: |
+          echo "Client: ${TAILSCALE_AUTH_CLIENT:+[set]}"
+          echo "Secret: ${TAILSCALE_AUTH_SECRET:+[set]}"
+        env:
+          TAILSCALE_AUTH_CLIENT: ${{ secrets.TAILSCALE_AUTH_CLIENT }}
+          TAILSCALE_AUTH_SECRET: ${{ secrets.TAILSCALE_AUTH_SECRET }}
+    
       - name: Setup Tailscale
         uses: tailscale/github-action@v2
         with:
