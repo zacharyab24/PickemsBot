@@ -26,7 +26,7 @@ type API struct {
 }
 
 func NewAPI(dbName string, mongoURI string, page string, params string, round string) (*API, error) {
-	if dbName == "" || page == "" || round == ""{
+	if dbName == "" || page == "" || round == "" {
 		return nil, fmt.Errorf("dbName, page, and round are required")
 	}
 	// Append round to page string
@@ -38,32 +38,32 @@ func NewAPI(dbName string, mongoURI string, page string, params string, round st
 	}
 
 	return &API{
-		Store:  s,
+		Store: s,
 	}, nil
 }
 
 // Function that contains the logic to set a user prediction in the DB
-// Preconditions: Receives user struct that contains userId and userName, and a list of teams the user wishes to set, 
-// and strings containing dbName, collName and round 
+// Preconditions: Receives user struct that contains userId and userName, and a list of teams the user wishes to set,
+// and strings containing dbName, collName and round
 // Postconditions: Updates the user's predictions in the database, or returns an error if it occurs
 func (a *API) SetUserPrediction(user shared.User, inputTeams []string, round string) error {
 	err := a.Store.EnsureScheduledMatches()
 	if err != nil {
 		return err
 	}
-	
+
 	// Get valid team names
 	validTeams, format, err := a.Store.GetValidTeams()
 	if err != nil {
 		return err
-	} 
+	}
 
 	// Get number of required teams
 	var requiredPredictions int
 	switch format {
 	case "swiss":
 		requiredPredictions = 10
-	case "single-elimination" :
+	case "single-elimination":
 		T := len(validTeams)
 		requiredPredictions = T / 2
 	default:
@@ -113,7 +113,7 @@ func (a *API) SetUserPrediction(user shared.User, inputTeams []string, round str
 	if err != nil {
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -146,7 +146,7 @@ func (a *API) CheckPrediction(user shared.User) (string, error) {
 }
 
 // Function that contains the logic required to get the leaderboard results
-// Preconditions: Receives receiver pointer to api 
+// Preconditions: Receives receiver pointer to api
 // Postconditions: Returns a string containing the leaderboard for the tournament
 func (a *API) GetLeaderboard() (string, error) {
 	// Check if results have been initialised
@@ -168,7 +168,7 @@ func (a *API) GetLeaderboard() (string, error) {
 			return "There are no user predictions currently stored", nil
 		} else {
 			return "", err
-		}		
+		}
 	}
 
 	var leaderboard []LeaderboardEntry
@@ -181,7 +181,7 @@ func (a *API) GetLeaderboard() (string, error) {
 		}
 		leaderboard = append(leaderboard, LeaderboardEntry{Username: pred.Username, Succeeded: scores.Successes, Failed: scores.Failed})
 	}
-	
+
 	// Order the leaderboard in decesending order so that the user with the highest score appear at the top. Note score = successes - failures and there is no tie breaker
 	sort.Slice(leaderboard, func(i, j int) bool {
 		return (leaderboard[i].Succeeded - leaderboard[i].Failed) > (leaderboard[j].Succeeded - leaderboard[j].Failed)
@@ -193,7 +193,7 @@ func (a *API) GetLeaderboard() (string, error) {
 	for i, user := range leaderboard {
 		response.WriteString(fmt.Sprintf("%d. %s, %d successes, %d failures\n", i+1, user.Username, user.Succeeded, user.Failed))
 	}
-	
+
 	return response.String(), nil
 }
 
@@ -206,13 +206,13 @@ func (a *API) GetTeams() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Get valid team names
 	validTeams, _, err := a.Store.GetValidTeams()
 	if err != nil {
 		return nil, err
-	} 
-	
+	}
+
 	return validTeams, nil
 }
 
@@ -224,7 +224,7 @@ func (a *API) GetUpcomingMatches() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	scheduledMatches, err := a.Store.FetchMatchSchedule()
 	if err != nil {
 		return nil, err
@@ -239,7 +239,7 @@ func (a *API) GetUpcomingMatches() ([]string, error) {
 			continue
 		}
 		streamUrl := getTwitchUrl(match.StreamUrl)
-		matches = append(matches, fmt.Sprintf("- %s VS %s (%s): <t:%d>: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, streamUrl))
+		matches = append(matches, fmt.Sprintf("- %s VS %s (bo%s): <t:%d>: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, streamUrl))
 	}
 	return matches, nil
 }
@@ -252,19 +252,19 @@ func (a *API) GetTournamentInfo() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Get valid team names
 	validTeams, format, err := a.Store.GetValidTeams()
 	if err != nil {
 		return nil, err
-	} 
+	}
 
 	// Get number of required teams
 	var requiredPredictions int
 	switch format {
 	case "swiss":
 		requiredPredictions = 10
-	case "single-elimination" :
+	case "single-elimination":
 		T := len(validTeams)
 		requiredPredictions = T / 2
 	default:
@@ -296,7 +296,7 @@ func (a *API) PopulateMatches() error {
 	}
 
 	// Populate Match Results
-	_, err = a.Store.GetMatchResults() 
+	_, err = a.Store.GetMatchResults()
 	if err != nil {
 		return err
 	}
