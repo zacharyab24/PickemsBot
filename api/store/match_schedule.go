@@ -60,6 +60,8 @@ func (s *Store) StoreMatchSchedule(scheduledMatches []external.ScheduledMatch) e
 		ScheduledMatches: scheduledMatches,
 	}}
 
+	fmt.Println("updating match schedule in db...")
+
 	// Perform insert or update
 	if notFound {
 		_, err := s.Collections.MatchSchedule.InsertOne(context.TODO(), UpcomingMatchDoc{Round: s.Round, ScheduledMatches: scheduledMatches})

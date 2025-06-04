@@ -93,6 +93,15 @@ func (a *API) SetUserPrediction(user shared.User, inputTeams []string, round str
 		return errors.New(str.String())
 	}
 
+	// Check for unique team names
+	seen := make(map[string]bool)
+	for _, team := range teams {
+		if seen[team] {
+			return fmt.Errorf("'%s' entered multiple times, stored prediction was not updated", team)
+		}
+		seen[team] = true
+	}
+
 	// Generate prediction struct
 	prediction, err := logic.GeneratePrediction(user, format, round, teams, requiredPredictions)
 	if err != nil {
@@ -229,7 +238,8 @@ func (a *API) GetUpcomingMatches() ([]string, error) {
 		if match.EpochTime < time.Now().Unix() || match.Finished {
 			continue
 		}
-		matches = append(matches, fmt.Sprintf("- %s VS %s (bo%s): <t:%d>: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, match.StreamUrl))
+		streamUrl := getTwitchUrl(match.StreamUrl)
+		matches = append(matches, fmt.Sprintf("- %s VS %s (%s): <t:%d>: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, streamUrl))
 	}
 	return matches, nil
 }
@@ -279,6 +289,7 @@ func (a *API) PopulateMatches() error {
 		return err
 	}
 
+	// Populate Scheduled Matches
 	err = a.Store.StoreMatchSchedule(scheduledMatches)
 	if err != nil {
 		return err
@@ -291,4 +302,20 @@ func (a *API) PopulateMatches() error {
 	}
 
 	return nil
+}
+
+// Helper function to get the twitch url from the liquipedia stream url
+// Preconditions: Receives a string containing stream name
+// Postconditions: Returns the correct steam name or unknown if it is not in the hard coded list of steam names
+func getTwitchUrl(streamUrl string) string {
+	urls := make(map[string]string)
+	urls["BLAST_Premier"] = "https://www.twitch.tv/blastpremier"
+	urls["BLAST"] = "https://www.twitch.tv/blast"
+	// Put more here as needed
+
+	url, ok := urls[streamUrl]
+	if !ok {
+		return "unknown"
+	}
+	return url
 }
