@@ -9,7 +9,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -22,27 +21,37 @@ import (
 
 func main() {
 	err := godotenv.Load()
-	
-	//Flags
-	roundPtr := flag.String("round", "Stage_1", "Round of tournament (Stage_1, Opening, Playoffs, etc)")
-	tournamentNamePtr := flag.String("tournamentName", "AustinMajor2025", "Tournament name, e.g. AustinMajor2025")
-	pagePtr := flag.String("tournamentPage", "BLAST/Major/2025/Austin", "Liquipedia Wiki Page: e.g. BLAST/Major/2025/Austin")
-	paramsPtr := flag.String("optionalParams", "", "Optional params required by some tournament format, if unsure leave empty")
-	testPtr := flag.String("test", "false", "Use release or beta bot: takes true or false as argument")
-
-	flag.Parse()
-	
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
 
+	// Get tournament name, round, page, params and test from .env file
+	tournamentName := os.Getenv("TOURNAMENT_NAME")
+	round := os.Getenv("ROUND")
+	page := os.Getenv("PAGE")
+	params := os.Getenv("PARAMS")
+	test := os.Getenv("TEST")
+
+	// Default values if environmental variables not found
+	if tournamentName == "" {
+		tournamentName = "Blast_Austin_Major_2025"
+	}
+	if round == "" {
+		round = "Stage_1"
+	}
+	if page == "" {
+		page = "BLAST/Major/2025/Austin"
+	}
+	if test == "" {
+		test = "false"
+	}
 	// Init API
-	page := fmt.Sprintf("%s/%s", *pagePtr, *roundPtr) 
-	apiInstance, err := api.NewAPI(*tournamentNamePtr, os.Getenv("MONGO_PROD_URI"), page, *paramsPtr, *roundPtr)
-	
+	fullPage := fmt.Sprintf("%s/%s", page, round)
+	apiInstance, err := api.NewAPI(tournamentName, os.Getenv("MONGO_PROD_URI"), fullPage, params, round)
+
 	if err != nil {
 		log.Fatalf("failed to initialize API: %v", err)
-	}	
+	}
 	defer func() {
 		if err = apiInstance.Store.Client.Disconnect(context.TODO()); err != nil {
 			panic(err)
@@ -55,15 +64,15 @@ func main() {
 
 	//Init bot
 	var discordToken string
-	if *testPtr == "false" { //Load production bot token
+	if test == "false" { //Load production bot token
 		discordToken = os.Getenv("DISCORD_PROD_TOKEN")
-	} else if *testPtr == "true" {
+	} else if test == "true" {
 		discordToken = os.Getenv("DISCORD_BETA_TOKEN")
 	} else {
-		fmt.Println("Invalid \"test\" flag. Should be true or false")
+		fmt.Println("Invalid \"test\" value. Should be true or false")
 	}
 	botInstance, err := bot.NewBot(discordToken, apiInstance)
-	
+
 	// Run bot
 	err = botInstance.Run()
 	if err != nil {
