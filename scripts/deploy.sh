@@ -7,6 +7,8 @@ echo "Deploy started at $(date)"
 cd /home/latte/PickemsBot
 
 git pull origin main
+git config --global --add safe.directory /home/latte/PickemsBot
+
 docker compose down
 docker compose up -d --build
 docker ps
