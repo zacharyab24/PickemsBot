@@ -24,4 +24,4 @@ jobs:
   
       - name: Add Server to known hosts
         run: |
-          ssh -o StrictHostKeyChecking=no latte@uon-marketplace.taild171a.ts.net 'bash -s' < ./scripts/deploy.sh
+          ssh -o StrictHostKeyChecking=no latte@uon-marketplace.taild171a.ts.net 'sh -s' < ./scripts/deploy.sh
