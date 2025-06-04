@@ -14,7 +14,6 @@ jobs:
         with:
           oauth-client-id: ${{ secrets.TAILSCALE_AUTH_CLIENT }}
           oauth-secret: ${{ secrets.TAILSCALE_AUTH_SECRET }}
-          tags: tag:ci
           version: 1.66.4
   
       - name: Add SSH Key
