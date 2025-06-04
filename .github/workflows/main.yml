@@ -9,19 +9,13 @@ jobs:
     name: build and repploy
     runs-on: ubuntu-latest
     steps:
-      - name: Setup Go 1.24
-        uses: actions/setup-go@v5
-        with:
-          go-version: '^1.24.3'
-      - run: go version
-    
       - name: Setup Tailscale
         uses: tailscale/github-action@v2
         with:
           oauth-client-id: ${{ secrets.TAILSCALE_AUTH_CLIENT }}
           oauth-secret: ${{ secrets.TAILSCALE_AUTH_SECRET }}
           tags: tag:ci
-          version: latest
+          version: 1.66.4
   
       - name: Add SSH Key
         id: ssh
