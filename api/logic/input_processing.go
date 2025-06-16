@@ -209,15 +209,13 @@ func calculateEliminationScore(prediction store.Prediction, results map[string]s
 			response.WriteString(fmt.Sprintf("- %s to make it to the %s", team, predictedProgress.Round))
 		}
 		
-		// Check if prediction was correct
-		if predictedProgress.Round == resultProgress.Round && ok {
-			if predictedProgress.Status == resultProgress.Status {
-				response.WriteString(" [Succeeded]\n")
-				succeeded++
-			} else if resultProgress.Status == "pending" {
-				response.WriteString(" [Pending]\n")
-				pending++
-			}
+		// Check if the  prediction was correct
+		if !ok || resultProgress.Status == "pending" {
+			response.WriteString(" [Pending]\n")
+			pending++
+		} else if predictedProgress.Round == resultProgress.Round && predictedProgress.Status == resultProgress.Status {
+			response.WriteString(" [Succeeded]\n")
+			succeeded++
 		} else {
 			response.WriteString(" [Failed]\n")
 			failed++
