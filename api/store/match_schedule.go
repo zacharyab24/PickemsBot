@@ -74,17 +74,18 @@ func (s *Store) StoreMatchSchedule(scheduledMatches []external.ScheduledMatch) e
 
 	// Create bson UpcomingMatchDoc
 	filter := bson.M{"round": s.Round}
-	update := bson.M{"$set": UpcomingMatchDoc {
+	upcomingMatchDoc := UpcomingMatchDoc {
 		Round: s.Round,
 		ScheduledMatches: scheduledMatches,
 		TTL : DetermineTTL(scheduledMatches),
-	}}
+	}
+	update := bson.M{"$set": upcomingMatchDoc}
 
 	fmt.Println("updating match schedule in db...")
 
 	// Perform insert or update
 	if notFound {
-		_, err := s.Collections.MatchSchedule.InsertOne(context.TODO(), UpcomingMatchDoc{Round: s.Round, ScheduledMatches: scheduledMatches})
+		_, err := s.Collections.MatchSchedule.InsertOne(context.TODO(), upcomingMatchDoc)
 		if err != nil {
 			return fmt.Errorf("failed to insert upcoming matches: %w", err)
 		}
