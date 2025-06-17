@@ -39,13 +39,13 @@ func TestStoreMatchSchedule_Update(t *testing.T) {
 	store := NewTestStore(t, "test-round")
 	
 	original := []external.ScheduledMatch {
-	{Team1: "TBD", Team2: "TBD", EpochTime: -62167219200, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
-	{Team1: "TBD", Team2: "TBD", EpochTime: -62167219200, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
-	{Team1: "FURIA", Team2: "PaiN Gaming", EpochTime: 1750359600, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
-	{Team1: "Team Spirit", Team2: "MOUZ", EpochTime: 1750375800, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
-	{Team1: "FaZe Clan", Team2: "The MongolZ", EpochTime: 1750442400, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
-	{Team1: "Natus Vincere", Team2: "Team Vitality", EpochTime: 1750458600, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
-	{Team1: "TBD", Team2: "TBD", EpochTime: 1750620600, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
+		{Team1: "TBD", Team2: "TBD", EpochTime: -62167219200, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
+		{Team1: "TBD", Team2: "TBD", EpochTime: -62167219200, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
+		{Team1: "FURIA", Team2: "PaiN Gaming", EpochTime: 1750359600, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
+		{Team1: "Team Spirit", Team2: "MOUZ", EpochTime: 1750375800, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
+		{Team1: "FaZe Clan", Team2: "The MongolZ", EpochTime: 1750442400, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
+		{Team1: "Natus Vincere", Team2: "Team Vitality", EpochTime: 1750458600, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
+		{Team1: "TBD", Team2: "TBD", EpochTime: 1750620600, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
 	}
 
 	if err := store.StoreMatchSchedule(original); err != nil {
