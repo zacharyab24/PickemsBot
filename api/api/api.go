@@ -295,7 +295,7 @@ func (a *API) PopulateMatches() error {
 		return err
 	}
 
-	// Populate Match Results
+	// Populate Match Results -> due to some spaghetti code, this also populates match schedule
 	_, err = a.Store.GetMatchResults()
 	if err != nil {
 		return err

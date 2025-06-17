@@ -100,6 +100,7 @@ func (e EliminationResultRecord) GetTeams() map[string]interface{} {
 type UpcomingMatchDoc struct {
 	Round string `bson:"round,omitempty"`
 	ScheduledMatches []external.ScheduledMatch `bson:"scheduled_matches,omitempty"`
+	TTL int64 `bson:"ttl,omitempty"`
 }
 
 // Function to convert RecordResult interface to MatchResult interface. Used when getting data from the db
