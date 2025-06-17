@@ -129,14 +129,6 @@ func (s *Store) GetMatchResults() (external.MatchResult, error) {
 			return nil, err
 		}
 
-		// Update Scheduled matches
-		// This probably isnt the best place to do this, but it is stopping us from needing another api call for the same data
-		// Its also not a concrete fix as you need to run $check or $leaderboard to get the latest scheduled matches
-		err = s.StoreMatchSchedule(upcomingMatches)
-		if err != nil {
-			return nil, err
-		}
-
 		return externalResults, nil
 	}
 

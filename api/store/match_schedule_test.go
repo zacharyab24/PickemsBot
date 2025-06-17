@@ -22,7 +22,7 @@ func NewTestStore(t *testing.T, round string) *Store {
 	}
 
 	db := client.Database("test")
-	coll := db.Collection("match_schedule_test")
+	coll := db.Collection("scheduled_matches")
 	_ = coll.Drop(context.TODO()) // clear before test
 
 	s := &Store{
