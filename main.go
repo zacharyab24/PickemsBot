@@ -31,6 +31,7 @@ func main() {
 	page := os.Getenv("PAGE")
 	params := os.Getenv("PARAMS")
 	test := os.Getenv("TEST")
+	upcomingOnly := os.Getenv("UPCOMING_ONLY")
 
 	// Default values if environmental variables not found
 	if tournamentName == "" {
@@ -45,6 +46,10 @@ func main() {
 	if test == "" {
 		test = "false"
 	}
+	if upcomingOnly == "" {
+		upcomingOnly = "false"
+	}
+
 	// Init API
 	fullPage := fmt.Sprintf("%s/%s", page, round)
 	apiInstance, err := api.NewAPI(tournamentName, os.Getenv("MONGO_PROD_URI"), fullPage, params, round)

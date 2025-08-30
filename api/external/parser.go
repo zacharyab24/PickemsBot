@@ -36,10 +36,10 @@ func GetMatchNodesFromJson(matchData string) ([]MatchNode, error) {
 	for _, result := range rawResults {
 		node, err := ParseMatchData(result)
 		if err != nil {
-			fmt.Println("Error creating match node:",err)
+			fmt.Println("Error creating match node:", err)
 			return nil, err
 		}
-		matchNodes = append(matchNodes, *node)	
+		matchNodes = append(matchNodes, *node)
 	}
 	return matchNodes, nil
 }
@@ -63,15 +63,15 @@ func GetScheduledMatchesFromJson(matchData string) ([]ScheduledMatch, error) {
 	for _, result := range rawResults {
 		match, err := ParseScheduledMatches(result)
 		if err != nil {
-			fmt.Println("Error creating match node:",err)
+			fmt.Println("Error creating match node:", err)
 			return nil, err
 		}
 		// Match and error will only ever be both nil if there is no upcoming match
 		if match == nil {
 			continue
 		}
-		
-		upcomingMatches = append(upcomingMatches, *match)	
+
+		upcomingMatches = append(upcomingMatches, *match)
 	}
 	return upcomingMatches, nil
 }
@@ -125,7 +125,7 @@ func ParseMatchData(result interface{}) (*MatchNode, error) {
 		}
 		teams[i] = name
 	}
-	
+
 	// If the match has finished, get the name of the team that won, else set as TBD
 	winner := "TBD"
 	if isFinished {
@@ -141,9 +141,9 @@ func ParseMatchData(result interface{}) (*MatchNode, error) {
 	}
 
 	return &MatchNode{
-		Id: matchIdStr,
-		Team1: teams[0],
-		Team2: teams[1],
+		Id:     matchIdStr,
+		Team1:  teams[0],
+		Team2:  teams[1],
 		Winner: winner,
 	}, nil
 }
@@ -158,12 +158,12 @@ func CalculateSwissScores(matchNodes []MatchNode) (map[string]string, error) {
 
 	for i := range matchNodes {
 		node := matchNodes[i]
-		
+
 		// Check if teams are in teams slice
 		if !slices.Contains(teams, node.Team1) {
 			teams = append(teams, node.Team1)
 		}
-		if ! slices.Contains(teams, node.Team2) {
+		if !slices.Contains(teams, node.Team2) {
 			teams = append(teams, node.Team2)
 		}
 
@@ -181,7 +181,7 @@ func CalculateSwissScores(matchNodes []MatchNode) (map[string]string, error) {
 			// Unexpected winner value skip
 			continue
 		}
-	
+
 	}
 
 	scores := make(map[string]string)
@@ -203,7 +203,7 @@ func GetEliminationResults(matchNodes []MatchNode) (map[string]shared.TeamProgre
 	if len(matchNodes) == 0 {
 		return nil, fmt.Errorf("at least one match required, recieved 0")
 	}
-	
+
 	// Ordered slice of rounds where [0] is the last match (grand final), and [n] is the first. This is where the limitation of 32 comes from
 	rounds, err := getRoundNames(len(matchNodes))
 	if err != nil {
@@ -264,7 +264,7 @@ func GetEliminationResults(matchNodes []MatchNode) (map[string]shared.TeamProgre
 	return results, nil
 }
 
-// Helper function to get the index of a round from its name. Used in GetEliminationResults 
+// Helper function to get the index of a round from its name. Used in GetEliminationResults
 // Preconditions: Receives a string, and slice of strings
 // Postconditions: Returns the index of that string in the slice, or -1 if not found
 func getRoundIndex(round string, rounds []string) int {
@@ -279,10 +279,10 @@ func getRoundIndex(round string, rounds []string) int {
 // Helper function to get the names of rounds for a single elim tournament, this is a hardcoded list with a limit of 32 matches
 // Preconditions Receives int containing number of matches in this tournament
 // Postconditions: Returns string slice containing round names, or error if it occurs
-func getRoundNames(numMatches int) ([]string, error){
+func getRoundNames(numMatches int) ([]string, error) {
 	// Find the number of rounds, this way we can make sure the name mapping is correct
 	// numRounds = log_2 (numMatches + 1) since there are always n-1 matches for a single elim tournament with n teams
-	numRounds := int(math.Ceil(math.Log2(float64(numMatches+1))))
+	numRounds := int(math.Ceil(math.Log2(float64(numMatches + 1))))
 
 	// Hardcoded slice of round names
 	roundNames := []string{
@@ -333,11 +333,11 @@ func ParseScheduledMatches(result interface{}) (*ScheduledMatch, error) {
 		return nil, fmt.Errorf("unexpected value for 'finished': %v (expected 0 or 1)", finishedRes)
 	}
 	isFinished := finishedRes == 1
-	
+
 	// // If match has finished, return nil for this node
 	// if finishedStr != 0 {
 	// 	return nil, nil
-	// } 
+	// }
 
 	// Get match date
 	matchDateStr, ok := match["date"].(string)
@@ -345,7 +345,7 @@ func ParseScheduledMatches(result interface{}) (*ScheduledMatch, error) {
 		return nil, fmt.Errorf("error mapping match2id interface")
 	}
 	// Match dates are in GMT, need to convert to epoch
-	layout := "2006-01-02 15:04:05" 
+	layout := "2006-01-02 15:04:05"
 	parsedTime, err := time.Parse(layout, matchDateStr)
 	if err != nil {
 		return nil, err
@@ -395,15 +395,15 @@ func ParseScheduledMatches(result interface{}) (*ScheduledMatch, error) {
 		}
 		teams[i] = name
 	}
-	
+
 	return &ScheduledMatch{
-		Team1: teams[0],
-		Team2: teams[1],
+		Team1:     teams[0],
+		Team2:     teams[1],
 		EpochTime: epoch,
-		BestOf: bestOf,
+		BestOf:    bestOf,
 		StreamUrl: twitchUrl,
-		Finished: isFinished,
-	}, nil 
+		Finished:  isFinished,
+	}, nil
 
 }
 
@@ -422,10 +422,10 @@ func ExtractMatchListId(wikitext string) ([]string, string, error) {
 	case "single-elimination":
 		re = regexp.MustCompile(`(?s)\{\{\s*Bracket\s*\|([^}]*)\}\}`) // {{ShowBracket ...}} templates used in swiss tournaments
 	default:
-		return nil, "", fmt.Errorf("unknown tournament format detected")
+		return nil, "", fmt.Errorf("unknown tournament format detected %s", format)
 	}
 
-	// Find regex matches 
+	// Find regex matches
 	matches := re.FindAllStringSubmatch(wikitext, -1)
 	for _, match := range matches {
 		paramsText := match[1]
@@ -436,12 +436,12 @@ func ExtractMatchListId(wikitext string) ([]string, string, error) {
 			part = strings.TrimSpace(part)
 			if strings.HasPrefix(part, "id=") {
 				id := strings.TrimSpace(strings.TrimPrefix(part, "id="))
-				
+
 				// Remove trailing html comments (some times occurs in single elim data)
 				reComment := regexp.MustCompile(`<!--.*?-->`)
 				id = reComment.ReplaceAllString(id, "")
 				id = strings.TrimSpace(id)
-				
+
 				if id != "" {
 					ids = append(ids, id)
 				}
@@ -469,7 +469,7 @@ func DetectTournamentFormat(wikitext string) string {
 		formatSection := results[1] // format is listed on the second line of the format section in wikitext
 		switch {
 		case strings.Contains(strings.ToLower(formatSection), "swiss") && strings.Contains(strings.ToLower(formatSection), "single-elimination"):
-		// This case occurs when both styles are on a singular page. This doesnt occur during the major and is just here for testing
+			// This case occurs when both styles are on a singular page. This doesnt occur during the major and is just here for testing
 			return "single-elimination"
 		case strings.Contains(strings.ToLower(formatSection), "swiss"):
 			return "swiss"
