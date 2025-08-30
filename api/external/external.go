@@ -21,7 +21,7 @@ import (
 // Returns slice of Scheduled matches or an error if it occurs
 func FetchScheduledMatches(apiKey string, page string, optionalParams string) ([]ScheduledMatch, error) {
 	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", page, optionalParams)
-	
+
 	// Get wikitext
 	wikitext, err := GetWikitext(url)
 	if err != nil {
@@ -59,17 +59,17 @@ func FetchScheduledMatches(apiKey string, page string, optionalParams string) ([
 // (e.g. https://liquipedia.net/counterstrike/PGL/2024/Copenhagen/Opening_Stage?action=raw)
 // Postconditions: Returns string containing raw wiki text and errors
 func GetWikitext(url string) (string, error) {
-	
+
 	// Create HTTP Request
 	client := &http.Client{}
-	request, err :=  http.NewRequest("GET", url, nil)
+	request, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		fmt.Println("Failed to create request", err)
 	}
 
 	// Headers to apply with API requirements
 	request.Header.Set("User-Agent", "LiquipediaDataFetcher/1.0")
-    request.Header.Set("Accept-Encoding", "gzip")
+	request.Header.Set("Accept-Encoding", "gzip")
 
 	response, err := client.Do(request)
 	if err != nil {
@@ -100,7 +100,7 @@ func GetWikitext(url string) (string, error) {
 	}
 
 	if err != nil {
-		fmt.Println("Failed to read response body:",err)
+		fmt.Println("Failed to read response body:", err)
 		return "", err
 	}
 
@@ -124,7 +124,7 @@ func GetLiquipediaMatchData(apiKey string, bracketIds []string) (string, error) 
 	// Convert tournalmentUrl string into url so we can add params
 	parsedUrl, err := url.Parse(apiUrl)
 	if err != nil {
-		fmt.Println("Invalid url:",err)
+		fmt.Println("Invalid url:", err)
 		return "", err
 	}
 
@@ -139,10 +139,10 @@ func GetLiquipediaMatchData(apiKey string, bracketIds []string) (string, error) 
 
 	// Create HTTP Request
 	client := &http.Client{}
-	request, err :=  http.NewRequest("GET", parsedUrl.String(), nil)
+	request, err := http.NewRequest("GET", parsedUrl.String(), nil)
 	if err != nil {
 		fmt.Println("Failed to create request", err)
-		return "", err;
+		return "", err
 	}
 
 	// Apply auth header to request

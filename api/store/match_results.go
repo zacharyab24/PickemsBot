@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"pickems-bot/api/external"
 	"strings"
@@ -26,7 +27,7 @@ import (
 func (s *Store) FetchMatchResultsFromDb() (ResultRecord, error) {
 	s.Collections.MatchResults.Name()
 	opts := options.FindOne()
-	
+
 	// MatchResult is an interface, which can't be decoded by MongoDB's driver. Instead need to get raw and convert to interface later
 	var raw bson.M
 
@@ -85,7 +86,7 @@ func (s *Store) GetMatchResults() (external.MatchResult, error) {
 	} else if dbResults.GetTTL() < time.Now().Unix() {
 		shouldRefresh = true
 	}
-	
+
 	// Run if we need to refresh the data stored in the db (either there is no data stored or the TTL has experied)
 	if shouldRefresh {
 		fmt.Println("updating match results stored in db...")
@@ -94,7 +95,7 @@ func (s *Store) GetMatchResults() (external.MatchResult, error) {
 		if err != nil {
 			return nil, err
 		}
-		
+
 		// Validate liquipedia data
 		switch externalResults.GetType() {
 		case "swiss":
@@ -134,7 +135,7 @@ func (s *Store) GetMatchResults() (external.MatchResult, error) {
 
 	// Else we can return the cached data
 
-	matchResult, err := ToMatchResult(dbResults) 
+	matchResult, err := ToMatchResult(dbResults)
 	if err != nil {
 		return nil, err
 	}
@@ -144,9 +145,9 @@ func (s *Store) GetMatchResults() (external.MatchResult, error) {
 // Helper function to get match data for a given liquipedia page. Note that the wiki is hard coded to counterstrike
 // Preconditions: Receives string containing liquipedia page (such as BLAST/Major/2025/Austin/Stage_1) and optional params (such as  &section=24 (this is not used in majors))
 // Postconditions: MatchResult interface containing either []MatchNode or map[string]string depending on the execution path, or error if it occurs
-func (s *Store) fetchMatchDataFromExternal() (external.MatchResult, error){
+func (s *Store) fetchMatchDataFromExternal() (external.MatchResult, error) {
 	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", s.Page, s.OptionalParams)
-	
+
 	// Get wikitext from url
 	wikitext, err := external.GetWikitext(url)
 	if err != nil {
@@ -187,7 +188,10 @@ func (s *Store) fetchMatchDataFromExternal() (external.MatchResult, error){
 			return nil, fmt.Errorf("error creating match tree: %w", err)
 		}
 		return external.EliminationResult{Progression: progression}, nil
-		
+	case "double-elimination":
+		log.Println("Not implemented yet")
+		return nil, nil
+
 	default:
 		return nil, fmt.Errorf("unknown format type: %s", format)
 	}
@@ -198,7 +202,7 @@ func (s *Store) fetchMatchDataFromExternal() (external.MatchResult, error){
 // PW Shanghai Major 2024_results, MatchResult inferface containing the data to be stored, and round as a string (e.g. stage_1)
 // Postconditions: Updates the data stored in the db, returns error message if the operation was unsuccessful
 func (s *Store) StoreMatchResults(matchResult external.MatchResult, upcomingMatches []external.ScheduledMatch) error {
-	
+
 	// Attempt to find an existing document
 	var raw bson.M
 	err := s.Collections.MatchResults.FindOne(context.TODO(), bson.M{"round": s.Round}).Decode(&raw)
@@ -223,9 +227,9 @@ func (s *Store) StoreMatchResults(matchResult external.MatchResult, upcomingMatc
 			},
 		}
 		newRecord = bson.M{
-			"type": typed.GetType(),
+			"type":  typed.GetType(),
 			"round": s.Round,
-			"ttl": ttl,
+			"ttl":   ttl,
 			"teams": typed.Scores,
 		}
 
@@ -237,9 +241,9 @@ func (s *Store) StoreMatchResults(matchResult external.MatchResult, upcomingMatc
 			},
 		}
 		newRecord = bson.M{
-			"type": typed.GetType(),
+			"type":  typed.GetType(),
 			"round": s.Round,
-			"ttl": ttl,
+			"ttl":   ttl,
 			"teams": typed.Progression,
 		}
 
@@ -271,7 +275,7 @@ func DetermineTTL(matches []external.ScheduledMatch) int64 {
 	now := time.Now().Unix()
 
 	const (
-		shortTTL = 3 * time.Minute // When there is a match ongoing TTL is 3 minutes
+		shortTTL  = 3 * time.Minute  // When there is a match ongoing TTL is 3 minutes
 		normalTTL = 30 * time.Minute // Else it is 30
 	)
 

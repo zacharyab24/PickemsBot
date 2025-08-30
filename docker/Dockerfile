@@ -5,8 +5,8 @@ FROM golang:1.24-alpine
 WORKDIR /app
 
 # Copy go mod and source
-COPY go.mod ./
-COPY . ./
+COPY ../go.mod ./
+COPY .. ./
 
 # Build the app
 RUN go build -o pickems
