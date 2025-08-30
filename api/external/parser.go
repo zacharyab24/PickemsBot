@@ -421,6 +421,8 @@ func ExtractMatchListId(wikitext string) ([]string, string, error) {
 		re = regexp.MustCompile(`(?s)\{\{\s*Matchlist\s*\|([^}]*)\}\}`) // {{Matchlist ...}} templates used in swiss tournaments
 	case "single-elimination":
 		re = regexp.MustCompile(`(?s)\{\{\s*Bracket\s*\|([^}]*)\}\}`) // {{ShowBracket ...}} templates used in swiss tournaments
+	case "double-elimination":
+		re = regexp.MustCompile(`(?s)\{\{\s*Bracket\s*\|([^}]*)\}\}`) // {{ShowBracket ...}} templates used in swiss tournaments
 	default:
 		return nil, "", fmt.Errorf("unknown tournament format detected %s", format)
 	}
@@ -475,6 +477,8 @@ func DetectTournamentFormat(wikitext string) string {
 			return "swiss"
 		case strings.Contains(strings.ToLower(formatSection), "single-elimination"):
 			return "single-elimination"
+		case strings.Contains(strings.ToLower(formatSection), "double-elimination"):
+			return "double-elimination"
 		default:
 			return "unknown"
 		}

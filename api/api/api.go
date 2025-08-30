@@ -282,7 +282,7 @@ func (a *API) GetTournamentInfo() ([]string, error) {
 // Function to fetch scheduled match data and store it in the DB. Needs to be run before other functions in this package will work properly
 // Preconditions: Receives receiver pointer to API
 // Postconditions: Returns nil, or an error if it occurs
-func (a *API) PopulateMatches() error {
+func (a *API) PopulateMatches(scheduleOnly bool) error {
 	// Populated Scheduled matches
 	scheduledMatches, err := external.FetchScheduledMatches(os.Getenv("LIQUIDPEDIADB_API_KEY"), a.Store.Page, a.Store.OptionalParams)
 	if err != nil {
@@ -295,12 +295,13 @@ func (a *API) PopulateMatches() error {
 		return err
 	}
 
-	// Populate Match Results -> due to some spaghetti code, this also populates match schedule
-	_, err = a.Store.GetMatchResults()
-	if err != nil {
-		return err
+	if !scheduleOnly { // Only run if scheduleOnly is false, this way we can store upcoming matches of unsupported match structures
+		// Populate Match Results -> due to some spaghetti code, this also populates match schedule
+		_, err = a.Store.GetMatchResults()
+		if err != nil {
+			return err
+		}
 	}
-
 	return nil
 }
 
