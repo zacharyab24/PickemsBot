@@ -239,7 +239,11 @@ func (a *API) GetUpcomingMatches() ([]string, error) {
 			continue
 		}
 		streamUrl := getTwitchUrl(match.StreamUrl)
-		matches = append(matches, fmt.Sprintf("- %s VS %s (bo%s): <t:%d>: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, streamUrl))
+		if streamUrl == "unknown" {
+			matches = append(matches, fmt.Sprintf("- %s VS %s (bo%s): <t:%d>\n", match.Team1, match.Team2, match.BestOf, match.EpochTime))
+		} else {
+			matches = append(matches, fmt.Sprintf("- %s VS %s (bo%s): <t:%d>: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, streamUrl))
+		}
 	}
 	return matches, nil
 }

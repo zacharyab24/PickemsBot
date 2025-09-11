@@ -358,14 +358,17 @@ func ParseScheduledMatches(result interface{}) (*ScheduledMatch, error) {
 		return nil, fmt.Errorf("error mapping stream to map")
 	}
 
-	twitchUrlRaw, ok := streamMap["twitch"]
+	streamUrlRaw, ok := streamMap["twitch"]
 	if !ok {
-		return nil, fmt.Errorf("twitch key not found in stream")
+		streamUrlRaw, ok = streamMap["kick"]
+		if !ok {
+			return nil, fmt.Errorf("twitch or kick keys not found in stream map")
+		}
 	}
 
-	twitchUrl, ok := twitchUrlRaw.(string)
+	streamUrl, ok := streamUrlRaw.(string)
 	if !ok {
-		return nil, fmt.Errorf("twitch url is not a string")
+		return nil, fmt.Errorf("stream url is not a string")
 	}
 
 	// Get bestOf
@@ -401,7 +404,7 @@ func ParseScheduledMatches(result interface{}) (*ScheduledMatch, error) {
 		Team2:     teams[1],
 		EpochTime: epoch,
 		BestOf:    bestOf,
-		StreamUrl: twitchUrl,
+		StreamUrl: streamUrl,
 		Finished:  isFinished,
 	}, nil
 
@@ -472,7 +475,7 @@ func DetectTournamentFormat(wikitext string) string {
 		switch {
 		case strings.Contains(strings.ToLower(formatSection), "swiss") && strings.Contains(strings.ToLower(formatSection), "single-elimination"):
 			// This case occurs when both styles are on a singular page. This doesnt occur during the major and is just here for testing
-			return "single-elimination"
+			return "swiss"
 		case strings.Contains(strings.ToLower(formatSection), "swiss"):
 			return "swiss"
 		case strings.Contains(strings.ToLower(formatSection), "single-elimination"):
