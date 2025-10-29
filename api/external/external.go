@@ -16,7 +16,7 @@ import (
 	"strings"
 )
 
-// Function to get scheduled matches, and return the results
+// FetchScheduledMatches Function to get scheduled matches, and return the results
 // Preconditions: Receives string containing api key
 // Returns slice of Scheduled matches or an error if it occurs
 func FetchScheduledMatches(apiKey string, page string, optionalParams string) ([]ScheduledMatch, error) {
@@ -155,7 +155,7 @@ func GetLiquipediaMatchData(apiKey string, bracketIds []string) (string, error) 
 	}
 	defer response.Body.Close()
 
-	// Check if we got a HTTP 200 response, if not an error has occured
+	// Check if we got a HTTP 200 response, if not an error has occurred
 	if response.StatusCode != http.StatusOK {
 		fmt.Printf("Failed to fetch page. Status code: %d\n", response.StatusCode)
 		return "", err
@@ -167,6 +167,8 @@ func GetLiquipediaMatchData(apiKey string, bracketIds []string) (string, error) 
 		fmt.Println("Failed to read body response:", err)
 		return "", err
 	}
+
+	fmt.Println(string(body))
 
 	return string(body), nil
 }

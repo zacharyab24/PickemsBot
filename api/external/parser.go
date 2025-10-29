@@ -17,9 +17,9 @@ import (
 	"time"
 )
 
-// Function to parse liquipedia match data json and return a slice of MatchNodes
+// GetMatchNodesFromJson Function to parse liquipedia match data json and return a slice of MatchNodes
 // Preconditions: Receives string containing json match data
-// Postconditons: Returns a slice containing MatchNodes or a error that occurs
+// Postconditons: Returns a slice containing MatchNodes or an error that occurs
 func GetMatchNodesFromJson(matchData string) ([]MatchNode, error) {
 	var root map[string]interface{}
 	if err := json.Unmarshal([]byte(matchData), &root); err != nil {
@@ -44,7 +44,7 @@ func GetMatchNodesFromJson(matchData string) ([]MatchNode, error) {
 	return matchNodes, nil
 }
 
-// Function to parse liquipedia match data json and return a slice of UpcomingMatch
+// GetScheduledMatchesFromJson Function to parse liquipedia match data json and return a slice of UpcomingMatch
 // Preconditions: Receives string containing json match data
 // Postconditons: Returns a slice containing MatchNodes or a error that occurs
 func GetScheduledMatchesFromJson(matchData string) ([]ScheduledMatch, error) {
@@ -76,7 +76,7 @@ func GetScheduledMatchesFromJson(matchData string) ([]ScheduledMatch, error) {
 	return upcomingMatches, nil
 }
 
-// Function to create match nodes from json input
+// ParseMatchData Function to create match nodes from json input
 // Preconditions: Receives result interface
 // Postconditions: Returns MatchNode pointer populated with match data, or error that occur
 func ParseMatchData(result interface{}) (*MatchNode, error) {
@@ -148,7 +148,7 @@ func ParseMatchData(result interface{}) (*MatchNode, error) {
 	}, nil
 }
 
-// Function to process match nodes and calculate swiss score
+// CalculateSwissScores Function to process match nodes and calculate swiss score
 // Preconditions: Receives slice of match nodes
 // Postconditions: Returns map[string]string containing teams:scores
 func CalculateSwissScores(matchNodes []MatchNode) (map[string]string, error) {
@@ -196,7 +196,7 @@ func CalculateSwissScores(matchNodes []MatchNode) (map[string]string, error) {
 	return scores, nil
 }
 
-// Function to process a slice of match nodes and return a map of team name : TeamProgress. Used for processing of Elimination stage matches
+// GetEliminationResults Function to process a slice of match nodes and return a map of team name : TeamProgress. Used for processing of Elimination stage matches
 // Preconditions: Receives slice of match nodes. Limitation of upto 5 rounds of matches (best of 32 tournament) but can be easily extended
 // Postconditions: Returns map of team name to TeamProgress (stage and status)
 func GetEliminationResults(matchNodes []MatchNode) (map[string]shared.TeamProgress, error) {
@@ -300,7 +300,7 @@ func getRoundNames(numMatches int) ([]string, error) {
 	return roundNames[:numRounds], nil
 }
 
-// Helper function to get the round and match numbers from a MatchNode Id
+// ExtractRoundAndMatchIds Helper function to get the round and match numbers from a MatchNode Id
 // Id is of the form <match2bracketid>_Rxx-Myyy (e.g. RSTxQ88PoQ_R03-M001)
 // Preconditions: Receives string containing match id
 // Postconditions: Returns round value and match value, or an error
@@ -315,7 +315,7 @@ func ExtractRoundAndMatchIds(id string) (round int, match int, err error) {
 	return round, match, nil
 }
 
-// Function to get scheduled matches from json data
+// ParseScheduledMatches Function to get scheduled matches from json data
 // Preconditions: Receives interface containing json match data
 // Postconditons: Returns slice of ScheduledMatch or an error that occurs
 func ParseScheduledMatches(result interface{}) (*ScheduledMatch, error) {
@@ -333,11 +333,6 @@ func ParseScheduledMatches(result interface{}) (*ScheduledMatch, error) {
 		return nil, fmt.Errorf("unexpected value for 'finished': %v (expected 0 or 1)", finishedRes)
 	}
 	isFinished := finishedRes == 1
-
-	// // If match has finished, return nil for this node
-	// if finishedStr != 0 {
-	// 	return nil, nil
-	// }
 
 	// Get match date
 	matchDateStr, ok := match["date"].(string)
@@ -410,7 +405,7 @@ func ParseScheduledMatches(result interface{}) (*ScheduledMatch, error) {
 
 }
 
-// Function to parse wiki text and extract `Matchlist` id
+// ExtractMatchListId Function to parse wiki text and extract `Matchlist` id
 // Preconditions: Receives string containing wiki text
 // Postconditions: Returns string slice containing id's present in input text and tournament format, or error if an invalid tournament format is detected or no results are found
 func ExtractMatchListId(wikitext string) ([]string, string, error) {
@@ -461,7 +456,7 @@ func ExtractMatchListId(wikitext string) ([]string, string, error) {
 	return ids, format, nil
 }
 
-// Function to determine the format of a tournament from a given wiki text, e.g. swiss, single-elimination
+// DetectTournamentFormat Function to determine the format of a tournament from a given wiki text, e.g. swiss, single-elimination
 // Preconditions: Receives string containing the raw wikitext
 // Preconditions: Returns string containing the format of the tournament
 func DetectTournamentFormat(wikitext string) string {
