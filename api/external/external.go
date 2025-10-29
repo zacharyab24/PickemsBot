@@ -27,13 +27,11 @@ func FetchScheduledMatches(apiKey string, page string, optionalParams string) ([
 	if err != nil {
 		return nil, fmt.Errorf("error getting wikitext: %w", err)
 	}
-
 	// Get match2bracketid's from wikitext
 	ids, _, err := ExtractMatchListId(wikitext)
 	if err != nil {
 		return nil, fmt.Errorf("error extracting match list: %w", err)
 	}
-
 	// Get match data from liquipedia db
 	jsonResponse, err := GetLiquipediaMatchData(apiKey, ids)
 	if err != nil {
@@ -107,7 +105,7 @@ func GetWikitext(url string) (string, error) {
 	return string(body), err
 }
 
-// Function to get match data from liquipediaDB filtered by `match2bracketid`. Each match2bracketid should give a table in the "Detailed Results" section for a round of a tournament
+// GetLiquipediaMatchData Function to get match data from liquipediaDB filtered by `match2bracketid`. Each match2bracketid should give a table in the "Detailed Results" section for a round of a tournament
 // e.g. For the URL https://liquipedia.net/counterstrike/PGL/2024/Copenhagen/Opening_Stage, we should be fetching the data for each of the matches in all 9 tables
 // Preconditions: Receives string containing liquipediadb api key, Receives url containing tournament page, receives string slice containing match2bracketid's
 // Postconditons: Returns the match data json as a string or errors
@@ -167,8 +165,6 @@ func GetLiquipediaMatchData(apiKey string, bracketIds []string) (string, error) 
 		fmt.Println("Failed to read body response:", err)
 		return "", err
 	}
-
-	fmt.Println(string(body))
 
 	return string(body), nil
 }
