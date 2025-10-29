@@ -46,7 +46,7 @@ func GetMatchNodesFromJson(matchData string) ([]MatchNode, error) {
 
 // GetScheduledMatchesFromJson Function to parse liquipedia match data json and return a slice of UpcomingMatch
 // Preconditions: Receives string containing json match data
-// Postconditons: Returns a slice containing MatchNodes or a error that occurs
+// Postconditons: Returns a slice containing MatchNodes or an error that occurs
 func GetScheduledMatchesFromJson(matchData string) ([]ScheduledMatch, error) {
 	var root map[string]interface{}
 	if err := json.Unmarshal([]byte(matchData), &root); err != nil {

@@ -1,0 +1,305 @@
+{
+  "result": [
+    {
+      "pageid": 362796,
+      "pagename": "PGL/2025/Masters",
+      "namespace": 0,
+      "objectname": "362796_AmF15pUfHd_0001",
+      "match2id": "AmF15pUfHd_0001",
+      "match2bracketid": "AmF15pUfHd",
+      "status": "",
+      "winner": "",
+      "walkover": "",
+      "resulttype": "",
+      "finished": 3,
+      "mode": "team",
+
+      "type": "Offline",
+      "section": "Round 4",
+      "game": "cs2",
+      "patch": "",
+      "date": "2025-10-29 08:00:00",
+      "dateexact": 1,
+      "stream": {
+        "twitch_en_1": "PGL",
+        "youtube": "PGL",
+        "twitch": "PGL",
+        "kick": "PGL",
+        "kick_en_1": "PGL",
+        "youtube_en_1": "PGL"
+      },
+      "links": {
+        "hltv": {
+          "1": {
+            "1": "https://www.hltv.org/matches/2387336/match",
+            "2": 0
+          }
+        }
+      },
+      "bestof": 3,
+      "vod": "",
+      "tournament": "PGL Masters Bucharest 2025",
+      "parent": "PGL/2025/Masters",
+      "tickername": "",
+      "shortname": "",
+      "series": "",
+      "icon": "PGL allmode.png",
+      "iconurl": "https://liquipedia.net/commons/images/thumb/a/a7/PGL_allmode.png/400px-PGL_allmode.png",
+      "icondark": "PGL allmode.png",
+      "icondarkurl": "https://liquipedia.net/commons/images/thumb/a/a7/PGL_allmode.png/400px-PGL_allmode.png",
+      "liquipediatier": "2",
+      "liquipediatiertype": "",
+      "publishertier": "Tier 1",
+      "extradata": {
+        "matchsection": "Round 4",
+        "overturned": false,
+        "timezoneoffset": "+02:00",
+        "featured": true,
+        "timestamp": 1761724800,
+        "hidden": false,
+        "timezoneid": "EET"
+      },
+      "match2bracketdata": {
+        "groupRoundIndex": 4,
+        "inheritedheader": "October 29, 2025",
+        "title": "Round 4 High Matches",
+        "next": "AmF15pUfHd_0002",
+        "matchIndex": 1,
+        "bracketindex": 6,
+        "type": "matchlist",
+        "header": "October 29, 2025"
+      },
+      "match2opponents": [
+        {
+          "id": 1,
+          "type": "team",
+          "name": "Aurora Gaming",
+          "template": "aurora gaming 2025",
+          "icon": "Aurora Gaming 2025 allmode.png",
+          "score": 0,
+          "status": "S",
+          "placement": -1,
+          "match2players": [
+            {
+              "id": 1,
+              "opid": 1,
+              "name": "XANTARES",
+              "displayname": "XANTARES",
+              "flag": "Turkey",
+              "extradata": []
+            },
+            {
+              "id": 2,
+              "opid": 1,
+              "name": "MAJ3R",
+              "displayname": "MAJ3R",
+              "flag": "Turkey",
+              "extradata": []
+            },
+            {
+              "id": 3,
+              "opid": 1,
+              "name": "Wicadia",
+              "displayname": "Wicadia",
+              "flag": "Turkey",
+              "extradata": []
+            },
+            {
+              "id": 4,
+              "opid": 1,
+              "name": "Woxic",
+              "displayname": "woxic",
+              "flag": "Turkey",
+              "extradata": []
+            },
+            {
+              "id": 5,
+              "opid": 1,
+              "name": "JottAAA",
+              "displayname": "jottAAA",
+              "flag": "Turkey",
+              "extradata": []
+            }
+          ],
+          "extradata": [],
+          "teamtemplate": {
+            "template": "aurora gaming 2025",
+            "page": "Aurora Gaming",
+            "name": "Aurora Gaming",
+            "shortname": "Aurora",
+            "bracketname": "Aurora Gaming",
+            "image": "Aurora Gaming 2025 allmode.png",
+            "imagedark": "Aurora Gaming 2025 allmode.png",
+            "legacyimage": "",
+            "legacyimagedark": "",
+            "imageurl": "https://liquipedia.net/commons/images/thumb/1/1c/Aurora_Gaming_2025_allmode.png/400px-Aurora_Gaming_2025_allmode.png",
+            "imagedarkurl": "https://liquipedia.net/commons/images/thumb/1/1c/Aurora_Gaming_2025_allmode.png/400px-Aurora_Gaming_2025_allmode.png",
+            "legacyimageurl": "",
+            "legacyimagedarkurl": ""
+          }
+        },
+        {
+          "id": 2,
+          "type": "team",
+          "name": "SAW",
+          "template": "saw 2021",
+          "icon": "SAW 2021 allmode.png",
+          "score": 0,
+          "status": "S",
+          "placement": -1,
+          "match2players": [
+            {
+              "id": 1,
+              "opid": 2,
+              "name": "MUTiRiS",
+              "displayname": "MUTiRiS",
+              "flag": "Portugal",
+              "extradata": []
+            },
+            {
+              "id": 2,
+              "opid": 2,
+              "name": "Story",
+              "displayname": "story",
+              "flag": "Portugal",
+              "extradata": []
+            },
+            {
+              "id": 3,
+              "opid": 2,
+              "name": "Ag1l",
+              "displayname": "Ag1l",
+              "flag": "Portugal",
+              "extradata": []
+            },
+            {
+              "id": 4,
+              "opid": 2,
+              "name": "Krazy",
+              "displayname": "krazy",
+              "flag": "Portugal",
+              "extradata": []
+            },
+            {
+              "id": 5,
+              "opid": 2,
+              "name": "AragornN",
+              "displayname": "aragornN",
+              "flag": "Portugal",
+              "extradata": []
+            }
+          ],
+          "extradata": [],
+          "teamtemplate": {
+            "template": "saw 2021",
+            "page": "SAW",
+            "name": "SAW",
+            "shortname": "SAW",
+            "bracketname": "SAW",
+            "image": "SAW 2021 allmode.png",
+            "imagedark": "SAW 2021 allmode.png",
+            "legacyimage": "",
+            "legacyimagedark": "",
+            "imageurl": "https://liquipedia.net/commons/images/thumb/f/fa/SAW_2021_allmode.png/400px-SAW_2021_allmode.png",
+            "imagedarkurl": "https://liquipedia.net/commons/images/thumb/f/fa/SAW_2021_allmode.png/400px-SAW_2021_allmode.png",
+            "legacyimageurl": "",
+            "legacyimagedarkurl": ""
+          }
+        }
+      ],
+      "match2games": [
+        {
+          "map": "Nuke",
+          "subgroup": "",
+          "match2gameid": 1,
+          "scores": [],
+          "participants": [],
+          "opponents": [
+            [],
+            []
+          ],
+          "status": "",
+          "winner": "",
+          "walkover": "",
+          "resulttype": "",
+          "date": "2025-10-29 08:00:00",
+          "mode": "team",
+          "type": "Offline",
+          "game": "cs2",
+          "patch": "",
+          "vod": "",
+          "length": "",
+          "extradata": {
+            "dateexact": true,
+            "t1halfs": [],
+            "t2halfs": [],
+            "timestamp": 1761724800,
+            "t2sides": [],
+            "t1sides": []
+          }
+        },
+        {
+          "map": "Inferno",
+          "subgroup": "",
+          "match2gameid": 2,
+          "scores": [],
+          "participants": [],
+          "opponents": [
+            [],
+            []
+          ],
+          "status": "",
+          "winner": "",
+          "walkover": "",
+          "resulttype": "",
+          "date": "2025-10-29 08:00:00",
+          "mode": "team",
+          "type": "Offline",
+          "game": "cs2",
+          "patch": "",
+          "vod": "",
+          "length": "",
+          "extradata": {
+            "dateexact": true,
+            "t1halfs": [],
+            "t2halfs": [],
+            "timestamp": 1761724800,
+            "t2sides": [],
+            "t1sides": []
+          }
+        },
+        {
+          "map": "Train",
+          "subgroup": "",
+          "match2gameid": 3,
+          "scores": [],
+          "participants": [],
+          "opponents": [
+            [],
+            []
+          ],
+          "status": "",
+          "winner": "",
+          "walkover": "",
+          "resulttype": "",
+          "date": "2025-10-29 08:00:00",
+          "mode": "team",
+          "type": "Offline",
+          "game": "cs2",
+          "patch": "",
+          "vod": "",
+          "length": "",
+          "extradata": {
+            "dateexact": true,
+            "t1halfs": [],
+            "t2halfs": [],
+            "timestamp": 1761724800,
+            "t2sides": [],
+            "t1sides": []
+          }
+        }
+      ],
+      "wiki": "counterstrike"
+    }
+  ]
+}
