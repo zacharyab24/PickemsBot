@@ -3,50 +3,37 @@ on:
   push:
     branches:
       - main
-    
+
 jobs:  
   build-and-deploy:
     name: Build and Deploy
     runs-on: ubuntu-latest
     steps:
+      # 1. Checkout repository
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # Debug: check that Tailscale secrets are populated
-      - name: Debug Tailscale secrets
-        run: |
-          if [ -z "${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}" ]; then
-            echo "ERROR: TAILSCALE_OAUTH_CLIENT_ID is empty"
-            exit 1
-          fi
-          if [ -z "${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}" ]; then
-            echo "ERROR: TAILSCALE_OAUTH_CLIENT_SECRET is empty"
-            exit 1
-          fi
-          echo "Secrets are populated correctly"
-
-      # Setup Tailscale using OAuth client (action installs tailscale for us)
-      - name: Setup Tailscale
+      # 2. Setup Tailscale via OIDC (no secrets required)
+      - name: Setup Tailscale via OIDC
         uses: tailscale/github-action@v2
         with:
-          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          oidc: true
           hostname: github-runner
           version: latest
           args: up --accept-dns=true
 
-      # Optional: debug connectivity to latte over Tailscale
-      - name: Debug Tailscale connectivity
+      # 3. Debug Tailscale connectivity (optional)
+      - name: Test Tailscale connection
         run: |
           ping -c 4 100.109.98.83 || echo "Ping failed"
 
-      # Setup SSH Key for deployment
+      # 4. Setup SSH key for deployment
       - name: Setup SSH Key
         uses: webfactory/ssh-agent@v0.5.4
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      # Deploy
+      # 5. Run the deploy script on your VM
       - name: Deploy Script
         run: |
           ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null latte@100.109.98.83 '/usr/bin/sh -s' < ./scripts/deploy.sh
