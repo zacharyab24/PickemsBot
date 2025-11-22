@@ -73,7 +73,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	//Init bot
+	// Init bot
 	var discordToken string
 	if test == "false" { //Load production bot token
 		discordToken = os.Getenv("DISCORD_PROD_TOKEN")

@@ -42,7 +42,7 @@ func (b *Bot) Run() error {
 		return err
 	}
 
-	// add a event handler
+	// add an event handler
 	discord.AddHandler(b.newMessage)
 
 	// open session
@@ -107,7 +107,7 @@ func (b *Bot) helpMessage(discord *discordgo.Session, message *discordgo.Message
 }
 
 // Function that prints the `$details` message in a discord channel
-// Preconditions: Recieves pointer to discordgo session and discordgo message
+// Preconditions: Receives pointer to discordgo session and discordgo message
 // Postconditions: User predictions are updated if data is valid, else an error message is sent to the discord channel
 func (b *Bot) details(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	info, err := b.ApiPtr.GetTournamentInfo()
@@ -124,7 +124,7 @@ func (b *Bot) details(discord *discordgo.Session, message *discordgo.MessageCrea
 }
 
 // Function that processes the user input for `$set` message, validates the picks are correct and updates the values stored in the db
-// Preconditions: Recieves pointer to discordgo session and discordgo message
+// Preconditions: Receives pointer to discordgo session and discordgo message
 // Postconditions: User predictions are updated if data is valid, else an error message is sent to the discord channel
 func (b *Bot) setPredictions(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	user := shared.User{UserId: message.Author.ID, Username: message.Author.Username}
@@ -144,7 +144,7 @@ func (b *Bot) setPredictions(discord *discordgo.Session, message *discordgo.Mess
 }
 
 // Function to check the current status of a user's predictions
-// Preconditions: Recieves pointer to the discordgo session and discordgo message
+// Preconditions: Receives pointer to the discordgo session and discordgo message
 // Postconditions: Sends the status of the users's predictions to the discord channel in the form 
 // "Succeeded: {succeeded}, Failed: {failed}, Pending: {pending}"
 func (b *Bot) checkPredictions(discord *discordgo.Session, message *discordgo.MessageCreate) {
@@ -162,7 +162,7 @@ func (b *Bot) checkPredictions(discord *discordgo.Session, message *discordgo.Me
 }
 
 // Function to calculate the leaderboard and send the leaderboard to a discord channel
-// Preconditions: Recieves pointer to the discordgo session and discordgo message
+// Preconditions: Receives pointer to the discordgo session and discordgo message
 // Postconditions: Generates leaderboard and posts leaderboard to same channel command was run
 func (b *Bot) leaderboard(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	res, err := b.ApiPtr.GetLeaderboard() 
@@ -194,8 +194,8 @@ func (b *Bot) teams(discord *discordgo.Session, message *discordgo.MessageCreate
 }
 
 // Function to scrape the upcoming matches, filter for the selected tournament, and post the match details to the discord channel
-// Preconditions: recieves UserPrediction struct of a player's predictions
-// Postconditions: sends a message to the discord channel where the command was run containing the upcoming matches
+// Preconditions: Receives UserPrediction struct of a player's predictions
+// Postconditions: Sends a message to the discord channel where the command was run containing the upcoming matches
 func (b *Bot) upcomingMatches(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	matches, err := b.ApiPtr.GetUpcomingMatches()
 	if err != nil {

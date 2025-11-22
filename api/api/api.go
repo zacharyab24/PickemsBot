@@ -182,12 +182,12 @@ func (a *API) GetLeaderboard() (string, error) {
 		leaderboard = append(leaderboard, LeaderboardEntry{Username: pred.Username, Succeeded: scores.Successes, Failed: scores.Failed})
 	}
 
-	// Order the leaderboard in decesending order so that the user with the highest score appear at the top. Note score = successes - failures and there is no tie breaker
+	// Order the leaderboard in descending order so that the user with the highest score appear at the top. Note score = successes - failures and there is no tie breaker
 	sort.Slice(leaderboard, func(i, j int) bool {
 		return (leaderboard[i].Succeeded - leaderboard[i].Failed) > (leaderboard[j].Succeeded - leaderboard[j].Failed)
 	})
 
-	// Generate Responnse stirng
+	// Generate Response string
 	var response strings.Builder
 	response.WriteString("The users with the best pickems are:\n")
 	for i, user := range leaderboard {
@@ -311,7 +311,7 @@ func (a *API) PopulateMatches(scheduleOnly bool) error {
 
 // Helper function to get the twitch url from the liquipedia stream url
 // Preconditions: Receives a string containing stream name
-// Postconditions: Returns the correct steam name or unknown if it is not in the hard coded list of steam names
+// Postconditions: Returns the correct stream name or unknown if it is not in the hard coded list of stream names
 func getTwitchUrl(streamUrl string) string {
 	urls := make(map[string]string)
 	urls["BLAST_Premier"] = "https://www.twitch.tv/blastpremier"
