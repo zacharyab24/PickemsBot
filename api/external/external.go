@@ -159,7 +159,7 @@ func GetLiquipediaMatchData(apiKey string, bracketIds []string) (string, error) 
 		return "", err
 	}
 
-	// Extract body from reponse and return it
+	// Extract body from response and return it
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		fmt.Println("Failed to read body response:", err)

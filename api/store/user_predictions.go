@@ -16,8 +16,8 @@ import (
 )
 
 // StoreUserPrediction stores user predictions in the db
-// Preconditions: receives strings containing db name, collection name and userID, and Prediction containing the users predictions
-// Postconditions: stores or updates the user's prediction stored in the db, or returns an error if the opperations was unsuccessful
+// Preconditions: Receives strings containing db name, collection name and userID, and Prediction containing the users predictions
+// Postconditions: Stores or updates the user's prediction stored in the db, or returns an error if the operations was unsuccessful
 func (s *Store) StoreUserPrediction(userID string, userPrediction Prediction) error {
 	// Attempt to find an existing document
 	var result Prediction
@@ -54,8 +54,8 @@ func (s *Store) StoreUserPrediction(userID string, userPrediction Prediction) er
 }
 
 // GetUserPrediction does DB lookup and gets prediction for a user
-// Preconditions: receives strings containing db name, collection name and userID
-// Postconditions: returns a user's prediction if it exists, or an error if it occurs
+// Preconditions: Receives strings containing db name, collection name and userID
+// Postconditions: Returns a user's prediction if it exists, or an error if it occurs
 func (s *Store) GetUserPrediction(userID string) (Prediction, error) {
 	opts := options.FindOne()
 
