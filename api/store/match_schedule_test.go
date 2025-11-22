@@ -26,8 +26,16 @@ func NewTestStore(t *testing.T, round string) *Store {
 	}
 
 	db := client.Database("test")
-	coll := db.Collection("scheduled_matches")
-	_ = coll.Drop(context.TODO()) // clear before test
+
+	// Initialize all collections
+	matchScheduleColl := db.Collection("scheduled_matches")
+	matchResultsColl := db.Collection("match_results")
+	predictionsColl := db.Collection("predictions")
+
+	// Clear all collections before test
+	_ = matchScheduleColl.Drop(context.TODO())
+	_ = matchResultsColl.Drop(context.TODO())
+	_ = predictionsColl.Drop(context.TODO())
 
 	s := &Store{
 		Client:   client,
@@ -35,15 +43,13 @@ func NewTestStore(t *testing.T, round string) *Store {
 		Round:    round,
 	}
 
-	s.Collections.MatchSchedule = coll
+	s.Collections.MatchSchedule = matchScheduleColl
+	s.Collections.MatchResults = matchResultsColl
+	s.Collections.Predictions = predictionsColl
 	return s
 }
 
 func TestStoreMatchSchedule_Update(t *testing.T) {
-	if os.Getenv("CI") != "" {
-		t.Skip("Skipping test that requires MongoDB in CI environment")
-	}
-
 	store := NewTestStore(t, "test-round")
 
 	original := []external.ScheduledMatch{
