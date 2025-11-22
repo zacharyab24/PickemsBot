@@ -1,0 +1,101 @@
+name: CI - Go Full Quality Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build-and-quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout the repository
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # 2. Setup Go
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      # 3. Cache Go modules
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      # 4. Download dependencies
+      - name: Download Go modules
+        run: go mod download
+
+      # 5. Check formatting
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Files not properly formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      # 6. Verify build (compilation)
+      - name: Verify build
+        run: go build ./...
+
+      # 7. Run vet
+      - name: Vet
+        run: go vet ./...
+
+      # 8. Install golint
+      - name: Install golint
+        run: go install golang.org/x/lint/golint@latest
+
+      # 9. Run golint and fail if issues exist
+      - name: Lint
+        run: |
+          lint_issues=$(golint ./...)
+          if [ -n "$lint_issues" ]; then
+            echo "$lint_issues"
+            exit 1
+          fi
+
+      # 10. Install staticcheck
+      - name: Install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+
+      # 11. Run staticcheck
+      - name: Static analysis
+        run: staticcheck ./...
+
+      # 12. Run tests with coverage
+      - name: Run tests
+        run: go test ./... -coverprofile=coverage.out -v
+
+      # 13. Enforce minimum coverage (80%)
+      - name: Check coverage
+        run: |
+          coverage=$(go tool cover -func=coverage.out | grep total: | awk '{print $3}' | sed 's/%//')
+          echo "Coverage is $coverage%"
+          if (( $(echo "$coverage < 80" | bc -l) )); then
+            echo "Coverage $coverage% is below 80% threshold"
+            exit 1
+          fi
+
+      # 14. Optional: dependency vulnerability check
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: govulncheck ./...
+
+      # 15. Upload coverage artifact
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.out
