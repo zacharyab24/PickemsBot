@@ -5,8 +5,9 @@
 
 package shared
 
+// User represents a user with their Discord ID and username
 type User struct {
-	UserId   string
+	UserID   string
 	Username string
 }
 

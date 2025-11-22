@@ -20,10 +20,10 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// Function to retrieve match results from the DB
-// Preconditions: Receives name of database as a string (e.g. user_pickems), receives name of collection as a string,
-// (e.g. PW Shanghai Major 2024_results, and round as string (e.g. stage_1)
-// Postconditions: Returns MatchResult interface if the operation was successful, or an error if it was not
+// FetchMatchResultsFromDb retrieves match results from the DB.
+// It receives name of database as a string (e.g. user_pickems), receives name of collection as a string,
+// (e.g. PW Shanghai Major 2024_results, and round as string (e.g. stage_1).
+// It returns MatchResult interface if the operation was successful, or an error if it was not.
 func (s *Store) FetchMatchResultsFromDb() (ResultRecord, error) {
 	s.Collections.MatchResults.Name()
 	opts := options.FindOne()
@@ -69,9 +69,9 @@ func (s *Store) FetchMatchResultsFromDb() (ResultRecord, error) {
 	}
 }
 
-// Function to get match results. Checks if the data in the db is outdated, if it is, makes api call to liquipediaDb api and updates local db
-// Precondtions: recieves string containing dbName, colName, round, page and params (all of these come from flags at start up)
-// Postconditions: Returns MatchResult containing the lastest match data, or an error if it occurs
+// GetMatchResults gets match results. Checks if the data in the db is outdated, if it is, makes api call to liquipediaDb api and updates local db.
+// It receives string containing dbName, colName, round, page and params (all of these come from flags at start up).
+// It returns MatchResult containing the latest match data, or an error if it occurs.
 func (s *Store) GetMatchResults() (external.MatchResult, error) {
 	// Get results stored in our db
 	dbResults, err := s.FetchMatchResultsFromDb()
@@ -155,7 +155,7 @@ func (s *Store) fetchMatchDataFromExternal() (external.MatchResult, error) {
 	}
 
 	// Get match2bracketid's from wikitext
-	ids, format, err := external.ExtractMatchListId(wikitext)
+	ids, format, err := external.ExtractMatchListID(wikitext)
 	if err != nil {
 		return nil, fmt.Errorf("error extracting match list: %w", err)
 	}
@@ -168,7 +168,7 @@ func (s *Store) fetchMatchDataFromExternal() (external.MatchResult, error) {
 	}
 
 	// Get match nodes from jsonResponse
-	matchNodes, err := external.GetMatchNodesFromJson(jsonResponse)
+	matchNodes, err := external.GetMatchNodesFromJSON(jsonResponse)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing match data: %w", err)
 	}
@@ -197,10 +197,10 @@ func (s *Store) fetchMatchDataFromExternal() (external.MatchResult, error) {
 	}
 }
 
-// Function used to store match results in the db
-// Preconditions: Receives name of database as a string (e.g. user_pickems), receives name of collection as a string, (e.g.)
-// PW Shanghai Major 2024_results, MatchResult inferface containing the data to be stored, and round as a string (e.g. stage_1)
-// Postconditions: Updates the data stored in the db, returns error message if the operation was unsuccessful
+// StoreMatchResults stores match results in the db.
+// It receives name of database as a string (e.g. user_pickems), receives name of collection as a string, (e.g.)
+// PW Shanghai Major 2024_results, MatchResult interface containing the data to be stored, and round as a string (e.g. stage_1).
+// It updates the data stored in the db, returns error message if the operation was unsuccessful.
 func (s *Store) StoreMatchResults(matchResult external.MatchResult, upcomingMatches []external.ScheduledMatch) error {
 
 	// Attempt to find an existing document
@@ -267,10 +267,10 @@ func (s *Store) StoreMatchResults(matchResult external.MatchResult, upcomingMatc
 	return nil
 }
 
-// Function for calculating TTL for result caching. If there are ongoing matches this is shortTTL, else normalTTL. These
-// values are defined in a const within the function
-// Preconditions: Receives slice of UpcomingMatch which contains information about the match
-// Postconditions: Returns time.Duration with the value for the TTL
+// DetermineTTL calculates TTL for result caching. If there are ongoing matches this is shortTTL, else normalTTL. These
+// values are defined in a const within the function.
+// It receives slice of UpcomingMatch which contains information about the match.
+// It returns time.Duration with the value for the TTL.
 func DetermineTTL(matches []external.ScheduledMatch) int64 {
 	now := time.Now().Unix()
 

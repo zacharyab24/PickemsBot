@@ -19,11 +19,13 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// Bot represents a Discord bot instance with its token and API pointer
 type Bot struct {
 	BotToken string
-	ApiPtr   *api.API
+	APIPtr   *api.API
 }
 
+// NewBot creates a new Bot instance with the provided token and API pointer
 func NewBot(botToken string, apiPtr *api.API) (*Bot, error) {
 	if botToken == "" {
 		return nil, fmt.Errorf("botToken is required but none was provided")
@@ -31,10 +33,11 @@ func NewBot(botToken string, apiPtr *api.API) (*Bot, error) {
 
 	return &Bot{
 		BotToken: botToken,
-		ApiPtr:   apiPtr,
+		APIPtr:   apiPtr,
 	}, nil
 }
 
+// Run starts the Discord bot and listens for messages
 func (b *Bot) Run() error {
 	// create a session
 	discord, err := discordgo.New("Bot " + b.BotToken)
@@ -110,7 +113,7 @@ func (b *Bot) helpMessage(discord *discordgo.Session, message *discordgo.Message
 // Preconditions: Recieves pointer to discordgo session and discordgo message
 // Postconditions: User predictions are updated if data is valid, else an error message is sent to the discord channel
 func (b *Bot) details(discord *discordgo.Session, message *discordgo.MessageCreate) {
-	info, err := b.ApiPtr.GetTournamentInfo()
+	info, err := b.APIPtr.GetTournamentInfo()
 	if err != nil {
 		fmt.Println(err)
 		discord.ChannelMessageSend(message.ChannelID, "An unexpected error occured")
@@ -127,7 +130,7 @@ func (b *Bot) details(discord *discordgo.Session, message *discordgo.MessageCrea
 // Preconditions: Recieves pointer to discordgo session and discordgo message
 // Postconditions: User predictions are updated if data is valid, else an error message is sent to the discord channel
 func (b *Bot) setPredictions(discord *discordgo.Session, message *discordgo.MessageCreate) {
-	user := shared.User{UserId: message.Author.ID, Username: message.Author.Username}
+	user := shared.User{UserID: message.Author.ID, Username: message.Author.Username}
 	res := fmt.Sprintf("%s's Pickems have been updated\n", user.Username)
 
 	// Get User Predictions from message
@@ -135,7 +138,7 @@ func (b *Bot) setPredictions(discord *discordgo.Session, message *discordgo.Mess
 	msg, _ := spaceSplitter.Split(message.Content)
 	userPreds := msg[1:]
 
-	err := b.ApiPtr.SetUserPrediction(user, userPreds, b.ApiPtr.Store.GetRound())
+	err := b.APIPtr.SetUserPrediction(user, userPreds, b.APIPtr.Store.GetRound())
 	if err != nil {
 		fmt.Println(err)
 		res = fmt.Sprintf("An error occured setting %s's Pickems: %s", user.Username, err)
@@ -148,8 +151,8 @@ func (b *Bot) setPredictions(discord *discordgo.Session, message *discordgo.Mess
 // Postconditions: Sends the status of the users's predictions to the discord channel in the form
 // "Succeeded: {succeeded}, Failed: {failed}, Pending: {pending}"
 func (b *Bot) checkPredictions(discord *discordgo.Session, message *discordgo.MessageCreate) {
-	user := shared.User{UserId: message.Author.ID, Username: message.Author.Username}
-	res, err := b.ApiPtr.CheckPrediction(user)
+	user := shared.User{UserID: message.Author.ID, Username: message.Author.Username}
+	res, err := b.APIPtr.CheckPrediction(user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			res = fmt.Sprintf("%s does not have any Pickems stored. Use $set to set your predictions\n", user.Username)
@@ -165,7 +168,7 @@ func (b *Bot) checkPredictions(discord *discordgo.Session, message *discordgo.Me
 // Preconditions: Recieves pointer to the discordgo session and discordgo message
 // Postconditions: Generates leaderboard and posts leaderboard to same channel command was run
 func (b *Bot) leaderboard(discord *discordgo.Session, message *discordgo.MessageCreate) {
-	res, err := b.ApiPtr.GetLeaderboard()
+	res, err := b.APIPtr.GetLeaderboard()
 	if err != nil {
 		fmt.Println(err)
 		res = "An error occured getting the leaderboard"
@@ -177,7 +180,7 @@ func (b *Bot) leaderboard(discord *discordgo.Session, message *discordgo.Message
 // Preconditions: None
 // Postcondtions: Posts list of team names to the same channel the command was run
 func (b *Bot) teams(discord *discordgo.Session, message *discordgo.MessageCreate) {
-	teams, err := b.ApiPtr.GetTeams()
+	teams, err := b.APIPtr.GetTeams()
 	if err != nil {
 		fmt.Println(err)
 		discord.ChannelMessageSend(message.ChannelID, "An error occured getting the teams list")
@@ -197,7 +200,7 @@ func (b *Bot) teams(discord *discordgo.Session, message *discordgo.MessageCreate
 // Preconditions: recieves UserPrediction struct of a player's predictions
 // Postconditions: sends a message to the discord channel where the command was run containing the upcoming matches
 func (b *Bot) upcomingMatches(discord *discordgo.Session, message *discordgo.MessageCreate) {
-	matches, err := b.ApiPtr.GetUpcomingMatches()
+	matches, err := b.APIPtr.GetUpcomingMatches()
 	if err != nil {
 		fmt.Println(err)
 		discord.ChannelMessageSend(message.ChannelID, "An error occured getting upcoming matches")

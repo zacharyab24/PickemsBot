@@ -99,10 +99,10 @@ func (s *Store) StoreMatchSchedule(scheduledMatches []external.ScheduledMatch) e
 	return nil
 }
 
-// Function to check if scheduled matches are populated in the db. Functions like getting and setting predictions are relient on this data
-// being present, so this function gives a way to check if that data actually exists before the program tries to use it
-// Preconditions: Receives receiver pointer for Score which contains information about the DB
-// Postconditions: Returns nil, or an error if the collection doesn't exist, the results are empty, or another error occurs
+// EnsureScheduledMatches checks if scheduled matches are populated in the db. Functions like getting and setting predictions are reliant on this data
+// being present, so this function gives a way to check if that data actually exists before the program tries to use it.
+// It receives receiver pointer for Score which contains information about the DB.
+// It returns nil, or an error if the collection doesn't exist, the results are empty, or another error occurs.
 func (s *Store) EnsureScheduledMatches() error {
 	var result struct {
 		ScheduledMatches []external.ScheduledMatch `bson:"scheduled_matches"`

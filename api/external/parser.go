@@ -17,10 +17,10 @@ import (
 	"time"
 )
 
-// GetMatchNodesFromJson Function to parse liquipedia match data json and return a slice of MatchNodes
+// GetMatchNodesFromJSON Function to parse liquipedia match data json and return a slice of MatchNodes
 // Preconditions: Receives string containing json match data
 // Postconditons: Returns a slice containing MatchNodes or an error that occurs
-func GetMatchNodesFromJson(matchData string) ([]MatchNode, error) {
+func GetMatchNodesFromJSON(matchData string) ([]MatchNode, error) {
 	var root map[string]interface{}
 	if err := json.Unmarshal([]byte(matchData), &root); err != nil {
 		return nil, fmt.Errorf("error parsing JSON: %w", err)
@@ -44,10 +44,10 @@ func GetMatchNodesFromJson(matchData string) ([]MatchNode, error) {
 	return matchNodes, nil
 }
 
-// GetScheduledMatchesFromJson Function to parse liquipedia match data json and return a slice of UpcomingMatch
+// GetScheduledMatchesFromJSON Function to parse liquipedia match data json and return a slice of UpcomingMatch
 // Preconditions: Receives string containing json match data
 // Postconditons: Returns a slice containing MatchNodes or an error that occurs
-func GetScheduledMatchesFromJson(matchData string) ([]ScheduledMatch, error) {
+func GetScheduledMatchesFromJSON(matchData string) ([]ScheduledMatch, error) {
 	var root map[string]interface{}
 	if err := json.Unmarshal([]byte(matchData), &root); err != nil {
 		return nil, fmt.Errorf("error parsing JSON: %w", err)
@@ -86,7 +86,7 @@ func ParseMatchData(result interface{}) (*MatchNode, error) {
 	}
 
 	// Get match id
-	matchIdStr, ok := match["match2id"].(string)
+	matchIDStr, ok := match["match2id"].(string)
 	if !ok {
 		return nil, fmt.Errorf("error mapping match2id interface")
 	}
@@ -141,7 +141,7 @@ func ParseMatchData(result interface{}) (*MatchNode, error) {
 	}
 
 	return &MatchNode{
-		Id:     matchIdStr,
+		ID:     matchIDStr,
 		Team1:  teams[0],
 		Team2:  teams[1],
 		Winner: winner,
@@ -213,7 +213,7 @@ func GetEliminationResults(matchNodes []MatchNode) (map[string]shared.TeamProgre
 	results := make(map[string]shared.TeamProgress)
 
 	for _, match := range matchNodes {
-		roundNum, _, err := ExtractRoundAndMatchIds(match.Id)
+		roundNum, _, err := ExtractRoundAndMatchIDs(match.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -300,11 +300,11 @@ func getRoundNames(numMatches int) ([]string, error) {
 	return roundNames[:numRounds], nil
 }
 
-// ExtractRoundAndMatchIds Helper function to get the round and match numbers from a MatchNode Id
+// ExtractRoundAndMatchIDs Helper function to get the round and match numbers from a MatchNode Id
 // Id is of the form <match2bracketid>_Rxx-Myyy (e.g. RSTxQ88PoQ_R03-M001)
 // Preconditions: Receives string containing match id
 // Postconditions: Returns round value and match value, or an error
-func ExtractRoundAndMatchIds(id string) (round int, match int, err error) {
+func ExtractRoundAndMatchIDs(id string) (round int, match int, err error) {
 	re := regexp.MustCompile(`_R(\d+)-M(\d+)$`)
 	matches := re.FindStringSubmatch(id)
 	if len(matches) != 3 {
@@ -353,15 +353,15 @@ func ParseScheduledMatches(result interface{}) (*ScheduledMatch, error) {
 		return nil, fmt.Errorf("error mapping stream to map")
 	}
 
-	streamUrlRaw, ok := streamMap["twitch"]
+	streamURLRaw, ok := streamMap["twitch"]
 	if !ok {
-		streamUrlRaw, ok = streamMap["kick"]
+		streamURLRaw, ok = streamMap["kick"]
 		if !ok {
 			return nil, fmt.Errorf("twitch or kick keys not found in stream map")
 		}
 	}
 
-	streamUrl, ok := streamUrlRaw.(string)
+	streamURL, ok := streamURLRaw.(string)
 	if !ok {
 		return nil, fmt.Errorf("stream url is not a string")
 	}
@@ -399,16 +399,16 @@ func ParseScheduledMatches(result interface{}) (*ScheduledMatch, error) {
 		Team2:     teams[1],
 		EpochTime: epoch,
 		BestOf:    bestOf,
-		StreamUrl: streamUrl,
+		StreamURL: streamURL,
 		Finished:  isFinished,
 	}, nil
 
 }
 
-// ExtractMatchListId Function to parse wiki text and extract `Matchlist` id
+// ExtractMatchListID Function to parse wiki text and extract `Matchlist` id
 // Preconditions: Receives string containing wiki text
 // Postconditions: Returns string slice containing id's present in input text and tournament format, or error if an invalid tournament format is detected or no results are found
-func ExtractMatchListId(wikitext string) ([]string, string, error) {
+func ExtractMatchListID(wikitext string) ([]string, string, error) {
 	ids := []string{}
 	format := DetectTournamentFormat(wikitext)
 	var re *regexp.Regexp

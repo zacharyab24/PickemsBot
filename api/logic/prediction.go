@@ -26,7 +26,7 @@ func GeneratePrediction(user shared.User, format string, round string, teams []s
 
 	// Set generic attributes for Prediction struct
 	prediction := store.Prediction{
-		UserId:   user.UserId,
+		UserID:   user.UserID,
 		Username: user.Username,
 		Format:   format,
 		Round:    round,

@@ -85,20 +85,20 @@ func (m *MockStore) GetValidTeams() ([]string, string, error) {
 }
 
 // StoreUserPrediction mock implementation
-func (m *MockStore) StoreUserPrediction(userId string, prediction store.Prediction) error {
+func (m *MockStore) StoreUserPrediction(userID string, prediction store.Prediction) error {
 	if m.StoreUserPredictionError != nil {
 		return m.StoreUserPredictionError
 	}
-	m.Predictions[userId] = prediction
+	m.Predictions[userID] = prediction
 	return nil
 }
 
 // GetUserPrediction mock implementation
-func (m *MockStore) GetUserPrediction(userId string) (store.Prediction, error) {
+func (m *MockStore) GetUserPrediction(userID string) (store.Prediction, error) {
 	if m.GetUserPredictionError != nil {
 		return store.Prediction{}, m.GetUserPredictionError
 	}
-	pred, ok := m.Predictions[userId]
+	pred, ok := m.Predictions[userID]
 	if !ok {
 		return store.Prediction{}, mongo.ErrNoDocuments
 	}

@@ -37,7 +37,7 @@ func TestNewBot_Success(t *testing.T) {
 		t.Errorf("Expected bot token 'test_token', got '%s'", bot.BotToken)
 	}
 
-	if bot.ApiPtr != apiPtr {
+	if bot.APIPtr != apiPtr {
 		t.Error("API pointer not set correctly")
 	}
 }

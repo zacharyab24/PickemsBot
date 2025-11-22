@@ -15,7 +15,7 @@ import (
 // TestGeneratePrediction_Swiss tests Swiss format prediction generation
 func TestGeneratePrediction_Swiss(t *testing.T) {
 	user := shared.User{
-		UserId:   "user123",
+		UserID:   "user123",
 		Username: "testuser",
 	}
 	teams := []string{
@@ -27,7 +27,7 @@ func TestGeneratePrediction_Swiss(t *testing.T) {
 	prediction, err := GeneratePrediction(user, "swiss", "opening-stage", teams, 10)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "user123", prediction.UserId)
+	assert.Equal(t, "user123", prediction.UserID)
 	assert.Equal(t, "testuser", prediction.Username)
 	assert.Equal(t, "swiss", prediction.Format)
 	assert.Equal(t, "opening-stage", prediction.Round)
@@ -39,7 +39,7 @@ func TestGeneratePrediction_Swiss(t *testing.T) {
 // TestGeneratePrediction_SingleElimination tests single-elimination format prediction generation
 func TestGeneratePrediction_SingleElimination(t *testing.T) {
 	user := shared.User{
-		UserId:   "user456",
+		UserID:   "user456",
 		Username: "anotheruser",
 	}
 	// Teams in order: GF winner, GF loser, SF losers (2), QF losers (4)
@@ -53,7 +53,7 @@ func TestGeneratePrediction_SingleElimination(t *testing.T) {
 	prediction, err := GeneratePrediction(user, "single-elimination", "playoff-stage", teams, 8)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "user456", prediction.UserId)
+	assert.Equal(t, "user456", prediction.UserID)
 	assert.Equal(t, "anotheruser", prediction.Username)
 	assert.Equal(t, "single-elimination", prediction.Format)
 	assert.Equal(t, "playoff-stage", prediction.Round)
@@ -81,7 +81,7 @@ func TestGeneratePrediction_SingleElimination(t *testing.T) {
 // TestGeneratePrediction_WrongTeamCount tests error when team count doesn't match
 func TestGeneratePrediction_WrongTeamCount(t *testing.T) {
 	user := shared.User{
-		UserId:   "user123",
+		UserID:   "user123",
 		Username: "testuser",
 	}
 	teams := []string{"Team1", "Team2", "Team3"} // Only 3 teams instead of 10
@@ -95,7 +95,7 @@ func TestGeneratePrediction_WrongTeamCount(t *testing.T) {
 // TestGeneratePrediction_ExactTeamCount tests that exact team count works
 func TestGeneratePrediction_ExactTeamCount(t *testing.T) {
 	user := shared.User{
-		UserId:   "user123",
+		UserID:   "user123",
 		Username: "testuser",
 	}
 	teams := []string{
@@ -107,13 +107,13 @@ func TestGeneratePrediction_ExactTeamCount(t *testing.T) {
 	prediction, err := GeneratePrediction(user, "swiss", "opening-stage", teams, 10)
 
 	assert.NoError(t, err)
-	assert.NotEmpty(t, prediction.UserId)
+	assert.NotEmpty(t, prediction.UserID)
 }
 
 // TestGeneratePrediction_TooManyTeams tests error when too many teams provided
 func TestGeneratePrediction_TooManyTeams(t *testing.T) {
 	user := shared.User{
-		UserId:   "user123",
+		UserID:   "user123",
 		Username: "testuser",
 	}
 	teams := make([]string, 15) // Too many teams

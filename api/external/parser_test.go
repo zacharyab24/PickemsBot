@@ -14,10 +14,10 @@ import (
 	"testing"
 )
 
-// region GetMatchNodesFromJson tests
+// region GetMatchNodesFromJSON tests
 
-// Test of GetMatchNodesFromJson that tests normal flow returns expected result
-func TestGetMatchNodesFromJson(t *testing.T) {
+// Test of GetMatchNodesFromJSON that tests normal flow returns expected result
+func TestGetMatchNodesFromJSON(t *testing.T) {
 	// Seed data
 	expectedResult := []MatchNode{
 		{"AmF15pUfHd_0001", "Aurora Gaming", "SAW", "TBD"},
@@ -73,54 +73,54 @@ func TestGetMatchNodesFromJson(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rawJson := sb.String()
-	actualResult, err := GetMatchNodesFromJson(rawJson)
+	rawJSON := sb.String()
+	actualResult, err := GetMatchNodesFromJSON(rawJSON)
 	if err != nil {
-		t.Fatal("GetMatchNodesFromJson should not have thrown an error. Error:", err)
+		t.Fatal("GetMatchNodesFromJSON should not have thrown an error. Error:", err)
 	}
 	if !reflect.DeepEqual(actualResult, expectedResult) {
 		t.Fatal("Actual does not equal expected")
 	}
 }
 
-// Test of GetMatchNodesFromJson when no data is returned
-func TestGetMatchNodesFromJson_NoMatchNodes(t *testing.T) {
+// Test of GetMatchNodesFromJSON when no data is returned
+func TestGetMatchNodesFromJSON_NoMatchNodes(t *testing.T) {
 	inputString := "{\"result\" : []}"
-	matches, err := GetMatchNodesFromJson(inputString)
+	matches, err := GetMatchNodesFromJSON(inputString)
 	if err != nil {
-		t.Fatal("GetMatchNodesFromJson should not have returned an error")
+		t.Fatal("GetMatchNodesFromJSON should not have returned an error")
 	}
 	if matches != nil {
 		t.Fatal("expected matches to be nil")
 	}
 }
 
-// Test of GetMatchNodesFromJson when given invalid json
-func TestGetMatchNodesFromJson_InvalidJson(t *testing.T) {
+// Test of GetMatchNodesFromJSON when given invalid json
+func TestGetMatchNodesFromJSON_InvalidJson(t *testing.T) {
 	inputString := "{\"some invalid json\"}"
-	_, err := GetMatchNodesFromJson(inputString)
+	_, err := GetMatchNodesFromJSON(inputString)
 	if err == nil {
-		t.Fatal("GetMatchNodesFromJson should have returned an error")
+		t.Fatal("GetMatchNodesFromJSON should have returned an error")
 	}
 	if err.Error() != "error parsing JSON: invalid character '}' after object key" {
 		t.Fatal("Unexpected error message")
 	}
 }
 
-// Test of GetMatchNodesFromJson when given valid json with invalid data
-func TestGetMatchNodesFromJson_NoResultField(t *testing.T) {
+// Test of GetMatchNodesFromJSON when given valid json with invalid data
+func TestGetMatchNodesFromJSON_NoResultField(t *testing.T) {
 	inputString := "{\"key\" : \"value\"}"
-	_, err := GetMatchNodesFromJson(inputString)
+	_, err := GetMatchNodesFromJSON(inputString)
 	if err == nil {
-		t.Fatal("GetMatchNodesFromJson should have returned an error")
+		t.Fatal("GetMatchNodesFromJSON should have returned an error")
 	}
 	if err.Error() != "missing or invalid 'result' field" {
 		t.Fatal("Unexpected error message")
 	}
 }
 
-// Test of GetMatchNodesFromJson when ParseScheduledMatches throws an error
-func TestGetMatchNodesFromJson_InvalidData(t *testing.T) {
+// Test of GetMatchNodesFromJSON when ParseScheduledMatches throws an error
+func TestGetMatchNodesFromJSON_InvalidData(t *testing.T) {
 	// Load json from disk
 	f, err := os.Open("testdata/parser/scheduledMatchInvalidRawData.json")
 	if err != nil {
@@ -139,10 +139,10 @@ func TestGetMatchNodesFromJson_InvalidData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rawJson := sb.String()
-	_, err = GetMatchNodesFromJson(rawJson)
+	rawJSON := sb.String()
+	_, err = GetMatchNodesFromJSON(rawJSON)
 	if err == nil {
-		t.Fatal("GetMatchNodesFromJson should have returned an error")
+		t.Fatal("GetMatchNodesFromJSON should have returned an error")
 	}
 	if strings.Contains(err.Error(), "Error creating match node") {
 		t.Fatal("Unexpected error message")
@@ -151,10 +151,10 @@ func TestGetMatchNodesFromJson_InvalidData(t *testing.T) {
 
 // endregion
 
-// region GetScheduledMatchesFromJson tests
+// region GetScheduledMatchesFromJSON tests
 
-// Test of GetScheduledMatchesFromJson that tests normal flow returns expected result
-func TestGetScheduledMatchesFromJson(t *testing.T) {
+// Test of GetScheduledMatchesFromJSON that tests normal flow returns expected result
+func TestGetScheduledMatchesFromJSON(t *testing.T) {
 	// Seed data
 	expectedResult := []ScheduledMatch{
 		{"TBD", "TBD", -62167219200, "3", "PGL", false},
@@ -213,8 +213,8 @@ func TestGetScheduledMatchesFromJson(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rawJson := sb.String()
-	actualResult, err := GetScheduledMatchesFromJson(rawJson)
+	rawJSON := sb.String()
+	actualResult, err := GetScheduledMatchesFromJSON(rawJSON)
 	sort.Slice(actualResult, func(i, j int) bool {
 		return actualResult[i].EpochTime < actualResult[j].EpochTime
 	})
@@ -229,44 +229,44 @@ func TestGetScheduledMatchesFromJson(t *testing.T) {
 	}
 }
 
-// Test of GetScheduledMatchesFromJson when no data is returned
-func TestGetScheduledMatchesFromJson_NoMatchNodes(t *testing.T) {
+// Test of GetScheduledMatchesFromJSON when no data is returned
+func TestGetScheduledMatchesFromJSON_NoMatchNodes(t *testing.T) {
 	inputString := "{\"result\" : []}"
-	matches, err := GetScheduledMatchesFromJson(inputString)
+	matches, err := GetScheduledMatchesFromJSON(inputString)
 	if err != nil {
-		t.Fatal("GetMatchNodesFromJson should not have returned an error")
+		t.Fatal("GetMatchNodesFromJSON should not have returned an error")
 	}
 	if matches != nil {
 		t.Fatal("expected matches to be nil")
 	}
 }
 
-// Test of GetScheduledMatchesFromJson when given invalid json
-func TestGetScheduledMatchesFromJson_InvalidJson(t *testing.T) {
+// Test of GetScheduledMatchesFromJSON when given invalid json
+func TestGetScheduledMatchesFromJSON_InvalidJson(t *testing.T) {
 	inputString := "{\"some invalid json\"}"
-	_, err := GetScheduledMatchesFromJson(inputString)
+	_, err := GetScheduledMatchesFromJSON(inputString)
 	if err == nil {
-		t.Fatal("GetMatchNodesFromJson should have returned an error")
+		t.Fatal("GetMatchNodesFromJSON should have returned an error")
 	}
 	if err.Error() != "error parsing JSON: invalid character '}' after object key" {
 		t.Fatal("Unexpected error message")
 	}
 }
 
-// Test of GetScheduledMatchesFromJson when given valid json with invalid data
-func TestGetScheduledMatchesFromJson_NoResultField(t *testing.T) {
+// Test of GetScheduledMatchesFromJSON when given valid json with invalid data
+func TestGetScheduledMatchesFromJSON_NoResultField(t *testing.T) {
 	inputString := "{\"key\" : \"value\"}"
-	_, err := GetScheduledMatchesFromJson(inputString)
+	_, err := GetScheduledMatchesFromJSON(inputString)
 	if err == nil {
-		t.Fatal("GetMatchNodesFromJson should have returned an error")
+		t.Fatal("GetMatchNodesFromJSON should have returned an error")
 	}
 	if err.Error() != "missing or invalid 'result' field" {
 		t.Fatal("Unexpected error message")
 	}
 }
 
-// Test of GetScheduledMatchesFromJson when ParseScheduledMatches throws an error
-func TestGetScheduledMatchesFromJson_InvalidData(t *testing.T) {
+// Test of GetScheduledMatchesFromJSON when ParseScheduledMatches throws an error
+func TestGetScheduledMatchesFromJSON_InvalidData(t *testing.T) {
 	// Load json from disk
 	f, err := os.Open("testdata/parser/scheduledMatchInvalidRawData.json")
 	if err != nil {
@@ -285,10 +285,10 @@ func TestGetScheduledMatchesFromJson_InvalidData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rawJson := sb.String()
-	_, err = GetScheduledMatchesFromJson(rawJson)
+	rawJSON := sb.String()
+	_, err = GetScheduledMatchesFromJSON(rawJSON)
 	if err == nil {
-		t.Fatal("GetMatchNodesFromJson should have returned an error")
+		t.Fatal("GetMatchNodesFromJSON should have returned an error")
 	}
 	if strings.Contains(err.Error(), "Error creating match node") {
 		t.Fatal("Unexpected error message")

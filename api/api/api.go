@@ -21,10 +21,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// API provides methods for interacting with the pickems bot data layer
 type API struct {
-	Store store.StoreInterface
+	Store store.Interface
 }
 
+// NewAPI creates a new API instance with the provided configuration
 func NewAPI(dbName string, mongoURI string, page string, params string, round string) (*API, error) {
 	if dbName == "" || page == "" || round == "" {
 		return nil, fmt.Errorf("dbName, page, and round are required")
@@ -42,10 +44,10 @@ func NewAPI(dbName string, mongoURI string, page string, params string, round st
 	}, nil
 }
 
-// Function that contains the logic to set a user prediction in the DB
-// Preconditions: Receives user struct that contains userId and userName, and a list of teams the user wishes to set,
-// and strings containing dbName, collName and round
-// Postconditions: Updates the user's predictions in the database, or returns an error if it occurs
+// SetUserPrediction contains the logic to set a user prediction in the DB.
+// It receives a user struct that contains userID and userName, and a list of teams the user wishes to set,
+// and strings containing dbName, collName and round.
+// It updates the user's predictions in the database, or returns an error if it occurs.
 func (a *API) SetUserPrediction(user shared.User, inputTeams []string, round string) error {
 	err := a.Store.EnsureScheduledMatches()
 	if err != nil {
@@ -109,7 +111,7 @@ func (a *API) SetUserPrediction(user shared.User, inputTeams []string, round str
 	}
 
 	// Insert prediction to db
-	err = a.Store.StoreUserPrediction(user.UserId, prediction)
+	err = a.Store.StoreUserPrediction(user.UserID, prediction)
 	if err != nil {
 		return err
 	}
@@ -117,16 +119,16 @@ func (a *API) SetUserPrediction(user shared.User, inputTeams []string, round str
 	return nil
 }
 
-// Function that contains the logic required to check a prediction
-// Preconditions: Receives a user struct and receiver pointer to api
-// Postconditions: Returns a string containing the results of the user's predictions, or an error if it occurs
+// CheckPrediction contains the logic required to check a prediction.
+// It receives a user struct and receiver pointer to api.
+// It returns a string containing the results of the user's predictions, or an error if it occurs.
 func (a *API) CheckPrediction(user shared.User) (string, error) {
 	err := a.Store.EnsureScheduledMatches()
 	if err != nil {
 		return "", err
 	}
 	// Fetch prediction from db
-	doc, err := a.Store.GetUserPrediction(user.UserId)
+	doc, err := a.Store.GetUserPrediction(user.UserID)
 	if err != nil {
 		return "", err
 	}
@@ -145,9 +147,8 @@ func (a *API) CheckPrediction(user shared.User) (string, error) {
 	return report, nil
 }
 
-// Function that contains the logic required to get the leaderboard results
-// Preconditions: Receives receiver pointer to api
-// Postconditions: Returns a string containing the leaderboard for the tournament
+// GetLeaderboard contains the logic required to get the leaderboard results.
+// It receives receiver pointer to api and returns a string containing the leaderboard for the tournament.
 func (a *API) GetLeaderboard() (string, error) {
 	// Check if results have been initialised
 	err := a.Store.EnsureScheduledMatches()
@@ -166,9 +167,8 @@ func (a *API) GetLeaderboard() (string, error) {
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return "There are no user predictions currently stored", nil
-		} else {
-			return "", err
 		}
+		return "", err
 	}
 
 	var leaderboard []LeaderboardEntry
@@ -197,9 +197,9 @@ func (a *API) GetLeaderboard() (string, error) {
 	return response.String(), nil
 }
 
-// Function to get a list of all valid team names
-// Preconditions: The valid teams list is initalised in db
-// Postconditions: Returns a string slice containing all valid teams for this round
+// GetTeams gets a list of all valid team names.
+// The valid teams list must be initialized in db.
+// It returns a string slice containing all valid teams for this round.
 func (a *API) GetTeams() ([]string, error) {
 	// We need to ensure scheduled match data exists, as this function relies on the results data being populated, which needs scheduled matches. Theres some pretty bad nesting / dependencies in this code base
 	err := a.Store.EnsureScheduledMatches()
@@ -216,9 +216,9 @@ func (a *API) GetTeams() ([]string, error) {
 	return validTeams, nil
 }
 
-// Function to get the upcoming matches for this round of the tournament
-// Preconditions: Receives receiver pointer to api. Will only follow the correct path if the scheduled matches data has been initialsed
-// Postconditions: Returns a string slice containing all upcoming matches in this round
+// GetUpcomingMatches gets the upcoming matches for this round of the tournament.
+// It receives receiver pointer to api. Will only follow the correct path if the scheduled matches data has been initialized.
+// It returns a string slice containing all upcoming matches in this round.
 func (a *API) GetUpcomingMatches() ([]string, error) {
 	err := a.Store.EnsureScheduledMatches()
 	if err != nil {
@@ -238,19 +238,18 @@ func (a *API) GetUpcomingMatches() ([]string, error) {
 		if match.EpochTime < time.Now().Unix() || match.Finished {
 			continue
 		}
-		streamUrl := getTwitchUrl(match.StreamUrl)
-		if streamUrl == "unknown" {
+		streamURL := getTwitchURL(match.StreamURL)
+		if streamURL == "unknown" {
 			matches = append(matches, fmt.Sprintf("- %s VS %s (bo%s): <t:%d>\n", match.Team1, match.Team2, match.BestOf, match.EpochTime))
 		} else {
-			matches = append(matches, fmt.Sprintf("- %s VS %s (bo%s): <t:%d>: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, streamUrl))
+			matches = append(matches, fmt.Sprintf("- %s VS %s (bo%s): <t:%d>: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, streamURL))
 		}
 	}
 	return matches, nil
 }
 
-// Function to get the following information about the tournament: Tournament Name, Round, Format, RequiredPredictions
-// Preconditions: None
-// Postconditions: Returns a string slice with the contents attribute : value containing the information listed above
+// GetTournamentInfo gets the following information about the tournament: Tournament Name, Round, Format, RequiredPredictions.
+// It returns a string slice with the contents attribute : value containing the information listed above.
 func (a *API) GetTournamentInfo() ([]string, error) {
 	err := a.Store.EnsureScheduledMatches()
 	if err != nil {
@@ -283,9 +282,8 @@ func (a *API) GetTournamentInfo() ([]string, error) {
 	return values, nil
 }
 
-// Function to fetch scheduled match data and store it in the DB. Needs to be run before other functions in this package will work properly
-// Preconditions: Receives receiver pointer to API
-// Postconditions: Returns nil, or an error if it occurs
+// PopulateMatches fetches scheduled match data and stores it in the DB. Needs to be run before other functions in this package will work properly.
+// It receives receiver pointer to API and returns nil, or an error if it occurs.
 func (a *API) PopulateMatches(scheduleOnly bool) error {
 	// Populated Scheduled matches
 	scheduledMatches, err := external.FetchScheduledMatches(os.Getenv("LIQUIDPEDIADB_API_KEY"), a.Store.GetPage(), a.Store.GetOptionalParams())
@@ -309,16 +307,15 @@ func (a *API) PopulateMatches(scheduleOnly bool) error {
 	return nil
 }
 
-// Helper function to get the twitch url from the liquipedia stream url
-// Preconditions: Receives a string containing stream name
-// Postconditions: Returns the correct steam name or unknown if it is not in the hard coded list of steam names
-func getTwitchUrl(streamUrl string) string {
+// getTwitchURL is a helper function to get the twitch url from the liquipedia stream url.
+// It receives a string containing stream name and returns the correct steam name or unknown if it is not in the hard coded list of steam names.
+func getTwitchURL(streamURL string) string {
 	urls := make(map[string]string)
 	urls["BLAST_Premier"] = "https://www.twitch.tv/blastpremier"
 	urls["BLAST"] = "https://www.twitch.tv/blast"
 	// Put more here as needed
 
-	url, ok := urls[streamUrl]
+	url, ok := urls[streamURL]
 	if !ok {
 		return "unknown"
 	}

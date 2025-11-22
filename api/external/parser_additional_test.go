@@ -16,9 +16,9 @@ import (
 // TestCalculateSwissScores_AllWins tests team with all wins
 func TestCalculateSwissScores_AllWins(t *testing.T) {
 	matchNodes := []MatchNode{
-		{Id: "1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},
-		{Id: "2", Team1: "TeamA", Team2: "TeamC", Winner: "TeamA"},
-		{Id: "3", Team1: "TeamA", Team2: "TeamD", Winner: "TeamA"},
+		{ID: "1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},
+		{ID: "2", Team1: "TeamA", Team2: "TeamC", Winner: "TeamA"},
+		{ID: "3", Team1: "TeamA", Team2: "TeamD", Winner: "TeamA"},
 	}
 
 	scores, err := CalculateSwissScores(matchNodes)
@@ -33,9 +33,9 @@ func TestCalculateSwissScores_AllWins(t *testing.T) {
 // TestCalculateSwissScores_MixedResults tests mixed win/loss records
 func TestCalculateSwissScores_MixedResults(t *testing.T) {
 	matchNodes := []MatchNode{
-		{Id: "1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},
-		{Id: "2", Team1: "TeamA", Team2: "TeamC", Winner: "TeamC"},
-		{Id: "3", Team1: "TeamB", Team2: "TeamC", Winner: "TeamB"},
+		{ID: "1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},
+		{ID: "2", Team1: "TeamA", Team2: "TeamC", Winner: "TeamC"},
+		{ID: "3", Team1: "TeamB", Team2: "TeamC", Winner: "TeamB"},
 	}
 
 	scores, err := CalculateSwissScores(matchNodes)
@@ -49,9 +49,9 @@ func TestCalculateSwissScores_MixedResults(t *testing.T) {
 // TestCalculateSwissScores_PendingMatches tests with TBD winners (pending matches)
 func TestCalculateSwissScores_PendingMatches(t *testing.T) {
 	matchNodes := []MatchNode{
-		{Id: "1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},
-		{Id: "2", Team1: "TeamA", Team2: "TeamC", Winner: "TBD"}, // Pending
-		{Id: "3", Team1: "TeamB", Team2: "TeamC", Winner: "TBD"}, // Pending
+		{ID: "1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},
+		{ID: "2", Team1: "TeamA", Team2: "TeamC", Winner: "TBD"}, // Pending
+		{ID: "3", Team1: "TeamB", Team2: "TeamC", Winner: "TBD"}, // Pending
 	}
 
 	scores, err := CalculateSwissScores(matchNodes)
@@ -75,8 +75,8 @@ func TestCalculateSwissScores_EmptyInput(t *testing.T) {
 // TestCalculateSwissScores_TBDTeamsExcluded tests that TBD teams are excluded
 func TestCalculateSwissScores_TBDTeamsExcluded(t *testing.T) {
 	matchNodes := []MatchNode{
-		{Id: "1", Team1: "TeamA", Team2: "TBD", Winner: "TeamA"},
-		{Id: "2", Team1: "TBD", Team2: "TeamB", Winner: "TeamB"},
+		{ID: "1", Team1: "TeamA", Team2: "TBD", Winner: "TeamA"},
+		{ID: "2", Team1: "TBD", Team2: "TeamB", Winner: "TeamB"},
 	}
 
 	scores, err := CalculateSwissScores(matchNodes)
@@ -91,8 +91,8 @@ func TestCalculateSwissScores_TBDTeamsExcluded(t *testing.T) {
 // TestCalculateSwissScores_InvalidWinner tests handling of unexpected winner values
 func TestCalculateSwissScores_InvalidWinner(t *testing.T) {
 	matchNodes := []MatchNode{
-		{Id: "1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamC"}, // Invalid winner
-		{Id: "2", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"}, // Valid
+		{ID: "1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamC"}, // Invalid winner
+		{ID: "2", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"}, // Valid
 	}
 
 	scores, err := CalculateSwissScores(matchNodes)
@@ -110,7 +110,7 @@ func TestCalculateSwissScores_InvalidWinner(t *testing.T) {
 // TestGetEliminationResults_GrandFinal tests single match (Grand Final)
 func TestGetEliminationResults_GrandFinal(t *testing.T) {
 	matchNodes := []MatchNode{
-		{Id: "bracket_R01-M001", Team1: "Winner", Team2: "RunnerUp", Winner: "Winner"},
+		{ID: "bracket_R01-M001", Team1: "Winner", Team2: "RunnerUp", Winner: "Winner"},
 	}
 
 	results, err := GetEliminationResults(matchNodes)
@@ -126,9 +126,9 @@ func TestGetEliminationResults_GrandFinal(t *testing.T) {
 func TestGetEliminationResults_MultipleRounds(t *testing.T) {
 	// R01 is Grand Final, R02 is Semi Final (higher round number = earlier round)
 	matchNodes := []MatchNode{
-		{Id: "bracket_R02-M001", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},
-		{Id: "bracket_R02-M002", Team1: "TeamC", Team2: "TeamD", Winner: "TeamC"},
-		{Id: "bracket_R01-M001", Team1: "TeamA", Team2: "TeamC", Winner: "TeamA"},
+		{ID: "bracket_R02-M001", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},
+		{ID: "bracket_R02-M002", Team1: "TeamC", Team2: "TeamD", Winner: "TeamC"},
+		{ID: "bracket_R01-M001", Team1: "TeamA", Team2: "TeamC", Winner: "TeamA"},
 	}
 
 	results, err := GetEliminationResults(matchNodes)
@@ -151,7 +151,7 @@ func TestGetEliminationResults_MultipleRounds(t *testing.T) {
 // TestGetEliminationResults_PendingMatches tests with TBD winners
 func TestGetEliminationResults_PendingMatches(t *testing.T) {
 	matchNodes := []MatchNode{
-		{Id: "bracket_R01-M001", Team1: "TeamA", Team2: "TeamB", Winner: "TBD"},
+		{ID: "bracket_R01-M001", Team1: "TeamA", Team2: "TeamB", Winner: "TBD"},
 	}
 
 	results, err := GetEliminationResults(matchNodes)
@@ -166,7 +166,7 @@ func TestGetEliminationResults_PendingMatches(t *testing.T) {
 // TestGetEliminationResults_EmptyWinner tests with empty winner string
 func TestGetEliminationResults_EmptyWinner(t *testing.T) {
 	matchNodes := []MatchNode{
-		{Id: "bracket_R01-M001", Team1: "TeamA", Team2: "TeamB", Winner: ""},
+		{ID: "bracket_R01-M001", Team1: "TeamA", Team2: "TeamB", Winner: ""},
 	}
 
 	results, err := GetEliminationResults(matchNodes)
@@ -189,7 +189,7 @@ func TestGetEliminationResults_EmptyInput(t *testing.T) {
 // TestGetEliminationResults_EmptyTeamNames tests handling of empty team names
 func TestGetEliminationResults_EmptyTeamNames(t *testing.T) {
 	matchNodes := []MatchNode{
-		{Id: "bracket_R01-M001", Team1: "", Team2: "TeamB", Winner: "TeamB"},
+		{ID: "bracket_R01-M001", Team1: "", Team2: "TeamB", Winner: "TeamB"},
 	}
 
 	results, err := GetEliminationResults(matchNodes)
@@ -312,44 +312,44 @@ func TestGetRoundNames_ZeroMatches(t *testing.T) {
 
 // endregion
 
-// region ExtractRoundAndMatchIds tests
+// region ExtractRoundAndMatchIDs tests
 
-// TestExtractRoundAndMatchIds_Valid tests valid ID format
-func TestExtractRoundAndMatchIds_Valid(t *testing.T) {
-	round, match, err := ExtractRoundAndMatchIds("RSTxQ88PoQ_R03-M001")
+// TestExtractRoundAndMatchIDs_Valid tests valid ID format
+func TestExtractRoundAndMatchIDs_Valid(t *testing.T) {
+	round, match, err := ExtractRoundAndMatchIDs("RSTxQ88PoQ_R03-M001")
 
 	assert.NoError(t, err)
 	assert.Equal(t, 3, round)
 	assert.Equal(t, 1, match)
 }
 
-// TestExtractRoundAndMatchIds_DifferentValues tests different round/match values
-func TestExtractRoundAndMatchIds_DifferentValues(t *testing.T) {
-	round, match, err := ExtractRoundAndMatchIds("ABC123_R10-M025")
+// TestExtractRoundAndMatchIDs_DifferentValues tests different round/match values
+func TestExtractRoundAndMatchIDs_DifferentValues(t *testing.T) {
+	round, match, err := ExtractRoundAndMatchIDs("ABC123_R10-M025")
 
 	assert.NoError(t, err)
 	assert.Equal(t, 10, round)
 	assert.Equal(t, 25, match)
 }
 
-// TestExtractRoundAndMatchIds_InvalidFormat tests invalid format
-func TestExtractRoundAndMatchIds_InvalidFormat(t *testing.T) {
-	_, _, err := ExtractRoundAndMatchIds("invalid_format")
+// TestExtractRoundAndMatchIDs_InvalidFormat tests invalid format
+func TestExtractRoundAndMatchIDs_InvalidFormat(t *testing.T) {
+	_, _, err := ExtractRoundAndMatchIDs("invalid_format")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid ID format")
 }
 
-// TestExtractRoundAndMatchIds_MissingUnderscore tests missing underscore
-func TestExtractRoundAndMatchIds_MissingUnderscore(t *testing.T) {
-	_, _, err := ExtractRoundAndMatchIds("R03-M001")
+// TestExtractRoundAndMatchIDs_MissingUnderscore tests missing underscore
+func TestExtractRoundAndMatchIDs_MissingUnderscore(t *testing.T) {
+	_, _, err := ExtractRoundAndMatchIDs("R03-M001")
 
 	assert.Error(t, err)
 }
 
-// TestExtractRoundAndMatchIds_MissingRound tests missing round number
-func TestExtractRoundAndMatchIds_MissingRound(t *testing.T) {
-	_, _, err := ExtractRoundAndMatchIds("bracket_M001")
+// TestExtractRoundAndMatchIDs_MissingRound tests missing round number
+func TestExtractRoundAndMatchIDs_MissingRound(t *testing.T) {
+	_, _, err := ExtractRoundAndMatchIDs("bracket_M001")
 
 	assert.Error(t, err)
 }
@@ -447,10 +447,10 @@ func TestDetectTournamentFormat_UnrecognizedFormat(t *testing.T) {
 
 // endregion
 
-// region ExtractMatchListId tests
+// region ExtractMatchListID tests
 
-// TestExtractMatchListId_Swiss tests extracting IDs from Swiss format
-func TestExtractMatchListId_Swiss(t *testing.T) {
+// TestExtractMatchListID_Swiss tests extracting IDs from Swiss format
+func TestExtractMatchListID_Swiss(t *testing.T) {
 	wikitext := `
 == Format ==
 Swiss format tournament
@@ -459,7 +459,7 @@ Swiss format tournament
 {{Matchlist|id=DEF456}}
 `
 
-	ids, format, err := ExtractMatchListId(wikitext)
+	ids, format, err := ExtractMatchListID(wikitext)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "swiss", format)
@@ -468,8 +468,8 @@ Swiss format tournament
 	assert.Contains(t, ids, "DEF456")
 }
 
-// TestExtractMatchListId_SingleElimination tests extracting IDs from single-elimination
-func TestExtractMatchListId_SingleElimination(t *testing.T) {
+// TestExtractMatchListID_SingleElimination tests extracting IDs from single-elimination
+func TestExtractMatchListID_SingleElimination(t *testing.T) {
 	wikitext := `
 == Format ==
 Single-elimination bracket
@@ -477,7 +477,7 @@ Single-elimination bracket
 {{Bracket|id=BRACKET1}}
 `
 
-	ids, format, err := ExtractMatchListId(wikitext)
+	ids, format, err := ExtractMatchListID(wikitext)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "single-elimination", format)
@@ -485,8 +485,8 @@ Single-elimination bracket
 	assert.Contains(t, ids, "BRACKET1")
 }
 
-// TestExtractMatchListId_NoMatches tests no matching templates
-func TestExtractMatchListId_NoMatches(t *testing.T) {
+// TestExtractMatchListID_NoMatches tests no matching templates
+func TestExtractMatchListID_NoMatches(t *testing.T) {
 	wikitext := `
 == Format ==
 Swiss format
@@ -494,7 +494,7 @@ Swiss format
 Some text but no templates
 `
 
-	ids, format, err := ExtractMatchListId(wikitext)
+	ids, format, err := ExtractMatchListID(wikitext)
 
 	// Function returns error when no IDs are found
 	assert.Error(t, err)
@@ -503,8 +503,8 @@ Some text but no templates
 	assert.Empty(t, format)
 }
 
-// TestExtractMatchListId_UnknownFormat tests error with unknown format
-func TestExtractMatchListId_UnknownFormat(t *testing.T) {
+// TestExtractMatchListID_UnknownFormat tests error with unknown format
+func TestExtractMatchListID_UnknownFormat(t *testing.T) {
 	wikitext := `
 == Format ==
 Round-robin format
@@ -512,14 +512,14 @@ Round-robin format
 {{Matchlist|id=ABC123}}
 `
 
-	_, _, err := ExtractMatchListId(wikitext)
+	_, _, err := ExtractMatchListID(wikitext)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown tournament format")
 }
 
-// TestExtractMatchListId_WithHTMLComments tests removing HTML comments
-func TestExtractMatchListId_WithHTMLComments(t *testing.T) {
+// TestExtractMatchListID_WithHTMLComments tests removing HTML comments
+func TestExtractMatchListID_WithHTMLComments(t *testing.T) {
 	wikitext := `
 == Format ==
 Single-elimination bracket
@@ -527,7 +527,7 @@ Single-elimination bracket
 {{Bracket|id=CLEAN123<!-- some comment -->}}
 `
 
-	ids, format, err := ExtractMatchListId(wikitext)
+	ids, format, err := ExtractMatchListID(wikitext)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "single-elimination", format)

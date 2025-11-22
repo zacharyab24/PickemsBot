@@ -63,7 +63,7 @@ func TestSetUserPrediction_SwissFormat_Success(t *testing.T) {
 
 	api := &API{Store: mockStore}
 
-	user := shared.User{UserId: "user1", Username: "testuser"}
+	user := shared.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
 
 	err := api.SetUserPrediction(user, teams, "test_round")
@@ -72,7 +72,7 @@ func TestSetUserPrediction_SwissFormat_Success(t *testing.T) {
 	}
 
 	// Verify prediction was stored
-	pred, ok := mockStore.Predictions[user.UserId]
+	pred, ok := mockStore.Predictions[user.UserID]
 	if !ok {
 		t.Error("Prediction was not stored")
 	}
@@ -89,7 +89,7 @@ func TestSetUserPrediction_SingleEliminationFormat_Success(t *testing.T) {
 
 	api := &API{Store: mockStore}
 
-	user := shared.User{UserId: "user1", Username: "testuser"}
+	user := shared.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Team A", "Team B", "Team C", "Team D"} // 4 teams for 8-team bracket
 
 	err := api.SetUserPrediction(user, teams, "test_round")
@@ -104,7 +104,7 @@ func TestSetUserPrediction_WrongNumberOfTeams(t *testing.T) {
 
 	api := &API{Store: mockStore}
 
-	user := shared.User{UserId: "user1", Username: "testuser"}
+	user := shared.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Team A", "Team B"} // Only 2 teams, need 10 for Swiss
 
 	err := api.SetUserPrediction(user, teams, "test_round")
@@ -123,7 +123,7 @@ func TestSetUserPrediction_InvalidTeamNames(t *testing.T) {
 
 	api := &API{Store: mockStore}
 
-	user := shared.User{UserId: "user1", Username: "testuser"}
+	user := shared.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Invalid1", "Invalid2", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
 
 	err := api.SetUserPrediction(user, teams, "test_round")
@@ -142,7 +142,7 @@ func TestSetUserPrediction_DuplicateTeams(t *testing.T) {
 
 	api := &API{Store: mockStore}
 
-	user := shared.User{UserId: "user1", Username: "testuser"}
+	user := shared.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Team A", "Team A", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
 
 	err := api.SetUserPrediction(user, teams, "test_round")
@@ -161,7 +161,7 @@ func TestSetUserPrediction_NoScheduledMatches(t *testing.T) {
 
 	api := &API{Store: mockStore}
 
-	user := shared.User{UserId: "user1", Username: "testuser"}
+	user := shared.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
 
 	err := api.SetUserPrediction(user, teams, "test_round")
@@ -177,7 +177,7 @@ func TestSetUserPrediction_StoreError(t *testing.T) {
 
 	api := &API{Store: mockStore}
 
-	user := shared.User{UserId: "user1", Username: "testuser"}
+	user := shared.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
 
 	err := api.SetUserPrediction(user, teams, "test_round")
@@ -196,7 +196,7 @@ func TestCheckPrediction_Success(t *testing.T) {
 
 	// Set up a prediction
 	pred := store.Prediction{
-		UserId:   "user1",
+		UserID:   "user1",
 		Username: "testuser",
 		Format:   "swiss",
 		Round:    "test_round",
@@ -216,7 +216,7 @@ func TestCheckPrediction_Success(t *testing.T) {
 	})
 
 	api := &API{Store: mockStore}
-	user := shared.User{UserId: "user1", Username: "testuser"}
+	user := shared.User{UserID: "user1", Username: "testuser"}
 
 	result, err := api.CheckPrediction(user)
 	if err != nil {
@@ -234,7 +234,7 @@ func TestCheckPrediction_NoPredictionFound(t *testing.T) {
 	mockStore.SetSwissResults(map[string]string{})
 
 	api := &API{Store: mockStore}
-	user := shared.User{UserId: "nonexistent", Username: "testuser"}
+	user := shared.User{UserID: "nonexistent", Username: "testuser"}
 
 	_, err := api.CheckPrediction(user)
 	if err == nil {
@@ -246,7 +246,7 @@ func TestCheckPrediction_NoScheduledMatches(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 
 	api := &API{Store: mockStore}
-	user := shared.User{UserId: "user1", Username: "testuser"}
+	user := shared.User{UserID: "user1", Username: "testuser"}
 
 	_, err := api.CheckPrediction(user)
 	if err == nil {
@@ -264,7 +264,7 @@ func TestGetLeaderboard_Success(t *testing.T) {
 
 	// Set up multiple predictions
 	pred1 := store.Prediction{
-		UserId:   "user1",
+		UserID:   "user1",
 		Username: "player1",
 		Format:   "swiss",
 		Round:    "test_round",
@@ -273,7 +273,7 @@ func TestGetLeaderboard_Success(t *testing.T) {
 		Lose:     []string{"Team I", "Team J"},
 	}
 	pred2 := store.Prediction{
-		UserId:   "user2",
+		UserID:   "user2",
 		Username: "player2",
 		Format:   "swiss",
 		Round:    "test_round",
@@ -382,7 +382,7 @@ func TestGetUpcomingMatches_Success(t *testing.T) {
 			Team2:     "Team B",
 			BestOf:    "3",
 			EpochTime: futureTime,
-			StreamUrl: "BLAST",
+			StreamURL: "BLAST",
 			Finished:  false,
 		},
 	})
@@ -415,7 +415,7 @@ func TestGetUpcomingMatches_FiltersPastMatches(t *testing.T) {
 			Team2:     "Team B",
 			BestOf:    "3",
 			EpochTime: pastTime,
-			StreamUrl: "BLAST",
+			StreamURL: "BLAST",
 			Finished:  false,
 		},
 		{
@@ -423,7 +423,7 @@ func TestGetUpcomingMatches_FiltersPastMatches(t *testing.T) {
 			Team2:     "Team D",
 			BestOf:    "3",
 			EpochTime: futureTime,
-			StreamUrl: "BLAST",
+			StreamURL: "BLAST",
 			Finished:  false,
 		},
 	})
@@ -455,7 +455,7 @@ func TestGetUpcomingMatches_FiltersFinishedMatches(t *testing.T) {
 			Team2:     "Team B",
 			BestOf:    "3",
 			EpochTime: futureTime,
-			StreamUrl: "BLAST",
+			StreamURL: "BLAST",
 			Finished:  true, // This match is finished
 		},
 	})
@@ -558,9 +558,9 @@ func TestPopulateMatches_ScheduleOnly(t *testing.T) {
 
 // endregion
 
-// region getTwitchUrl tests
+// region getTwitchURL tests
 
-func TestGetTwitchUrl_KnownStream(t *testing.T) {
+func TestGetTwitchURL_KnownStream(t *testing.T) {
 	tests := []struct {
 		input    string
 		expected string
@@ -571,7 +571,7 @@ func TestGetTwitchUrl_KnownStream(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			result := getTwitchUrl(tt.input)
+			result := getTwitchURL(tt.input)
 			if result != tt.expected {
 				t.Errorf("Expected %s, got %s", tt.expected, result)
 			}
@@ -579,8 +579,8 @@ func TestGetTwitchUrl_KnownStream(t *testing.T) {
 	}
 }
 
-func TestGetTwitchUrl_UnknownStream(t *testing.T) {
-	result := getTwitchUrl("unknown_stream")
+func TestGetTwitchURL_UnknownStream(t *testing.T) {
+	result := getTwitchURL("unknown_stream")
 	if result != "unknown" {
 		t.Errorf("Expected 'unknown', got %s", result)
 	}

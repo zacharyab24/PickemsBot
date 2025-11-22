@@ -15,8 +15,8 @@ import (
 
 type Prediction struct {
 	// Generic attributes
-	Id       primitive.ObjectID `bson:"_id,omitempty"`
-	UserId   string             `bson:"userid,omitempty"`
+	ID       primitive.ObjectID `bson:"_id,omitempty"`
+	UserID   string             `bson:"userid,omitempty"`
 	Username string             `bson:"username,omitempty"`
 	Format   string             `bson:"format,omitempty"` // "swiss" or "single-elimination"
 	Round    string             `bson:"round,omitempty"`
@@ -44,18 +44,22 @@ type SwissResultRecord struct {
 	Teams map[string]string `bson:"teams,omitempty"`
 }
 
+// GetType returns the tournament format type
 func (s SwissResultRecord) GetType() string {
 	return "swiss"
 }
 
+// GetRound returns the round name
 func (s SwissResultRecord) GetRound() string {
 	return s.Round
 }
 
+// GetTTL returns the time-to-live timestamp
 func (s SwissResultRecord) GetTTL() int64 {
 	return s.TTL
 }
 
+// GetTeams returns teams as a generic map
 func (s SwissResultRecord) GetTeams() map[string]interface{} {
 	result := make(map[string]interface{}, len(s.Teams))
 	for k, v := range s.Teams {
