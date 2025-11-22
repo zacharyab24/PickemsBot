@@ -12,7 +12,7 @@ import (
 	"slices"
 )
 
-// Function to generate user prediction object to be stored in db
+// GeneratePrediction generates a user prediction object to be stored in db.
 // Precondtions: Receives a user struct, strings containing round and format, string slice of teams, and required number of teams
 // teams []string assumes the following: team names are valid, they are ordered correctly. The correct order for this is:
 // swiss: teams[0..1]: win, teams[2..7]: advance and teams[8..9]: lose

@@ -18,7 +18,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// Function used to fetch scheduled matches for a round from db
+// FetchMatchSchedule fetches scheduled matches for a round from db
 // Preconditions: Receives receiver pointer for Store which contains DB information such as database name, collection and round
 // Postconditions: Returns slice of upcoming matches or error message if the operation was unsuccessful
 func (s *Store) FetchMatchSchedule() ([]external.ScheduledMatch, error) {
@@ -54,7 +54,7 @@ func (s *Store) FetchMatchSchedule() ([]external.ScheduledMatch, error) {
 	return res.ScheduledMatches, nil
 }
 
-// Function to store upcoming matches
+// StoreMatchSchedule stores upcoming matches
 // Preconditions: Receives pointer for Store which contains DB information such as database name, collection and round
 // and slice slice of []external.ScheduledMatch containing the data to be stored
 // Postconditions: Updates the data stored in the db, returns error message if the operation was unsuccessful

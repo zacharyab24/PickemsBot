@@ -16,7 +16,7 @@ import (
 	"github.com/lithammer/fuzzysearch/fuzzy"
 )
 
-// Function to process teams names from user input and check if they are valid
+// CheckTeamNames processes team names from user input and checks if they are valid.
 // Preconditions: receives two string slices; one containing the user's predictions and another that is a list of valid team names
 // Postconditions: returns two string slices, a slice of correctly formatted team names and slice of strings containing the invalid team names
 func CheckTeamNames(predictionTeams []string, validTeams []string) ([]string, []string) {

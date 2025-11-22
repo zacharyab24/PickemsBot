@@ -15,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// Store represents the database connection and configuration
 type Store struct {
 	Client         *mongo.Client
 	Database       *mongo.Database
@@ -28,7 +29,7 @@ type Store struct {
 	}
 }
 
-// Function for initialsing Store. Sets global values and initialises db connection
+// NewStore initializes Store. Sets global values and initialises db connection
 // Preconditions: Receives strings containing the following: dbName, mongoURI, page, params and round
 // Postconditions: Updates global values, sets collection values, and returns pointer to the Store object, or error if it occurs
 func NewStore(dbName string, mongoURI string, page string, params string, round string) (*Store, error) {

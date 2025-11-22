@@ -15,7 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// Function to store user predictions in the db
+// StoreUserPrediction stores user predictions in the db
 // Preconditions: receives strings containing db name, collection name and userID, and Prediction containing the users predictions
 // Postconditions: stores or updates the user's prediction stored in the db, or returns an error if the opperations was unsuccessful
 func (s *Store) StoreUserPrediction(userID string, userPrediction Prediction) error {
@@ -53,7 +53,7 @@ func (s *Store) StoreUserPrediction(userID string, userPrediction Prediction) er
 	return nil
 }
 
-// Function to do DB lookup and get prediction for a user
+// GetUserPrediction does DB lookup and gets prediction for a user
 // Preconditions: receives strings containing db name, collection name and userID
 // Postconditions: returns a user's prediction if it exists, or an error if it occurs
 func (s *Store) GetUserPrediction(userID string) (Prediction, error) {

@@ -178,19 +178,22 @@ func (m *MockStore) SetScheduledMatches(matches []external.ScheduledMatch) {
 	m.ScheduledMatches = matches
 }
 
-// Implement getter methods for StoreInterface
+// GetDatabase returns the mock database interface
 func (m *MockStore) GetDatabase() interface{ Name() string } {
 	return m.Database
 }
 
+// GetRound returns the round name
 func (m *MockStore) GetRound() string {
 	return m.Round
 }
 
+// GetPage returns the page path
 func (m *MockStore) GetPage() string {
 	return "Test/Tournament/2025"
 }
 
+// GetOptionalParams returns optional parameters
 func (m *MockStore) GetOptionalParams() string {
 	return ""
 }
@@ -202,6 +205,7 @@ func (mc *mockClient) Disconnect(ctx context.Context) error {
 	return nil
 }
 
+// GetClient returns the mock MongoDB client
 func (m *MockStore) GetClient() interface{ Disconnect(context.Context) error } {
 	return &mockClient{}
 }

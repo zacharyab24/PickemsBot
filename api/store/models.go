@@ -13,6 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// Prediction represents a user's prediction for a tournament round
 type Prediction struct {
 	// Generic attributes
 	ID       primitive.ObjectID `bson:"_id,omitempty"`
@@ -30,6 +31,7 @@ type Prediction struct {
 	Progression map[string]shared.TeamProgress `bson:"progression,omitempty"`
 }
 
+// ResultRecord defines the interface for tournament result records
 type ResultRecord interface {
 	GetType() string
 	GetRound() string
@@ -68,25 +70,29 @@ func (s SwissResultRecord) GetTeams() map[string]interface{} {
 	return result
 }
 
-// EliminationRecordResult represents the way data will be stored in the DB for a single-elimination bracket
+// EliminationResultRecord represents the way data will be stored in the DB for a single-elimination bracket
 type EliminationResultRecord struct {
 	Round string                         `bson:"round,omitempty"`
 	TTL   int64                          `bson:"ttl,omitempty"`
 	Teams map[string]shared.TeamProgress `bson:"teams,omitempty"`
 }
 
+// GetType returns the tournament format type
 func (e EliminationResultRecord) GetType() string {
 	return "single-elimination"
 }
 
+// GetRound returns the round name
 func (e EliminationResultRecord) GetRound() string {
 	return e.Round
 }
 
+// GetTTL returns the time-to-live timestamp
 func (e EliminationResultRecord) GetTTL() int64 {
 	return e.TTL
 }
 
+// GetTeams returns teams as a generic map
 func (e EliminationResultRecord) GetTeams() map[string]interface{} {
 	result := make(map[string]interface{}, len(e.Teams))
 	for k, v := range e.Teams {
@@ -100,14 +106,14 @@ func (e EliminationResultRecord) GetTeams() map[string]interface{} {
 	return result
 }
 
-// Upcoming Match Document struct
+// UpcomingMatchDoc represents upcoming match data stored in the database
 type UpcomingMatchDoc struct {
 	Round            string                    `bson:"round,omitempty"`
 	ScheduledMatches []external.ScheduledMatch `bson:"scheduled_matches,omitempty"`
 	TTL              int64                     `bson:"ttl,omitempty"`
 }
 
-// Function to convert RecordResult interface to MatchResult interface. Used when getting data from the db
+// ToMatchResult converts a RecordResult interface to MatchResult interface. Used when getting data from the db
 // Preconditions: none
 // Postconditions: Returns a MatchResult or error if it occurs
 func ToMatchResult(r ResultRecord) (external.MatchResult, error) {
@@ -147,6 +153,7 @@ func ToMatchResult(r ResultRecord) (external.MatchResult, error) {
 	}
 }
 
+// ScoreResult represents the result of scoring a user's predictions
 type ScoreResult struct {
 	Successes int
 	Pending   int
