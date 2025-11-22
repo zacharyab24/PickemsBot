@@ -59,7 +59,7 @@ func CheckTeamNames(predictionTeams []string, validTeams []string) ([]string, []
 	return formattedTeamNames, invalidTeams
 }
 
-// Function to calculate a user's score
+// CalculateUserScore calculates a user's score based on their predictions
 // Preconditons: Receives a Prediction struct with the data to check, and a match_data.ResultRecord which serves as the point of truth to check against
 // Postconditions: Returns a ScoreResult containing the number of successes, fails and pending results or an error if it occurs
 func CalculateUserScore(userPrediction store.Prediction, results external.MatchResult) (store.ScoreResult, string, error) {
