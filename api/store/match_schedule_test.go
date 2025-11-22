@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"os"
 	"pickems-bot/api/external"
 	"testing"
 
@@ -13,7 +14,10 @@ import (
 func NewTestStore(t *testing.T, round string) *Store {
 	t.Helper()
 
-	mongoURI := "mongodb://192.168.1.105:27017/?directConnection=true&serverSelectionTimeoutMS=2000"
+	mongoURI := os.Getenv("MONGO_TEST_URI")
+	if mongoURI == "" {
+		mongoURI = "mongodb://192.168.1.105:27017/?directConnection=true&serverSelectionTimeoutMS=2000"
+	}
 
 	clientOpts := options.Client().ApplyURI(mongoURI)
 	client, err := mongo.Connect(context.TODO(), clientOpts)
@@ -36,6 +40,10 @@ func NewTestStore(t *testing.T, round string) *Store {
 }
 
 func TestStoreMatchSchedule_Update(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping test that requires MongoDB in CI environment")
+	}
+
 	store := NewTestStore(t, "test-round")
 
 	original := []external.ScheduledMatch{
