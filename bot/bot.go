@@ -147,7 +147,7 @@ func (b *Bot) setPredictions(discord *discordgo.Session, message *discordgo.Mess
 }
 
 // Function to check the current status of a user's predictions
-// Preconditions: Recieves pointer to the discordgo session and discordgo message
+// Preconditions: Receives pointer to the discordgo session and discordgo message
 // Postconditions: Sends the status of the users's predictions to the discord channel in the form
 // "Succeeded: {succeeded}, Failed: {failed}, Pending: {pending}"
 func (b *Bot) checkPredictions(discord *discordgo.Session, message *discordgo.MessageCreate) {
@@ -197,8 +197,8 @@ func (b *Bot) teams(discord *discordgo.Session, message *discordgo.MessageCreate
 }
 
 // Function to scrape the upcoming matches, filter for the selected tournament, and post the match details to the discord channel
-// Preconditions: recieves UserPrediction struct of a player's predictions
-// Postconditions: sends a message to the discord channel where the command was run containing the upcoming matches
+// Preconditions: Receives UserPrediction struct of a player's predictions
+// Postconditions: Sends a message to the discord channel where the command was run containing the upcoming matches
 func (b *Bot) upcomingMatches(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	matches, err := b.APIPtr.GetUpcomingMatches()
 	if err != nil {

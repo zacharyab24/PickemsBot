@@ -78,7 +78,7 @@ func GetScheduledMatchesFromJSON(matchData string) ([]ScheduledMatch, error) {
 
 // ParseMatchData Function to create match nodes from json input
 // Preconditions: Receives result interface
-// Postconditions: Returns MatchNode pointer populated with match data, or error that occur
+// Postconditions: Returns MatchNode pointer populated with match data, or error that occurs
 func ParseMatchData(result interface{}) (*MatchNode, error) {
 	match, ok := result.(map[string]interface{})
 	if !ok {

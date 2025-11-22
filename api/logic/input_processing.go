@@ -17,8 +17,8 @@ import (
 )
 
 // CheckTeamNames processes team names from user input and checks if they are valid.
-// Preconditions: receives two string slices; one containing the user's predictions and another that is a list of valid team names
-// Postconditions: returns two string slices, a slice of correctly formatted team names and slice of strings containing the invalid team names
+// Preconditions: Receives two string slices; one containing the user's predictions and another that is a list of valid team names
+// Postconditions: Returns two string slices, a slice of correctly formatted team names and slice of strings containing the invalid team names
 func CheckTeamNames(predictionTeams []string, validTeams []string) ([]string, []string) {
 	var formattedTeamNames []string
 	var invalidTeams []string
@@ -83,7 +83,7 @@ func CalculateUserScore(userPrediction store.Prediction, results external.MatchR
 }
 
 // Function to caluclate a user's score for a swiss tournament
-// Preconditions: Receives a Prediction and a teams map with the structre: teamName : score
+// Preconditions: Receives a Prediction and a teams map with the structure: teamName : score
 // Postconditions: Returns a ScoreResult containing the number of successes, failures and pending results, or an error if it occurs
 func calculateSwissScore(prediction store.Prediction, teams map[string]string) (store.ScoreResult, string, error) {
 	var succeeded, pending, failed int
@@ -190,7 +190,7 @@ func evaluateSwissPrediction(teams []string, scores map[string]string, evalFn fu
 }
 
 // Function to calcluate a user's score for a single-elimination tournament
-// Preconditions: Receives a Prediction and a teams map with the structre: teamName : teamProgress
+// Preconditions: Receives a Prediction and a teams map with the structure: teamName : teamProgress
 // Postconditions: Returns a ScoreResult containing the number of successes, failures and pending results, or an error if it occurs
 func calculateEliminationScore(prediction store.Prediction, results map[string]shared.TeamProgress) (store.ScoreResult, string, error) {
 	var succeeded, pending, failed int
