@@ -14,6 +14,145 @@ import (
 	"testing"
 )
 
+// region GetMatchNodesFromJson tests
+
+// Test of GetMatchNodesFromJson that tests normal flow returns expected result
+func TestGetMatchNodesFromJson(t *testing.T) {
+	// Seed data
+	expectedResult := []MatchNode{
+		{"AmF15pUfHd_0001", "Aurora Gaming", "SAW", "TBD"},
+		{"AmF15pUfHd_0002", "Team Liquid", "FlyQuest", "TBD"},
+		{"AmF15pUfHd_0003", "B8", "Legacy", "TBD"},
+		{"IykJinz1G8_0001", "GamerLegion", "SAW", "SAW"},
+		{"IykJinz1G8_0002", "Team Liquid", "BetBoom Team", "Team Liquid"},
+		{"IykJinz1G8_0003", "3DMAX", "FlyQuest", "FlyQuest"},
+		{"IykJinz1G8_0004", "Astralis", "Legacy", "Legacy"},
+		{"U7JeCe3nrs_0001", "GamerLegion", "PaiN Gaming", "PaiN Gaming"},
+		{"U7JeCe3nrs_0002", "HEROIC", "BetBoom Team", "HEROIC"},
+		{"U7JeCe3nrs_0003", "Aurora Gaming", "Team Liquid", "Aurora Gaming"},
+		{"U7JeCe3nrs_0004", "3DMAX", "B8", "B8"},
+		{"VKTHpS7s0x_0001", "Aurora Gaming", "HEROIC", "HEROIC"},
+		{"VKTHpS7s0x_0002", "B8", "PaiN Gaming", "PaiN Gaming"},
+		{"ayB546T4zZ_0001", "PaiN Gaming", "Gentle Mates", "PaiN Gaming"},
+		{"ayB546T4zZ_0002", "Legacy", "Team Liquid", "Team Liquid"},
+		{"ayB546T4zZ_0003", "HEROIC", "Ninjas in Pyjamas", "HEROIC"},
+		{"ayB546T4zZ_0004", "GamerLegion", "FlyQuest", "GamerLegion"},
+		{"ayB546T4zZ_0005", "3DMAX", "SAW", "3DMAX"},
+		{"ayB546T4zZ_0006", "BetBoom Team", "MIBR", "BetBoom Team"},
+		{"ayB546T4zZ_0007", "Aurora Gaming", "Fnatic", "Aurora Gaming"},
+		{"ayB546T4zZ_0008", "Astralis", "B8", "B8"},
+		{"f3Ubb66fCx_0001", "3DMAX", "Astralis", "TBD"},
+		{"f3Ubb66fCx_0002", "BetBoom Team", "Gentle Mates", "TBD"},
+		{"f3Ubb66fCx_0003", "GamerLegion", "Fnatic", "TBD"},
+		{"ilPVE8BYF6_0001", "Ninjas in Pyjamas", "Gentle Mates", "Gentle Mates"},
+		{"ilPVE8BYF6_0002", "Fnatic", "MIBR", "Fnatic"},
+		{"vINHUV3all_0001", "Legacy", "Gentle Mates", "Legacy"},
+		{"vINHUV3all_0002", "SAW", "Ninjas in Pyjamas", "SAW"},
+		{"vINHUV3all_0003", "Fnatic", "FlyQuest", "FlyQuest"},
+		{"vINHUV3all_0004", "Astralis", "MIBR", "Astralis"},
+		{"zIiQwLgw83_0001", "TBD", "TBD", "TBD"},
+		{"zIiQwLgw83_0002", "TBD", "TBD", "TBD"},
+		{"zIiQwLgw83_0003", "TBD", "TBD", "TBD"},
+	}
+
+	// Load json from disk
+	f, err := os.Open("testdata/parser/scheduledMatchRawData.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	var sb strings.Builder
+
+	for scanner.Scan() {
+		sb.WriteString(scanner.Text())
+	}
+
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	rawJson := sb.String()
+	actualResult, err := GetMatchNodesFromJson(rawJson)
+	if err != nil {
+		t.Fatal("GetMatchNodesFromJson should not have thrown an error. Error:", err)
+	}
+	if !reflect.DeepEqual(actualResult, expectedResult) {
+		t.Fatal("Actual does not equal expected")
+	}
+}
+
+// Test of GetMatchNodesFromJson when no data is returned
+func TestGetMatchNodesFromJson_NoMatchNodes(t *testing.T) {
+	inputString := "{\"result\" : []}"
+	matches, err := GetMatchNodesFromJson(inputString)
+	if err != nil {
+		t.Fatal("GetMatchNodesFromJson should not have returned an error")
+	}
+	if matches != nil {
+		t.Fatal("expected matches to be nil")
+	}
+}
+
+// Test of GetMatchNodesFromJson when given invalid json
+func TestGetMatchNodesFromJson_InvalidJson(t *testing.T) {
+	inputString := "{\"some invalid json\"}"
+	_, err := GetMatchNodesFromJson(inputString)
+	if err == nil {
+		t.Fatal("GetMatchNodesFromJson should have returned an error")
+	}
+	if err.Error() != "error parsing JSON: invalid character '}' after object key" {
+		t.Fatal("Unexpected error message")
+	}
+}
+
+// Test of GetMatchNodesFromJson when given valid json with invalid data
+func TestGetMatchNodesFromJson_NoResultField(t *testing.T) {
+	inputString := "{\"key\" : \"value\"}"
+	_, err := GetMatchNodesFromJson(inputString)
+	if err == nil {
+		t.Fatal("GetMatchNodesFromJson should have returned an error")
+	}
+	if err.Error() != "missing or invalid 'result' field" {
+		t.Fatal("Unexpected error message")
+	}
+}
+
+// Test of GetMatchNodesFromJson when ParseScheduledMatches throws an error
+func TestGetMatchNodesFromJson_InvalidData(t *testing.T) {
+	// Load json from disk
+	f, err := os.Open("testdata/parser/scheduledMatchInvalidRawData.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	var sb strings.Builder
+
+	for scanner.Scan() {
+		sb.WriteString(scanner.Text())
+	}
+
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	rawJson := sb.String()
+	_, err = GetMatchNodesFromJson(rawJson)
+	if err == nil {
+		t.Fatal("GetMatchNodesFromJson should have returned an error")
+	}
+	if strings.Contains(err.Error(), "Error creating match node") {
+		t.Fatal("Unexpected error message")
+	}
+}
+
+// endregion
+
+// region GetScheduledMatchesFromJson tests
+
 // Test of GetScheduledMatchesFromJson that tests normal flow returns expected result
 func TestGetScheduledMatchesFromJson(t *testing.T) {
 	// Seed data
@@ -155,3 +294,7 @@ func TestGetScheduledMatchesFromJson_InvalidData(t *testing.T) {
 		t.Fatal("Unexpected error message")
 	}
 }
+
+//endregion
+
+// TODO: Add comprehensive ParseMatchData tests with proper map[string]interface{} input

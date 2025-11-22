@@ -135,7 +135,7 @@ func (b *Bot) setPredictions(discord *discordgo.Session, message *discordgo.Mess
 	msg, _ := spaceSplitter.Split(message.Content)
 	userPreds := msg[1:]
 
-	err := b.ApiPtr.SetUserPrediction(user, userPreds ,b.ApiPtr.Store.Round)
+	err := b.ApiPtr.SetUserPrediction(user, userPreds ,b.ApiPtr.Store.GetRound())
 	if err != nil {
 		fmt.Println(err)
 		res = fmt.Sprintf("An error occured setting %s's Pickems: %s", user.Username, err)

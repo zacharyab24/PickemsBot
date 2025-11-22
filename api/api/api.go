@@ -22,7 +22,7 @@ import (
 )
 
 type API struct {
-	Store *store.Store
+	Store store.StoreInterface
 }
 
 func NewAPI(dbName string, mongoURI string, page string, params string, round string) (*API, error) {
@@ -276,8 +276,8 @@ func (a *API) GetTournamentInfo() ([]string, error) {
 	}
 
 	var values []string
-	values = append(values, fmt.Sprintf("Tournament Name: %s", a.Store.Database.Name()))
-	values = append(values, fmt.Sprintf("Round: %s", a.Store.Round))
+	values = append(values, fmt.Sprintf("Tournament Name: %s", a.Store.GetDatabase().Name()))
+	values = append(values, fmt.Sprintf("Round: %s", a.Store.GetRound()))
 	values = append(values, fmt.Sprintf("Format: %s", format))
 	values = append(values, fmt.Sprintf("Number of required teams: %d", requiredPredictions))
 	return values, nil
@@ -288,7 +288,7 @@ func (a *API) GetTournamentInfo() ([]string, error) {
 // Postconditions: Returns nil, or an error if it occurs
 func (a *API) PopulateMatches(scheduleOnly bool) error {
 	// Populated Scheduled matches
-	scheduledMatches, err := external.FetchScheduledMatches(os.Getenv("LIQUIDPEDIADB_API_KEY"), a.Store.Page, a.Store.OptionalParams)
+	scheduledMatches, err := external.FetchScheduledMatches(os.Getenv("LIQUIDPEDIADB_API_KEY"), a.Store.GetPage(), a.Store.GetOptionalParams())
 	if err != nil {
 		return err
 	}
