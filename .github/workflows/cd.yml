@@ -1,4 +1,4 @@
-name: Deploy App
+name: CD - Deploy App
 on: 
   push:
     branches:
@@ -15,7 +15,7 @@ jobs:
       - name: Setup Tailscale
         uses: tailscale/github-action@v2
         with:
-          authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
+          oauth-token: ${{ secrets.TAILSCALE_OAUTH_TOKEN }}
           
       - name: Setup SSH Key
         uses: webfactory/ssh-agent@v0.5.4
