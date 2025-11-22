@@ -9,40 +9,22 @@ jobs:
     name: Build and Deploy
     runs-on: ubuntu-latest
     steps:
-      # 1. Checkout the repository
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # 2. Debug: check that Tailscale secrets are populated
-      - name: Debug Tailscale secrets
+      - name: Setup Tailscale with retry
         run: |
-          if [ -z "${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}" ]; then
-            echo "ERROR: TAILSCALE_OAUTH_CLIENT_ID is empty"
-            exit 1
-          fi
-          if [ -z "${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}" ]; then
-            echo "ERROR: TAILSCALE_OAUTH_CLIENT_SECRET is empty"
-            exit 1
-          fi
-          echo "Secrets are populated correctly"
+          for i in {1..3}; do
+            sudo tailscale up --hostname github-runner --authkey="${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}" && break
+            echo "Retrying tailscale up..."
+            sleep 5
+          done
 
-      # 3. Setup Tailscale using OAuth client
-      - name: Setup Tailscale
-        uses: tailscale/github-action@v2
-        with:
-          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
-          hostname: github-runner
-          version: latest   # optional: ensures latest Tailscale
-          args: up          # optional: runs tailscale up
-
-      # 4. Setup SSH Key for deployment
       - name: Setup SSH Key
         uses: webfactory/ssh-agent@v0.5.4
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      # 5. Run the deploy script on your VM
       - name: Deploy Script
         run: |
           ssh -o StrictHostKeyChecking=no latte@uon-marketplace.taild171a.ts.net '/usr/bin/sh -s' < ./scripts/deploy.sh
