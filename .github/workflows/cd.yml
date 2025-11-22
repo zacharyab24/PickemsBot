@@ -12,19 +12,41 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Tailscale with retry
+      # Debug: check that Tailscale secrets are populated
+      - name: Debug Tailscale secrets
         run: |
-          for i in {1..3}; do
-            sudo tailscale up --hostname github-runner --authkey="${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}" && break
-            echo "Retrying tailscale up..."
-            sleep 5
-          done
+          if [ -z "${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}" ]; then
+            echo "ERROR: TAILSCALE_OAUTH_CLIENT_ID is empty"
+            exit 1
+          fi
+          if [ -z "${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}" ]; then
+            echo "ERROR: TAILSCALE_OAUTH_CLIENT_SECRET is empty"
+            exit 1
+          fi
+          echo "Secrets are populated correctly"
 
+      # Setup Tailscale using OAuth client (action installs tailscale for us)
+      - name: Setup Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          hostname: github-runner
+          version: latest
+          args: up --accept-dns=true
+
+      # Optional: debug connectivity to latte over Tailscale
+      - name: Debug Tailscale connectivity
+        run: |
+          ping -c 4 100.109.98.83 || echo "Ping failed"
+
+      # Setup SSH Key for deployment
       - name: Setup SSH Key
         uses: webfactory/ssh-agent@v0.5.4
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
+      # Deploy
       - name: Deploy Script
         run: |
-          ssh -o StrictHostKeyChecking=no latte@100.109.98.83 '/usr/bin/sh -s' < ./scripts/deploy.sh
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null latte@100.109.98.83 '/usr/bin/sh -s' < ./scripts/deploy.sh
