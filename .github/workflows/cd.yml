@@ -27,4 +27,4 @@ jobs:
 
       - name: Deploy Script
         run: |
-          ssh -o StrictHostKeyChecking=no latte@uon-marketplace.taild171a.ts.net '/usr/bin/sh -s' < ./scripts/deploy.sh
+          ssh -o StrictHostKeyChecking=no latte@uon-marketplace '/usr/bin/sh -s' < ./scripts/deploy.sh
