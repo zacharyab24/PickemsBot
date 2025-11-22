@@ -15,20 +15,21 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// Store represents the database connection and configuration
 type Store struct {
-	Client     *mongo.Client
-	Database   *mongo.Database
-	Page string
+	Client         *mongo.Client
+	Database       *mongo.Database
+	Page           string
 	OptionalParams string
-	Round string
-	Collections struct {
-		Predictions     *mongo.Collection
-		MatchResults    *mongo.Collection
+	Round          string
+	Collections    struct {
+		Predictions   *mongo.Collection
+		MatchResults  *mongo.Collection
 		MatchSchedule *mongo.Collection
 	}
 }
 
-// Function for initialsing Store. Sets global values and initialises db connection
+// NewStore initializes Store. Sets global values and initialises db connection
 // Preconditions: Receives strings containing the following: dbName, mongoURI, page, params and round
 // Postconditions: Updates global values, sets collection values, and returns pointer to the Store object, or error if it occurs
 func NewStore(dbName string, mongoURI string, page string, params string, round string) (*Store, error) {
@@ -43,23 +44,19 @@ func NewStore(dbName string, mongoURI string, page string, params string, round 
 	}
 
 	return &Store{
-		Client:   client,
-		Database: db,
-		Page: page,
+		Client:         client,
+		Database:       db,
+		Page:           page,
 		OptionalParams: params,
-		Round: round,
+		Round:          round,
 		Collections: struct {
-			Predictions     *mongo.Collection
-			MatchResults    *mongo.Collection
+			Predictions   *mongo.Collection
+			MatchResults  *mongo.Collection
 			MatchSchedule *mongo.Collection
 		}{
-			Predictions:     db.Collection("user_predictions"),
-			MatchResults:    db.Collection("match_results"),
+			Predictions:   db.Collection("user_predictions"),
+			MatchResults:  db.Collection("match_results"),
 			MatchSchedule: db.Collection("scheduled_matches"),
 		},
 	}, nil
 }
-
-
-
-

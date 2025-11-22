@@ -5,14 +5,16 @@
 
 package api
 
+// ScoreResult represents the outcome of score calculation for a user's predictions
 type ScoreResult struct {
 	Successes int
 	Pending   int
 	Failed    int
 }
 
+// LeaderboardEntry represents a single entry in the leaderboard
 type LeaderboardEntry struct {
-	Username string
+	Username  string
 	Succeeded int
-	Failed int
+	Failed    int
 }

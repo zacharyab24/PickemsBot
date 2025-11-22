@@ -1,0 +1,89 @@
+{
+  "result": [
+    {
+      "pageid": 362796,
+      "pagename": "PGL/2025/Masters",
+      "namespace": 0,
+      "objectname": "362796_zIiQwLgw83_0003",
+      "match2id": "zIiQwLgw83_0003",
+      "match2bracketid": "zIiQwLgw83",
+      "status": "",
+      "winner": "",
+      "walkover": "",
+      "resulttype": "",
+      "finished": 0,
+      "mode": "team",
+      "type": "Offline",
+      "section": "Round 5",
+      "game": "cs2",
+      "patch": "",
+      "date": "0000-01-01 00:00:00",
+      "dateexact": 0,
+      "stream": {
+        "twitch_en_1": "PGL",
+        "youtube": "PGL",
+        "twitch": "PGL",
+        "kick": "PGL",
+        "kick_en_1": "PGL",
+        "youtube_en_1": "PGL"
+      },
+      "links": [],
+      "bestof": 3,
+      "vod": "",
+      "tournament": "PGL Masters Bucharest 2025",
+      "parent": "PGL/2025/Masters",
+      "tickername": "",
+      "shortname": "",
+      "series": "",
+      "icon": "PGL allmode.png",
+      "iconurl": "https://liquipedia.net/commons/images/thumb/a/a7/PGL_allmode.png/400px-PGL_allmode.png",
+      "icondark": "PGL allmode.png",
+      "icondarkurl": "https://liquipedia.net/commons/images/thumb/a/a7/PGL_allmode.png/400px-PGL_allmode.png",
+      "liquipediatier": "2",
+      "liquipediatiertype": "",
+      "publishertier": "Tier 1",
+      "extradata": {
+        "matchsection": "Round 5",
+        "overturned": false,
+        "timestamp": -62167219200,
+        "hidden": false,
+        "featured": true
+      },
+      "match2bracketdata": {
+        "groupRoundIndex": 5,
+        "inheritedheader": "October 29, 2025",
+        "matchIndex": 3,
+        "bracketindex": 8,
+        "type": "matchlist"
+      },
+      "match2opponents": [
+        {
+          "id": 1,
+          "type": "literal",
+          "name": "",
+          "template": "",
+          "icon": "",
+          "score": -1,
+          "status": "",
+          "placement": -1,
+          "match2players": [],
+          "extradata": []
+        },
+        {
+          "id": 2,
+          "type": "literal",
+          "name": "",
+          "template": "",
+          "icon": "",
+          "score": -1,
+          "status": "",
+          "placement": -1,
+          "match2players": [],
+          "extradata": []
+        }
+      ],
+      "match2games": [],
+      "wiki": "counterstrike"
+    }
+  ]
+}

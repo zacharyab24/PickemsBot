@@ -1,3 +1,5 @@
 .env
 /pickems-bot
 .idea
+*.exe
+*.out

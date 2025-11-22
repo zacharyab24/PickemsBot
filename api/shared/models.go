@@ -5,12 +5,13 @@
 
 package shared
 
+// User represents a user with their Discord ID and username
 type User struct {
-	UserId   string
+	UserID   string
 	Username string
 }
 
-// Team Progress struct
+// TeamProgress represents a team's progress through tournament rounds
 type TeamProgress struct {
 	Round  string `bson:"round,omitempty"`  // e.g. "semifinal", "grandfinal"
 	Status string `bson:"status,omitempty"` // "advanced", "eliminated"

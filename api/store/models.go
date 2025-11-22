@@ -13,10 +13,11 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// Prediction represents a user's prediction for a tournament round
 type Prediction struct {
 	// Generic attributes
-	Id       primitive.ObjectID `bson:"_id,omitempty"`
-	UserId   string             `bson:"userid,omitempty"`
+	ID       primitive.ObjectID `bson:"_id,omitempty"`
+	UserID   string             `bson:"userid,omitempty"`
 	Username string             `bson:"username,omitempty"`
 	Format   string             `bson:"format,omitempty"` // "swiss" or "single-elimination"
 	Round    string             `bson:"round,omitempty"`
@@ -30,6 +31,7 @@ type Prediction struct {
 	Progression map[string]shared.TeamProgress `bson:"progression,omitempty"`
 }
 
+// ResultRecord defines the interface for tournament result records
 type ResultRecord interface {
 	GetType() string
 	GetRound() string
@@ -44,18 +46,22 @@ type SwissResultRecord struct {
 	Teams map[string]string `bson:"teams,omitempty"`
 }
 
+// GetType returns the tournament format type
 func (s SwissResultRecord) GetType() string {
 	return "swiss"
 }
 
+// GetRound returns the round name
 func (s SwissResultRecord) GetRound() string {
 	return s.Round
 }
 
+// GetTTL returns the time-to-live timestamp
 func (s SwissResultRecord) GetTTL() int64 {
 	return s.TTL
 }
 
+// GetTeams returns teams as a generic map
 func (s SwissResultRecord) GetTeams() map[string]interface{} {
 	result := make(map[string]interface{}, len(s.Teams))
 	for k, v := range s.Teams {
@@ -64,25 +70,29 @@ func (s SwissResultRecord) GetTeams() map[string]interface{} {
 	return result
 }
 
-// EliminationRecordResult represents the way data will be stored in the DB for a single-elimination bracket
+// EliminationResultRecord represents the way data will be stored in the DB for a single-elimination bracket
 type EliminationResultRecord struct {
-	Round string                  `bson:"round,omitempty"`
-	TTL   int64                   `bson:"ttl,omitempty"`
+	Round string                         `bson:"round,omitempty"`
+	TTL   int64                          `bson:"ttl,omitempty"`
 	Teams map[string]shared.TeamProgress `bson:"teams,omitempty"`
 }
 
+// GetType returns the tournament format type
 func (e EliminationResultRecord) GetType() string {
 	return "single-elimination"
 }
 
+// GetRound returns the round name
 func (e EliminationResultRecord) GetRound() string {
 	return e.Round
 }
 
+// GetTTL returns the time-to-live timestamp
 func (e EliminationResultRecord) GetTTL() int64 {
 	return e.TTL
 }
 
+// GetTeams returns teams as a generic map
 func (e EliminationResultRecord) GetTeams() map[string]interface{} {
 	result := make(map[string]interface{}, len(e.Teams))
 	for k, v := range e.Teams {
@@ -96,55 +106,56 @@ func (e EliminationResultRecord) GetTeams() map[string]interface{} {
 	return result
 }
 
-// Upcoming Match Document struct
+// UpcomingMatchDoc represents upcoming match data stored in the database
 type UpcomingMatchDoc struct {
-	Round string `bson:"round,omitempty"`
+	Round            string                    `bson:"round,omitempty"`
 	ScheduledMatches []external.ScheduledMatch `bson:"scheduled_matches,omitempty"`
-	TTL int64 `bson:"ttl,omitempty"`
+	TTL              int64                     `bson:"ttl,omitempty"`
 }
 
-// Function to convert RecordResult interface to MatchResult interface. Used when getting data from the db
+// ToMatchResult converts a RecordResult interface to MatchResult interface. Used when getting data from the db
 // Preconditions: none
-// Postconditions: Returns a MatchResult or error if it occurs 
+// Postconditions: Returns a MatchResult or error if it occurs
 func ToMatchResult(r ResultRecord) (external.MatchResult, error) {
-    switch r.GetType() {
-    case "swiss":
-        scores := make(map[string]string)
-        for team, val := range r.GetTeams() {
-            strVal, ok := val.(string)
-            if !ok {
-                return nil, fmt.Errorf("invalid score for team %s", team)
-            }
-            scores[team] = strVal
-        }
-        return external.SwissResult{Scores: scores}, nil
-    case "single-elimination":
-        progression := make(map[string]shared.TeamProgress)
-        for team, val := range r.GetTeams() {
-            raw, ok := val.(map[string]interface{})
-            if !ok {
-                return nil, fmt.Errorf("invalid progression format for team %s", team)
-            }
-            
-            // Initialize TeamProgress struct
-            tp := shared.TeamProgress{}
-            
-            if round, ok := raw["round"].(string); ok {
-                tp.Round = round
-            }
-            if status, ok := raw["status"].(string); ok {
-                tp.Status = status
-            }
-            progression[team] = tp
-        }
-        return external.EliminationResult{Progression: progression}, nil
-    default:
-        return nil, fmt.Errorf("unknown result type: %s", r.GetType())
-    }
+	switch r.GetType() {
+	case "swiss":
+		scores := make(map[string]string)
+		for team, val := range r.GetTeams() {
+			strVal, ok := val.(string)
+			if !ok {
+				return nil, fmt.Errorf("invalid score for team %s", team)
+			}
+			scores[team] = strVal
+		}
+		return external.SwissResult{Scores: scores}, nil
+	case "single-elimination":
+		progression := make(map[string]shared.TeamProgress)
+		for team, val := range r.GetTeams() {
+			raw, ok := val.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("invalid progression format for team %s", team)
+			}
+
+			// Initialize TeamProgress struct
+			tp := shared.TeamProgress{}
+
+			if round, ok := raw["round"].(string); ok {
+				tp.Round = round
+			}
+			if status, ok := raw["status"].(string); ok {
+				tp.Status = status
+			}
+			progression[team] = tp
+		}
+		return external.EliminationResult{Progression: progression}, nil
+	default:
+		return nil, fmt.Errorf("unknown result type: %s", r.GetType())
+	}
 }
 
+// ScoreResult represents the result of scoring a user's predictions
 type ScoreResult struct {
 	Successes int
-	Pending int
-	Failed int
+	Pending   int
+	Failed    int
 }

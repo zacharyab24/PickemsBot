@@ -16,7 +16,7 @@ import (
 	"strings"
 )
 
-// Function to get scheduled matches, and return the results
+// FetchScheduledMatches Function to get scheduled matches, and return the results
 // Preconditions: Receives string containing api key
 // Returns slice of Scheduled matches or an error if it occurs
 func FetchScheduledMatches(apiKey string, page string, optionalParams string) ([]ScheduledMatch, error) {
@@ -27,13 +27,11 @@ func FetchScheduledMatches(apiKey string, page string, optionalParams string) ([
 	if err != nil {
 		return nil, fmt.Errorf("error getting wikitext: %w", err)
 	}
-
 	// Get match2bracketid's from wikitext
-	ids, _, err := ExtractMatchListId(wikitext)
+	ids, _, err := ExtractMatchListID(wikitext)
 	if err != nil {
 		return nil, fmt.Errorf("error extracting match list: %w", err)
 	}
-
 	// Get match data from liquipedia db
 	jsonResponse, err := GetLiquipediaMatchData(apiKey, ids)
 	if err != nil {
@@ -41,7 +39,7 @@ func FetchScheduledMatches(apiKey string, page string, optionalParams string) ([
 	}
 
 	// Get scheduled matches (if any) from jsonResponse
-	scheduledMatches, err := GetScheduledMatchesFromJson(jsonResponse)
+	scheduledMatches, err := GetScheduledMatchesFromJSON(jsonResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -54,10 +52,10 @@ func FetchScheduledMatches(apiKey string, page string, optionalParams string) ([
 	return scheduledMatches, nil
 }
 
-// Function to fetch raw wikitext from a given URL. This function does not perform any parsing on the text
-// Preconditions: Receives string that contains URL for liquipedia page we wish to parse
-// (e.g. https://liquipedia.net/counterstrike/PGL/2024/Copenhagen/Opening_Stage?action=raw)
-// Postconditions: Returns string containing raw wiki text and errors
+// GetWikitext fetches raw wikitext from a given URL. This function does not perform any parsing on the text.
+// It receives string that contains URL for liquipedia page we wish to parse
+// (e.g. https://liquipedia.net/counterstrike/PGL/2024/Copenhagen/Opening_Stage?action=raw).
+// It returns string containing raw wiki text and errors.
 func GetWikitext(url string) (string, error) {
 
 	// Create HTTP Request
@@ -107,12 +105,12 @@ func GetWikitext(url string) (string, error) {
 	return string(body), err
 }
 
-// Function to get match data from liquipediaDB filtered by `match2bracketid`. Each match2bracketid should give a table in the "Detailed Results" section for a round of a tournament
+// GetLiquipediaMatchData Function to get match data from liquipediaDB filtered by `match2bracketid`. Each match2bracketid should give a table in the "Detailed Results" section for a round of a tournament
 // e.g. For the URL https://liquipedia.net/counterstrike/PGL/2024/Copenhagen/Opening_Stage, we should be fetching the data for each of the matches in all 9 tables
 // Preconditions: Receives string containing liquipediadb api key, Receives url containing tournament page, receives string slice containing match2bracketid's
 // Postconditons: Returns the match data json as a string or errors
 func GetLiquipediaMatchData(apiKey string, bracketIds []string) (string, error) {
-	apiUrl := "https://api.liquipedia.net/api/v3/match"
+	apiURL := "https://api.liquipedia.net/api/v3/match"
 
 	// Format match2bracketids for URL params
 	var conditions []string
@@ -122,24 +120,24 @@ func GetLiquipediaMatchData(apiKey string, bracketIds []string) (string, error) 
 	conditionString := strings.Join(conditions, " OR ")
 
 	// Convert tournalmentUrl string into url so we can add params
-	parsedUrl, err := url.Parse(apiUrl)
+	parsedURL, err := url.Parse(apiURL)
 	if err != nil {
 		fmt.Println("Invalid url:", err)
 		return "", err
 	}
 
 	// Set URL parameters
-	params := parsedUrl.Query()
+	params := parsedURL.Query()
 	params.Set("limit", "100")
 	params.Set("wiki", "counterstrike")
 	params.Set("conditions", conditionString)
 	params.Set("rawstreams", "false")
 	params.Set("streamurls", "false")
-	parsedUrl.RawQuery = params.Encode()
+	parsedURL.RawQuery = params.Encode()
 
 	// Create HTTP Request
 	client := &http.Client{}
-	request, err := http.NewRequest("GET", parsedUrl.String(), nil)
+	request, err := http.NewRequest("GET", parsedURL.String(), nil)
 	if err != nil {
 		fmt.Println("Failed to create request", err)
 		return "", err
@@ -155,7 +153,7 @@ func GetLiquipediaMatchData(apiKey string, bracketIds []string) (string, error) 
 	}
 	defer response.Body.Close()
 
-	// Check if we got a HTTP 200 response, if not an error has occured
+	// Check if we got a HTTP 200 response, if not an error has occurred
 	if response.StatusCode != http.StatusOK {
 		fmt.Printf("Failed to fetch page. Status code: %d\n", response.StatusCode)
 		return "", err

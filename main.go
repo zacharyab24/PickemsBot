@@ -59,7 +59,7 @@ func main() {
 		log.Fatalf("failed to initialize API: %v", err)
 	}
 	defer func() {
-		if err = apiInstance.Store.Client.Disconnect(context.TODO()); err != nil {
+		if err = apiInstance.Store.GetClient().Disconnect(context.TODO()); err != nil {
 			panic(err)
 		}
 	}()

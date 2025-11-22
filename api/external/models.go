@@ -7,41 +7,45 @@ package external
 
 import "pickems-bot/api/shared"
 
-// Interface for MatchResults. Used to unify the return types of swiss and single-elimination for GetMatchData
+// MatchResult is an interface for match results. Used to unify the return types of swiss and single-elimination for GetMatchData
 type MatchResult interface {
 	GetType() string
 }
 
-// Struct for swiss results
+// SwissResult is a struct for swiss tournament results
 type SwissResult struct {
 	Scores map[string]string
 }
 
+// GetType returns the tournament format type
 func (s SwissResult) GetType() string {
 	return "swiss"
 }
 
-// Struct for single elimination results
+// EliminationResult is a struct for single elimination tournament results
 type EliminationResult struct {
 	Progression map[string]shared.TeamProgress
 }
 
+// GetType returns the tournament format type
 func (e EliminationResult) GetType() string {
 	return "single-elimination"
 }
 
+// MatchNode represents a single match in a tournament bracket
 type MatchNode struct {
-	Id     string
+	ID     string
 	Team1  string
 	Team2  string
 	Winner string
 }
 
+// ScheduledMatch represents a scheduled match with timing and streaming information
 type ScheduledMatch struct {
 	Team1     string
 	Team2     string
 	EpochTime int64
 	BestOf    string
-	StreamUrl string
-	Finished bool
+	StreamURL string
+	Finished  bool
 }
