@@ -2,26 +2,34 @@ name: CD - Deploy App
 on: 
   push:
     branches:
-    - main
+      - main
     
 jobs:  
   build-and-deploy:
-    name: build and deploy
+    name: Build and Deploy
     runs-on: ubuntu-latest
     steps:
+      # 1. Checkout the repository
       - name: Checkout repo
         uses: actions/checkout@v4
-        
+
+      # 2. Setup Tailscale using OAuth client
       - name: Setup Tailscale
         uses: tailscale/github-action@v2
         with:
-          oauth-token: ${{ secrets.TAILSCALE_OAUTH_TOKEN }}
-          
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          hostname: github-runner
+          version: latest   # optional: ensures latest Tailscale
+          args: up          # optional: runs tailscale up
+
+      # 3. Setup SSH Key for deployment
       - name: Setup SSH Key
         uses: webfactory/ssh-agent@v0.5.4
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-  
+
+      # 4. Run the deploy script on your VM
       - name: Deploy Script
         run: |
           ssh -o StrictHostKeyChecking=no latte@uon-marketplace.taild171a.ts.net '/usr/bin/sh -s' < ./scripts/deploy.sh
