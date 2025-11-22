@@ -28,12 +28,12 @@ func (s *Store) StoreUserPrediction(userId string, userPrediction Prediction) er
 		return fmt.Errorf("lookup for existing prediction failed: %w", err)
 	}
 
-	update := bson.M {
+	update := bson.M{
 		"$set": userPrediction,
 	}
 	filter := bson.M{
 		"userid": userId,
-		"round": userPrediction.Round,
+		"round":  userPrediction.Round,
 	}
 
 	// The user currently does not have predictions stored so we create a new document
@@ -77,7 +77,7 @@ func (s *Store) GetUserPrediction(userId string) (Prediction, error) {
 func (s *Store) GetAllUserPredictions() ([]Prediction, error) {
 	// Filter query to match documents where the round is the round sting input to the function
 	filter := bson.D{{Key: "round", Value: s.Round}}
-	
+
 	// Retrieves documents that match the filter
 	cursor, err := s.Collections.Predictions.Find(context.TODO(), filter)
 	if err != nil {
@@ -86,13 +86,13 @@ func (s *Store) GetAllUserPredictions() ([]Prediction, error) {
 		}
 		return nil, fmt.Errorf("error fetching results from db: %w", err)
 	}
-	
+
 	// Unpack the cursor into a slice
 	var results []Prediction
 	if err = cursor.All(context.TODO(), &results); err != nil {
 		return nil, fmt.Errorf("error unpacking cursor into slice of predictions: %w", err)
 	}
-	
+
 	return results, nil
 }
 
@@ -108,23 +108,23 @@ func (s *Store) GetValidTeams() ([]string, string, error) {
 		return nil, "", err
 	}
 
- 	var teamNames []string
+	var teamNames []string
 
-    // Type assertion to determine the concrete type and extract team names
-    switch result := dbResults.(type) {
-    case SwissResultRecord:
-        // For Swiss format, Teams is map[string]string
-        for teamName := range result.Teams {
+	// Type assertion to determine the concrete type and extract team names
+	switch result := dbResults.(type) {
+	case SwissResultRecord:
+		// For Swiss format, Teams is map[string]string
+		for teamName := range result.Teams {
 			teamNames = append(teamNames, teamName)
-        }
-    case EliminationResultRecord:
-        // For Elimination format, Progression is map[string]*TeamProgress
-        for teamName := range result.Teams {
-            teamNames = append(teamNames, teamName)
-        }
-    default:
-        return nil, "", fmt.Errorf("unknown result record type: %T", result)
-    }
+		}
+	case EliminationResultRecord:
+		// For Elimination format, Progression is map[string]*TeamProgress
+		for teamName := range result.Teams {
+			teamNames = append(teamNames, teamName)
+		}
+	default:
+		return nil, "", fmt.Errorf("unknown result record type: %T", result)
+	}
 
-    return teamNames,dbResults.GetType(), nil
+	return teamNames, dbResults.GetType(), nil
 }

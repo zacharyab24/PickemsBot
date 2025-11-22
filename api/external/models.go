@@ -43,5 +43,5 @@ type ScheduledMatch struct {
 	EpochTime int64
 	BestOf    string
 	StreamUrl string
-	Finished bool
+	Finished  bool
 }

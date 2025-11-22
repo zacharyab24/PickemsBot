@@ -342,7 +342,7 @@ func TestSetEliminationPredictions_ThresholdLogic(t *testing.T) {
 		roundCounts[progress.Round]++
 	}
 
-	assert.Equal(t, 2, roundCounts["Grand Final"]) // Winner + Finalist
-	assert.Equal(t, 2, roundCounts["Semi Final"])   // 2 SF losers
+	assert.Equal(t, 2, roundCounts["Grand Final"])   // Winner + Finalist
+	assert.Equal(t, 2, roundCounts["Semi Final"])    // 2 SF losers
 	assert.Equal(t, 4, roundCounts["Quarter Final"]) // 4 QF losers
 }

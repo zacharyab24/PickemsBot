@@ -21,17 +21,17 @@ import (
 
 type Bot struct {
 	BotToken string
-	ApiPtr *api.API
+	ApiPtr   *api.API
 }
 
 func NewBot(botToken string, apiPtr *api.API) (*Bot, error) {
-	if botToken == ""{
+	if botToken == "" {
 		return nil, fmt.Errorf("botToken is required but none was provided")
 	}
 
 	return &Bot{
 		BotToken: botToken,
-		ApiPtr: apiPtr,
+		ApiPtr:   apiPtr,
 	}, nil
 }
 
@@ -82,7 +82,7 @@ func (b *Bot) newMessage(discord *discordgo.Session, message *discordgo.MessageC
 
 	case startsWith(message.Content, "$teams"):
 		b.teams(discord, message)
-		
+
 	case startsWith(message.Content, "$upcoming"):
 		b.upcomingMatches(discord, message)
 	}
@@ -93,16 +93,16 @@ func (b *Bot) newMessage(discord *discordgo.Session, message *discordgo.MessageC
 // Postconditions: Help message is sent to the discord channel
 func (b *Bot) helpMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	var res strings.Builder
-	res.WriteString("PickEms Bot v3.0\n") 
-	res.WriteString("`details`: Get information about the tournament including name, round, format, and number of required teams for setting prediction\n") 
+	res.WriteString("PickEms Bot v3.0\n")
+	res.WriteString("`details`: Get information about the tournament including name, round, format, and number of required teams for setting prediction\n")
 	res.WriteString("`$set team1 ... teamN`: Sets your Pick'Ems\n")
 	res.WriteString("For a swiss tournament, 10 teams are required: 1 & 2 are the 3-0 teams, 3-8 are the 3-1 / 3-2 teams and 9-10 are the 0-3 teams.\n")
 	res.WriteString("For a single elimination tournament, 4 teams are required: 1 & 2 are the teams that place 3rd and 4th in the tournament, 3 is the team that places 2nd and 4 is the team that places first\n")
-	res.WriteString("There is fuzzy matching on names, however you should try and have a close match for the best results. Names that contain two or more words need to be encase in \" (e.g. \"The MongolZ\")\n") 
+	res.WriteString("There is fuzzy matching on names, however you should try and have a close match for the best results. Names that contain two or more words need to be encase in \" (e.g. \"The MongolZ\")\n")
 	res.WriteString("`$check`: shows the current status of your Pick'Ems\n")
 	res.WriteString("`$teams`: shows the teams currently in the current stage of the tournament. Use this list to set your PickEms\n")
 	res.WriteString("`$leaderboard`: shows which users have the best pickems in the current stage. This is sorted by number of successful picks. There is no tie breaker in the event two users have the same number of successes\n")
-	res.WriteString("`$upcoming`: shows the upcoming matches for this round of the tournament with confirmed teams\n") 
+	res.WriteString("`$upcoming`: shows the upcoming matches for this round of the tournament with confirmed teams\n")
 	discord.ChannelMessageSend(message.ChannelID, res.String())
 }
 
@@ -117,10 +117,10 @@ func (b *Bot) details(discord *discordgo.Session, message *discordgo.MessageCrea
 	}
 	var res strings.Builder
 	for i := range info {
-		res.WriteString(fmt.Sprintf("%s\n",info[i]))
+		res.WriteString(fmt.Sprintf("%s\n", info[i]))
 	}
 	discord.ChannelMessageSend(message.ChannelID, res.String())
-	
+
 }
 
 // Function that processes the user input for `$set` message, validates the picks are correct and updates the values stored in the db
@@ -135,17 +135,17 @@ func (b *Bot) setPredictions(discord *discordgo.Session, message *discordgo.Mess
 	msg, _ := spaceSplitter.Split(message.Content)
 	userPreds := msg[1:]
 
-	err := b.ApiPtr.SetUserPrediction(user, userPreds ,b.ApiPtr.Store.GetRound())
+	err := b.ApiPtr.SetUserPrediction(user, userPreds, b.ApiPtr.Store.GetRound())
 	if err != nil {
 		fmt.Println(err)
 		res = fmt.Sprintf("An error occured setting %s's Pickems: %s", user.Username, err)
-	}	
+	}
 	discord.ChannelMessageSend(message.ChannelID, res)
 }
 
 // Function to check the current status of a user's predictions
 // Preconditions: Recieves pointer to the discordgo session and discordgo message
-// Postconditions: Sends the status of the users's predictions to the discord channel in the form 
+// Postconditions: Sends the status of the users's predictions to the discord channel in the form
 // "Succeeded: {succeeded}, Failed: {failed}, Pending: {pending}"
 func (b *Bot) checkPredictions(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	user := shared.User{UserId: message.Author.ID, Username: message.Author.Username}
@@ -157,7 +157,7 @@ func (b *Bot) checkPredictions(discord *discordgo.Session, message *discordgo.Me
 			fmt.Println(err)
 			res = fmt.Sprintf("An error occured checking %s's Pickems", user.Username)
 		}
-	} 
+	}
 	discord.ChannelMessageSend(message.ChannelID, res)
 }
 
@@ -165,7 +165,7 @@ func (b *Bot) checkPredictions(discord *discordgo.Session, message *discordgo.Me
 // Preconditions: Recieves pointer to the discordgo session and discordgo message
 // Postconditions: Generates leaderboard and posts leaderboard to same channel command was run
 func (b *Bot) leaderboard(discord *discordgo.Session, message *discordgo.MessageCreate) {
-	res, err := b.ApiPtr.GetLeaderboard() 
+	res, err := b.ApiPtr.GetLeaderboard()
 	if err != nil {
 		fmt.Println(err)
 		res = "An error occured getting the leaderboard"
@@ -173,7 +173,7 @@ func (b *Bot) leaderboard(discord *discordgo.Session, message *discordgo.Message
 	discord.ChannelMessageSend(message.ChannelID, res)
 }
 
-// Function to get valid teams and send the result to a discord channel 
+// Function to get valid teams and send the result to a discord channel
 // Preconditions: None
 // Postcondtions: Posts list of team names to the same channel the command was run
 func (b *Bot) teams(discord *discordgo.Session, message *discordgo.MessageCreate) {
@@ -183,7 +183,7 @@ func (b *Bot) teams(discord *discordgo.Session, message *discordgo.MessageCreate
 		discord.ChannelMessageSend(message.ChannelID, "An error occured getting the teams list")
 		return
 	}
-	
+
 	var res strings.Builder
 	res.WriteString("Valid teams for this stage are:\n")
 	for _, team := range teams {
@@ -209,7 +209,7 @@ func (b *Bot) upcomingMatches(discord *discordgo.Session, message *discordgo.Mes
 	} else {
 		var builder strings.Builder
 		builder.WriteString("Upcoming matches:\n")
-		for _,match := range matches {
+		for _, match := range matches {
 			if strings.Contains(match, "TBD") {
 				continue
 			}

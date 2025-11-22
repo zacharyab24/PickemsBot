@@ -66,8 +66,8 @@ func (s SwissResultRecord) GetTeams() map[string]interface{} {
 
 // EliminationRecordResult represents the way data will be stored in the DB for a single-elimination bracket
 type EliminationResultRecord struct {
-	Round string                  `bson:"round,omitempty"`
-	TTL   int64                   `bson:"ttl,omitempty"`
+	Round string                         `bson:"round,omitempty"`
+	TTL   int64                          `bson:"ttl,omitempty"`
 	Teams map[string]shared.TeamProgress `bson:"teams,omitempty"`
 }
 
@@ -98,53 +98,53 @@ func (e EliminationResultRecord) GetTeams() map[string]interface{} {
 
 // Upcoming Match Document struct
 type UpcomingMatchDoc struct {
-	Round string `bson:"round,omitempty"`
+	Round            string                    `bson:"round,omitempty"`
 	ScheduledMatches []external.ScheduledMatch `bson:"scheduled_matches,omitempty"`
-	TTL int64 `bson:"ttl,omitempty"`
+	TTL              int64                     `bson:"ttl,omitempty"`
 }
 
 // Function to convert RecordResult interface to MatchResult interface. Used when getting data from the db
 // Preconditions: none
-// Postconditions: Returns a MatchResult or error if it occurs 
+// Postconditions: Returns a MatchResult or error if it occurs
 func ToMatchResult(r ResultRecord) (external.MatchResult, error) {
-    switch r.GetType() {
-    case "swiss":
-        scores := make(map[string]string)
-        for team, val := range r.GetTeams() {
-            strVal, ok := val.(string)
-            if !ok {
-                return nil, fmt.Errorf("invalid score for team %s", team)
-            }
-            scores[team] = strVal
-        }
-        return external.SwissResult{Scores: scores}, nil
-    case "single-elimination":
-        progression := make(map[string]shared.TeamProgress)
-        for team, val := range r.GetTeams() {
-            raw, ok := val.(map[string]interface{})
-            if !ok {
-                return nil, fmt.Errorf("invalid progression format for team %s", team)
-            }
-            
-            // Initialize TeamProgress struct
-            tp := shared.TeamProgress{}
-            
-            if round, ok := raw["round"].(string); ok {
-                tp.Round = round
-            }
-            if status, ok := raw["status"].(string); ok {
-                tp.Status = status
-            }
-            progression[team] = tp
-        }
-        return external.EliminationResult{Progression: progression}, nil
-    default:
-        return nil, fmt.Errorf("unknown result type: %s", r.GetType())
-    }
+	switch r.GetType() {
+	case "swiss":
+		scores := make(map[string]string)
+		for team, val := range r.GetTeams() {
+			strVal, ok := val.(string)
+			if !ok {
+				return nil, fmt.Errorf("invalid score for team %s", team)
+			}
+			scores[team] = strVal
+		}
+		return external.SwissResult{Scores: scores}, nil
+	case "single-elimination":
+		progression := make(map[string]shared.TeamProgress)
+		for team, val := range r.GetTeams() {
+			raw, ok := val.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("invalid progression format for team %s", team)
+			}
+
+			// Initialize TeamProgress struct
+			tp := shared.TeamProgress{}
+
+			if round, ok := raw["round"].(string); ok {
+				tp.Round = round
+			}
+			if status, ok := raw["status"].(string); ok {
+				tp.Status = status
+			}
+			progression[team] = tp
+		}
+		return external.EliminationResult{Progression: progression}, nil
+	default:
+		return nil, fmt.Errorf("unknown result type: %s", r.GetType())
+	}
 }
 
 type ScoreResult struct {
 	Successes int
-	Pending int
-	Failed int
+	Pending   int
+	Failed    int
 }

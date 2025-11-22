@@ -1,4 +1,4 @@
-﻿/* parser_test.go
+/* parser_test.go
  * Contains unit tests for parser.go
  * Authors: Zachary Bower
  */

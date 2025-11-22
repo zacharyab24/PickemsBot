@@ -14,7 +14,7 @@ func NewTestStore(t *testing.T, round string) *Store {
 	t.Helper()
 
 	mongoUri := "mongodb://192.168.1.105:27017/?directConnection=true&serverSelectionTimeoutMS=2000"
-	
+
 	clientOpts := options.Client().ApplyURI(mongoUri)
 	client, err := mongo.Connect(context.TODO(), clientOpts)
 	if err != nil {
@@ -37,8 +37,8 @@ func NewTestStore(t *testing.T, round string) *Store {
 
 func TestStoreMatchSchedule_Update(t *testing.T) {
 	store := NewTestStore(t, "test-round")
-	
-	original := []external.ScheduledMatch {
+
+	original := []external.ScheduledMatch{
 		{Team1: "TBD", Team2: "TBD", EpochTime: -62167219200, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
 		{Team1: "TBD", Team2: "TBD", EpochTime: -62167219200, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
 		{Team1: "FURIA", Team2: "PaiN Gaming", EpochTime: 1750359600, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
@@ -52,7 +52,7 @@ func TestStoreMatchSchedule_Update(t *testing.T) {
 		t.Fatalf("insert failed: %v", err)
 	}
 
-	updated := []external.ScheduledMatch {
+	updated := []external.ScheduledMatch{
 		{Team1: "Team Spirit", Team2: "Team Vitality", EpochTime: -62167219200, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
 		{Team1: "FaZe Clan", Team2: "FURIA", EpochTime: -62167219200, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: false},
 		{Team1: "FURIA", Team2: "PaiN Gaming", EpochTime: 1750359600, BestOf: "3", StreamUrl: "BLAST_Premier", Finished: true},

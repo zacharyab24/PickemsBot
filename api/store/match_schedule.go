@@ -21,9 +21,9 @@ import (
 // Function used to fetch scheduled matches for a round from db
 // Preconditions: Receives receiver pointer for Store which contains DB information such as database name, collection and round
 // Postconditions: Returns slice of upcoming matches or error message if the operation was unsuccessful
-func (s *Store) FetchMatchSchedule() ([]external.ScheduledMatch, error){
+func (s *Store) FetchMatchSchedule() ([]external.ScheduledMatch, error) {
 	opts := options.FindOne()
-	
+
 	// Get UpcomingMatchDoc result from db
 	var res UpcomingMatchDoc
 	var shouldRefresh bool
@@ -54,15 +54,15 @@ func (s *Store) FetchMatchSchedule() ([]external.ScheduledMatch, error){
 	return res.ScheduledMatches, nil
 }
 
-// Function to store upcoming matches 
-// Preconditions: Receives pointer for Store which contains DB information such as database name, collection and round 
+// Function to store upcoming matches
+// Preconditions: Receives pointer for Store which contains DB information such as database name, collection and round
 // and slice slice of []external.ScheduledMatch containing the data to be stored
 // Postconditions: Updates the data stored in the db, returns error message if the operation was unsuccessful
 func (s *Store) StoreMatchSchedule(scheduledMatches []external.ScheduledMatch) error {
 	if len(scheduledMatches) == 0 {
 		return fmt.Errorf("scheduled matches input has length 0, requires at least 1")
 	}
-	
+
 	// Attempt to find an existing document
 	var raw bson.M
 	err := s.Collections.MatchSchedule.FindOne(context.TODO(), bson.M{"round": s.Round}).Decode(&raw)
@@ -74,10 +74,10 @@ func (s *Store) StoreMatchSchedule(scheduledMatches []external.ScheduledMatch) e
 
 	// Create bson UpcomingMatchDoc
 	filter := bson.M{"round": s.Round}
-	upcomingMatchDoc := UpcomingMatchDoc {
-		Round: s.Round,
+	upcomingMatchDoc := UpcomingMatchDoc{
+		Round:            s.Round,
 		ScheduledMatches: scheduledMatches,
-		TTL : DetermineTTL(scheduledMatches),
+		TTL:              DetermineTTL(scheduledMatches),
 	}
 	update := bson.M{"$set": upcomingMatchDoc}
 
@@ -104,9 +104,9 @@ func (s *Store) StoreMatchSchedule(scheduledMatches []external.ScheduledMatch) e
 // Preconditions: Receives receiver pointer for Score which contains information about the DB
 // Postconditions: Returns nil, or an error if the collection doesn't exist, the results are empty, or another error occurs
 func (s *Store) EnsureScheduledMatches() error {
- 	var result struct {
+	var result struct {
 		ScheduledMatches []external.ScheduledMatch `bson:"scheduled_matches"`
-	} 
+	}
 	filter := bson.M{"round": s.Round}
 	err := s.Collections.MatchSchedule.FindOne(context.TODO(), filter).Decode(&result)
 	if err != nil {

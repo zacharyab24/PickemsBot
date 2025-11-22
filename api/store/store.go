@@ -16,14 +16,14 @@ import (
 )
 
 type Store struct {
-	Client     *mongo.Client
-	Database   *mongo.Database
-	Page string
+	Client         *mongo.Client
+	Database       *mongo.Database
+	Page           string
 	OptionalParams string
-	Round string
-	Collections struct {
-		Predictions     *mongo.Collection
-		MatchResults    *mongo.Collection
+	Round          string
+	Collections    struct {
+		Predictions   *mongo.Collection
+		MatchResults  *mongo.Collection
 		MatchSchedule *mongo.Collection
 	}
 }
@@ -43,23 +43,19 @@ func NewStore(dbName string, mongoURI string, page string, params string, round 
 	}
 
 	return &Store{
-		Client:   client,
-		Database: db,
-		Page: page,
+		Client:         client,
+		Database:       db,
+		Page:           page,
 		OptionalParams: params,
-		Round: round,
+		Round:          round,
 		Collections: struct {
-			Predictions     *mongo.Collection
-			MatchResults    *mongo.Collection
+			Predictions   *mongo.Collection
+			MatchResults  *mongo.Collection
 			MatchSchedule *mongo.Collection
 		}{
-			Predictions:     db.Collection("user_predictions"),
-			MatchResults:    db.Collection("match_results"),
+			Predictions:   db.Collection("user_predictions"),
+			MatchResults:  db.Collection("match_results"),
 			MatchSchedule: db.Collection("scheduled_matches"),
 		},
 	}, nil
 }
-
-
-
-

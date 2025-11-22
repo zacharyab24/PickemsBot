@@ -92,7 +92,7 @@ func TestCalculateSwissScores_TBDTeamsExcluded(t *testing.T) {
 func TestCalculateSwissScores_InvalidWinner(t *testing.T) {
 	matchNodes := []MatchNode{
 		{Id: "1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamC"}, // Invalid winner
-		{Id: "2", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},  // Valid
+		{Id: "2", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"}, // Valid
 	}
 
 	scores, err := CalculateSwissScores(matchNodes)

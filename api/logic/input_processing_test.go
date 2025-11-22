@@ -273,7 +273,7 @@ func TestCalculateUserScore_EliminationFailed(t *testing.T) {
 
 	results := external.EliminationResult{
 		Progression: map[string]shared.TeamProgress{
-			"Team A": {Round: "Semifinal", Status: "eliminated"}, // Failed
+			"Team A": {Round: "Semifinal", Status: "eliminated"},    // Failed
 			"Team B": {Round: "Quarterfinal", Status: "eliminated"}, // Failed
 		},
 	}

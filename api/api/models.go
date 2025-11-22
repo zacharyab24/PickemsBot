@@ -12,7 +12,7 @@ type ScoreResult struct {
 }
 
 type LeaderboardEntry struct {
-	Username string
+	Username  string
 	Succeeded int
-	Failed int
+	Failed    int
 }

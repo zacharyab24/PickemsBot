@@ -19,17 +19,17 @@ import (
 // single elim: teams[0]: gf winner, teams[1]: gf loser, teams[2..3]: sf loser, teams[4..7]: qf loser, teams[8-15]: b16 loser, teams[16-31]: b32 loser
 // Postconditions: Returns a Prediction that is ready to be inserted into the db, or returns an error that occurs
 func GeneratePrediction(user shared.User, format string, round string, teams []string, numRequiredTeams int) (store.Prediction, error) {
-	// Check if slice of teams provided by the user has the correct amount of teams 
+	// Check if slice of teams provided by the user has the correct amount of teams
 	if numRequiredTeams != len(teams) {
 		return store.Prediction{}, fmt.Errorf("this tournament requires %d teams but input was %d", numRequiredTeams, len(teams))
 	}
 
 	// Set generic attributes for Prediction struct
-	prediction := store.Prediction {
-		UserId: user.UserId,
+	prediction := store.Prediction{
+		UserId:   user.UserId,
 		Username: user.Username,
-		Format: format,
-		Round: round,
+		Format:   format,
+		Round:    round,
 	}
 
 	// Set format specific attributes using helper functions
@@ -50,7 +50,7 @@ func GeneratePrediction(user shared.User, format string, round string, teams []s
 // Helper function to break up teams slice into 3 slices for swiss-only attributes of Prediction struct
 // Preconditions: Receives string slice with exactly 10 valid team names
 // Postconditions: Returns 3 string slices (win, advance, lose) according to format defined above
-func setSwissPredictions(teams []string) ([]string, []string, []string){
+func setSwissPredictions(teams []string) ([]string, []string, []string) {
 	win := teams[0:2]
 	advance := teams[2:8]
 	lose := teams[8:10]
@@ -71,7 +71,7 @@ func setEliminationPredictions(teams []string) map[string]shared.TeamProgress {
 		"Best of 32",
 	}
 	pointer := 0
-	
+
 	// Input is from lowest to highest i.e. B32 -> B16 -> QF -> SF -> GF, if we reverse it the logic is a lot simpler
 	slices.Reverse(teams)
 
@@ -82,19 +82,19 @@ func setEliminationPredictions(teams []string) map[string]shared.TeamProgress {
 
 	threshold := 1
 	count := 0
-	
+
 	for i := 1; i <= len(teams)-1; i++ {
 		// Add team to progression map
 		progression[teams[i]] = shared.TeamProgress{Round: roundNames[pointer], Status: "eliminated"}
-		
+
 		// If we reach our threshold for how many teams are in this round, we need to increment the roundName pointer and update threshold
-		count ++
+		count++
 		if count == threshold {
 			pointer++
 			threshold *= 2
 			count = 0
 		}
-		
+
 	}
 	return progression
 }

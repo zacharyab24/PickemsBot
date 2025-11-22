@@ -19,7 +19,7 @@ import (
 // Function to process teams names from user input and check if they are valid
 // Preconditions: receives two string slices; one containing the user's predictions and another that is a list of valid team names
 // Postconditions: returns two string slices, a slice of correctly formatted team names and slice of strings containing the invalid team names
-func CheckTeamNames(predictionTeams []string, validTeams []string) ([]string, []string)  {
+func CheckTeamNames(predictionTeams []string, validTeams []string) ([]string, []string) {
 	var formattedTeamNames []string
 	var invalidTeams []string
 
@@ -33,13 +33,13 @@ func CheckTeamNames(predictionTeams []string, validTeams []string) ([]string, []
 	}
 
 	// Match team names
-	for _, team := range predictionTeams {	
+	for _, team := range predictionTeams {
 		lowerTeam := strings.ToLower(team)
 		fuzzyResults := fuzzy.RankFind(lowerTeam, validTeamsLower)
 		// If there is no valid team name, add it to the invalid teams list
 		if len(fuzzyResults) == 0 {
 			invalidTeams = append(invalidTeams, team)
-			continue		
+			continue
 		} else if len(fuzzyResults) == 1 {
 			formattedTeamNames = append(formattedTeamNames, lookup[fuzzyResults[0].Target]) // Append the original team name, not the lowercase one
 		} else if len(fuzzyResults) > 1 { // If there are multiple matches, check to see if theres an exact match with the input
@@ -47,14 +47,14 @@ func CheckTeamNames(predictionTeams []string, validTeams []string) ([]string, []
 			for i := range fuzzyResults {
 				if fuzzyResults[i].Target == lowerTeam {
 					temp = fuzzyResults[i].Target
-				} 
+				}
 			}
 			// If no exact match was found, take the best ranked match
 			if temp == "" {
 				temp = fuzzyResults[0].Target
 			}
 			formattedTeamNames = append(formattedTeamNames, lookup[temp])
-		} 
+		}
 	}
 	return formattedTeamNames, invalidTeams
 }
@@ -67,7 +67,7 @@ func CalculateUserScore(userPrediction store.Prediction, results external.MatchR
 	case external.SwissResult:
 		scores, report, err := calculateSwissScore(userPrediction, r.Scores)
 		if err != nil {
-			return store.ScoreResult{},"", err
+			return store.ScoreResult{}, "", err
 		}
 		return scores, report, nil
 
@@ -195,7 +195,7 @@ func evaluateSwissPrediction(teams []string, scores map[string]string, evalFn fu
 func calculateEliminationScore(prediction store.Prediction, results map[string]shared.TeamProgress) (store.ScoreResult, string, error) {
 	var succeeded, pending, failed int
 	var response strings.Builder
-	
+
 	if len(prediction.Progression) == 0 || len(results) == 0 {
 		return store.ScoreResult{}, "", fmt.Errorf("prediction progress or results progress cannot be empty")
 	}
@@ -208,7 +208,7 @@ func calculateEliminationScore(prediction store.Prediction, results map[string]s
 		} else {
 			response.WriteString(fmt.Sprintf("- %s to make it to the %s", team, predictedProgress.Round))
 		}
-		
+
 		// Check if the  prediction was correct
 		if !ok || resultProgress.Status == "pending" {
 			response.WriteString(" [Pending]\n")
@@ -221,10 +221,10 @@ func calculateEliminationScore(prediction store.Prediction, results map[string]s
 			failed++
 		}
 	}
-		
+
 	return store.ScoreResult{
-		Successes: succeeded, 
-		Pending: pending, 
-		Failed: failed,
+		Successes: succeeded,
+		Pending:   pending,
+		Failed:    failed,
 	}, response.String(), nil
 }

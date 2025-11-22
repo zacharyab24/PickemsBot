@@ -44,8 +44,8 @@ func TestToMatchResult_Elimination(t *testing.T) {
 		Round: "playoff-stage",
 		TTL:   1234567890,
 		Teams: map[string]shared.TeamProgress{
-			"Winner":   {Round: "Grand Final", Status: "advanced"},
-			"RunnerUp": {Round: "Grand Final", Status: "eliminated"},
+			"Winner":     {Round: "Grand Final", Status: "advanced"},
+			"RunnerUp":   {Round: "Grand Final", Status: "eliminated"},
 			"SemiFinal1": {Round: "Semi Final", Status: "eliminated"},
 		},
 	}
@@ -66,9 +66,9 @@ func TestToMatchResult_Elimination(t *testing.T) {
 // InvalidSwissRecord is a mock type for testing invalid Swiss scores
 type InvalidSwissRecord struct{}
 
-func (r InvalidSwissRecord) GetType() string { return "swiss" }
+func (r InvalidSwissRecord) GetType() string  { return "swiss" }
 func (r InvalidSwissRecord) GetRound() string { return "test" }
-func (r InvalidSwissRecord) GetTTL() int64 { return 123 }
+func (r InvalidSwissRecord) GetTTL() int64    { return 123 }
 func (r InvalidSwissRecord) GetTeams() map[string]interface{} {
 	return map[string]interface{}{
 		"TeamA": 123, // Invalid: should be string
@@ -88,9 +88,9 @@ func TestToMatchResult_Swiss_InvalidScoreType(t *testing.T) {
 // InvalidEliminationRecord is a mock type for testing invalid elimination progression
 type InvalidEliminationRecord struct{}
 
-func (r InvalidEliminationRecord) GetType() string { return "single-elimination" }
+func (r InvalidEliminationRecord) GetType() string  { return "single-elimination" }
 func (r InvalidEliminationRecord) GetRound() string { return "test" }
-func (r InvalidEliminationRecord) GetTTL() int64 { return 123 }
+func (r InvalidEliminationRecord) GetTTL() int64    { return 123 }
 func (r InvalidEliminationRecord) GetTeams() map[string]interface{} {
 	return map[string]interface{}{
 		"TeamA": "invalid_string", // Should be map[string]interface{}
@@ -110,9 +110,9 @@ func TestToMatchResult_Elimination_InvalidProgressionType(t *testing.T) {
 // PartialEliminationRecord is a mock type with missing fields
 type PartialEliminationRecord struct{}
 
-func (r PartialEliminationRecord) GetType() string { return "single-elimination" }
+func (r PartialEliminationRecord) GetType() string  { return "single-elimination" }
 func (r PartialEliminationRecord) GetRound() string { return "test" }
-func (r PartialEliminationRecord) GetTTL() int64 { return 123 }
+func (r PartialEliminationRecord) GetTTL() int64    { return 123 }
 func (r PartialEliminationRecord) GetTeams() map[string]interface{} {
 	return map[string]interface{}{
 		"TeamA": map[string]interface{}{
@@ -138,9 +138,9 @@ func TestToMatchResult_Elimination_MissingFields(t *testing.T) {
 // UnknownTypeRecord is a mock type for testing unknown result types
 type UnknownTypeRecord struct{}
 
-func (r UnknownTypeRecord) GetType() string { return "unknown-format" }
+func (r UnknownTypeRecord) GetType() string  { return "unknown-format" }
 func (r UnknownTypeRecord) GetRound() string { return "test" }
-func (r UnknownTypeRecord) GetTTL() int64 { return 123 }
+func (r UnknownTypeRecord) GetTTL() int64    { return 123 }
 func (r UnknownTypeRecord) GetTeams() map[string]interface{} {
 	return map[string]interface{}{}
 }
