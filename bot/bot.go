@@ -196,7 +196,7 @@ func (b *Bot) teams(discord *discordgo.Session, message *discordgo.MessageCreate
 	discord.ChannelMessageSend(message.ChannelID, res.String())
 }
 
-// Function to scrape the upcoming matches, filter for the selected tournament, and post the match details to the discord channel
+// upcomingMatches gets lastest match data from db, and post details for upcoming matches to the discord channel
 // Preconditions: Receives UserPrediction struct of a player's predictions
 // Postconditions: Sends a message to the discord channel where the command was run containing the upcoming matches
 func (b *Bot) upcomingMatches(discord *discordgo.Session, message *discordgo.MessageCreate) {
@@ -206,25 +206,23 @@ func (b *Bot) upcomingMatches(discord *discordgo.Session, message *discordgo.Mes
 		discord.ChannelMessageSend(message.ChannelID, "An error occured getting upcoming matches")
 		return
 	}
-	var res string
+	var res strings.Builder
 	if len(matches) == 0 {
-		res = "No upcoming matches"
+		res.WriteString("No upcoming matches")
 	} else {
-		var builder strings.Builder
-		builder.WriteString("Upcoming matches:\n")
+		res.WriteString("Upcoming matches:\n")
 		for _, match := range matches {
 			if strings.Contains(match, "TBD") {
 				continue
 			}
-			builder.WriteString(match)
+			res.WriteString(match)
 		}
-		res = builder.String()
 	}
-	discord.ChannelMessageSend(message.ChannelID, res)
+	discord.ChannelMessageSend(message.ChannelID, res.String())
 }
 
 // Helper function to check if a string starts with a given substring
-// Preconditions: Recieves an input string and a substring
+// Preconditions: Receives an input string and a substring
 // Postconditions: Returns true if the substring is at the start of the string, else returns false
 func startsWith(inputString string, substring string) bool {
 	//Check if the substring is present in the input string
