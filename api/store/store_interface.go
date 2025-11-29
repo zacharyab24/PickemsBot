@@ -28,6 +28,7 @@ type Interface interface {
 	GetPage() string
 	GetOptionalParams() string
 	GetClient() interface{ Disconnect(context.Context) error }
+	FetchAndUpdateMatchResults() error
 }
 
 // Ensure Store implements Interface

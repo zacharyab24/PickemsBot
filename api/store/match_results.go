@@ -87,53 +87,17 @@ func (s *Store) GetMatchResults() (external.MatchResult, error) {
 		shouldRefresh = true
 	}
 
-	// Run if we need to refresh the data stored in the db (either there is no data stored or the TTL has experied)
+	// Run if we need to refresh the data stored in the db (either there is no data stored or the TTL has expired)
 	if shouldRefresh {
-		fmt.Println("updating match results stored in db...")
-		// Get data from LiquipediaDB api
-		externalResults, err := s.fetchMatchDataFromExternal()
+		err = s.FetchAndUpdateMatchResults()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error occured updating match results in db: %w", err)
 		}
-
-		// Validate liquipedia data
-		switch externalResults.GetType() {
-		case "swiss":
-			swissResult, ok := externalResults.(external.SwissResult)
-			if !ok {
-				return nil, fmt.Errorf("could not assert MatchResult to SwissResult")
-			}
-			if len(swissResult.Scores) == 0 {
-				return nil, fmt.Errorf("no result returned from liquipediadb")
-			}
-		case "single-elimination":
-			elimResult, ok := externalResults.(external.EliminationResult)
-			if !ok {
-				return nil, fmt.Errorf("could not assert MatchResult to EliminationResult")
-			}
-			if len(elimResult.Progression) == 0 {
-				return nil, fmt.Errorf("no result returned from liquipediadb")
-			}
-		default:
-			return nil, fmt.Errorf("unknown format type returned from liquipediadb")
-		}
-
-		// Get upcoming matches from db
-		upcomingMatches, err := s.FetchMatchSchedule()
+		dbResults, err = s.FetchMatchResultsFromDb()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error occured getting match results from db: %w", err)
 		}
-
-		// Update match results in db
-		err = s.StoreMatchResults(externalResults, upcomingMatches)
-		if err != nil {
-			return nil, err
-		}
-
-		return externalResults, nil
 	}
-
-	// Else we can return the cached data
 
 	matchResult, err := ToMatchResult(dbResults)
 	if err != nil {
@@ -304,4 +268,52 @@ func DetermineTTL(matches []external.ScheduledMatch) int64 {
 	}
 	// No ongoing match
 	return time.Now().Add(normalTTL).Unix()
+}
+
+// FetchAndUpdateMatchResults void function to fetch match results and update what is stored in the db
+// Preconditions: DB has been initialised, store pointer is initialised
+// Postconditions: Updates match results for configured tournament in DB
+func (s *Store) FetchAndUpdateMatchResults() error {
+	log.Println("updating match results stored in db...")
+	// Get data from LiquipediaDB api
+	externalResults, err := s.fetchMatchDataFromExternal()
+	if err != nil {
+		return err
+	}
+
+	// Validate liquipedia data
+	switch externalResults.GetType() {
+	case "swiss":
+		swissResult, ok := externalResults.(external.SwissResult)
+		if !ok {
+			return fmt.Errorf("could not assert MatchResult to SwissResult")
+		}
+		if len(swissResult.Scores) == 0 {
+			return fmt.Errorf("no result returned from liquipediadb")
+		}
+	case "single-elimination":
+		elimResult, ok := externalResults.(external.EliminationResult)
+		if !ok {
+			return fmt.Errorf("could not assert MatchResult to EliminationResult")
+		}
+		if len(elimResult.Progression) == 0 {
+			return fmt.Errorf("no result returned from liquipediadb")
+		}
+	default:
+		return fmt.Errorf("unknown format type returned from liquipediadb")
+	}
+
+	// Get upcoming matches from db
+	upcomingMatches, err := s.FetchMatchSchedule()
+	if err != nil {
+		return err
+	}
+
+	// Update match results in db
+	err = s.StoreMatchResults(externalResults, upcomingMatches)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
