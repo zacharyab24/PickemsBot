@@ -26,6 +26,7 @@ func isRelevantTournamentPage(page, base string) bool {
 // Preconditions: HTTP server has been started, receives HTTP ResponseWriter and Http Request
 // Postconditions: Kicks off the update functions for the MatchResults data and Leaderboard data
 func (s *Server) LiquipediaWebhookHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("Received request to liquipediadb webhook")
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return

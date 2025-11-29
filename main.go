@@ -87,7 +87,7 @@ func main() {
 
 	// Start web server for webhooks
 	go func() {
-		if err := web.Start(web.Config{Addr: ":8080"}); err != nil {
+		if err := web.Start(web.Config{Addr: ":8080", API: apiInstance}); err != nil {
 			log.Fatalf("failed to start web server: %v", err)
 		}
 	}()

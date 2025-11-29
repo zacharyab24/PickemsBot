@@ -69,34 +69,15 @@ func (s *Store) FetchMatchResultsFromDb() (ResultRecord, error) {
 	}
 }
 
-// GetMatchResults gets match results. Checks if the data in the db is outdated, if it is, makes api call to liquipediaDb api and updates local db.
-// It receives string containing dbName, colName, round, page and params (all of these come from flags at start up).
-// It returns MatchResult containing the latest match data, or an error if it occurs.
+// GetMatchResults gets match results from DB and converts it to a MatchResult struct
+// Preconditions: Receives store pointer
+// Postconditions: Returns MatchResult containing the latest match data, or an error if it occurs.
 func (s *Store) GetMatchResults() (external.MatchResult, error) {
 	// Get results stored in our db
 	dbResults, err := s.FetchMatchResultsFromDb()
-	var shouldRefresh bool
-	if err != nil {
-		// If this is triggered, there are no match results currently saved in the db
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			shouldRefresh = true
-		} else {
-			return nil, fmt.Errorf("error occured getting match results from db: %w", err)
-		}
-	} else if dbResults.GetTTL() < time.Now().Unix() {
-		shouldRefresh = true
-	}
 
-	// Run if we need to refresh the data stored in the db (either there is no data stored or the TTL has expired)
-	if shouldRefresh {
-		err = s.FetchAndUpdateMatchResults()
-		if err != nil {
-			return nil, fmt.Errorf("error occured updating match results in db: %w", err)
-		}
-		dbResults, err = s.FetchMatchResultsFromDb()
-		if err != nil {
-			return nil, fmt.Errorf("error occured getting match results from db: %w", err)
-		}
+	if err != nil {
+		return nil, fmt.Errorf("error occured getting match results from db: %w", err)
 	}
 
 	matchResult, err := ToMatchResult(dbResults)
