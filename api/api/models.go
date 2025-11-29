@@ -11,10 +11,3 @@ type ScoreResult struct {
 	Pending   int
 	Failed    int
 }
-
-// LeaderboardEntry represents a single entry in the leaderboard
-type LeaderboardEntry struct {
-	Username  string
-	Succeeded int
-	Failed    int
-}

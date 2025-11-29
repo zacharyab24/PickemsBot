@@ -164,14 +164,14 @@ func (b *Bot) checkPredictions(discord *discordgo.Session, message *discordgo.Me
 	discord.ChannelMessageSend(message.ChannelID, res)
 }
 
-// Function to calculate the leaderboard and send the leaderboard to a discord channel
-// Preconditions: Recieves pointer to the discordgo session and discordgo message
+// Function to fetch the leaderboard and return it to a discord channel
+// Preconditions: Receives pointer to the discordgo session and discordgo message
 // Postconditions: Generates leaderboard and posts leaderboard to same channel command was run
 func (b *Bot) leaderboard(discord *discordgo.Session, message *discordgo.MessageCreate) {
 	res, err := b.APIPtr.GetLeaderboard()
 	if err != nil {
 		fmt.Println(err)
-		res = "An error occured getting the leaderboard"
+		res = "An error occurred getting the leaderboard"
 	}
 	discord.ChannelMessageSend(message.ChannelID, res)
 }

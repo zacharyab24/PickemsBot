@@ -17,8 +17,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // API provides methods for interacting with the pickems bot data layer
@@ -147,51 +145,76 @@ func (a *API) CheckPrediction(user shared.User) (string, error) {
 	return report, nil
 }
 
-// GetLeaderboard contains the logic required to get the leaderboard results.
-// It receives receiver pointer to api and returns a string containing the leaderboard for the tournament.
-func (a *API) GetLeaderboard() (string, error) {
+// GenerateLeaderboard contains the logic required to generate a leaderboard.
+// Preconditions: Receives receiver pointer to api
+// Postconditions: Generates the leaderboard, updates it in the DB and returns nil, or returns an error if it occurs
+func (a *API) GenerateLeaderboard() error {
 	// Check if results have been initialised
 	err := a.Store.EnsureScheduledMatches()
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	// Fetch match results from db
 	results, err := a.Store.GetMatchResults()
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	// Fetch all predictions
 	preds, err := a.Store.GetAllUserPredictions()
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return "There are no user predictions currently stored", nil
+		return err
+	}
+
+	var leaderboard store.Leaderboard
+	leaderboard.Round = a.Store.GetRound()
+
+	// Iterate over each user's predictions, calculate their score and append the leaderboardEntry to the leaderboard object
+	for _, pred := range preds {
+		var leaderboardEntry store.LeaderboardEntry
+		scores, _, err := logic.CalculateUserScore(pred, results)
+		if err != nil {
+			return err
 		}
+
+		leaderboardEntry.UserID = pred.UserID
+		leaderboardEntry.Username = pred.Username
+		leaderboardEntry.Score = scores.Successes + scores.Pending - scores.Failed
+		leaderboardEntry.ScoreResult.Successes = scores.Successes
+		leaderboardEntry.ScoreResult.Pending = scores.Pending
+		leaderboardEntry.ScoreResult.Failed = scores.Failed
+
+		leaderboard.Entries = append(leaderboard.Entries, leaderboardEntry)
+	}
+
+	err = a.Store.StoreLeaderboard(leaderboard)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetLeaderboard fetches the leaderboard from the db and generates a response string
+// Preconditions: Receives receiver pointer to api
+// Postconditions: Returns a string with the summary of the leaderboard for this round of the tournament
+func (a *API) GetLeaderboard() (string, error) {
+	// Fetch leaderboard from DB
+	entries, err := a.Store.FetchLeaderboardFromDB()
+	if err != nil {
 		return "", err
 	}
 
-	var leaderboard []LeaderboardEntry
-
-	// Iterate over each user's predictions and calculate their score
-	for _, pred := range preds {
-		scores, _, err := logic.CalculateUserScore(pred, results)
-		if err != nil {
-			return "", err
-		}
-		leaderboard = append(leaderboard, LeaderboardEntry{Username: pred.Username, Succeeded: scores.Successes, Failed: scores.Failed})
-	}
-
-	// Order the leaderboard in decesending order so that the user with the highest score appear at the top. Note score = successes - failures and there is no tie breaker
-	sort.Slice(leaderboard, func(i, j int) bool {
-		return (leaderboard[i].Succeeded - leaderboard[i].Failed) > (leaderboard[j].Succeeded - leaderboard[j].Failed)
+	// Order the leaderboard in descending order so that the user with the highest score appear at the top. Note score = successes - failures and there is no tie breaker
+	sort.Slice(entries, func(i, j int) bool {
+		return (entries[i].Score) > (entries[j].Score)
 	})
 
-	// Generate Responnse stirng
+	// Generate Response string
 	var response strings.Builder
 	response.WriteString("The users with the best pickems are:\n")
-	for i, user := range leaderboard {
-		response.WriteString(fmt.Sprintf("%d. %s, %d successes, %d failures\n", i+1, user.Username, user.Succeeded, user.Failed))
+	for i, user := range entries {
+		response.WriteString(fmt.Sprintf("%d. %s, %d successes, %d failures\n", i+1, user.Username, user.ScoreResult.Successes, user.ScoreResult.Failed))
 	}
 
 	return response.String(), nil

@@ -256,7 +256,7 @@ func TestCheckPrediction_NoScheduledMatches(t *testing.T) {
 
 // endregion
 
-// region GetLeaderboard tests
+// region GenerateLeaderboard tests
 
 func TestGetLeaderboard_Success(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
@@ -295,7 +295,7 @@ func TestGetLeaderboard_Success(t *testing.T) {
 
 	api := &API{Store: mockStore}
 
-	result, err := api.GetLeaderboard()
+	result, err := api.GenerateLeaderboard()
 	if err != nil {
 		t.Errorf("Expected no error, got: %s", err.Error())
 	}
@@ -312,7 +312,7 @@ func TestGetLeaderboard_NoPredictions(t *testing.T) {
 
 	api := &API{Store: mockStore}
 
-	result, err := api.GetLeaderboard()
+	result, err := api.GenerateLeaderboard()
 	if err != nil {
 		t.Errorf("Expected no error, got: %s", err.Error())
 	}
@@ -327,7 +327,7 @@ func TestGetLeaderboard_NoScheduledMatches(t *testing.T) {
 
 	api := &API{Store: mockStore}
 
-	_, err := api.GetLeaderboard()
+	_, err := api.GenerateLeaderboard()
 	if err == nil {
 		t.Error("Expected error when no scheduled matches, got nil")
 	}

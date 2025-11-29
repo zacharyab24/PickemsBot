@@ -26,7 +26,6 @@ func isRelevantTournamentPage(page, base string) bool {
 // Preconditions: HTTP server has been started, receives HTTP ResponseWriter and Http Request
 // Postconditions: Kicks off the update functions for the MatchResults data and Leaderboard data
 func (s *Server) LiquipediaWebhookHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("Received request to liquipediadb webhook")
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -52,7 +51,7 @@ func (s *Server) LiquipediaWebhookHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	log.Printf("Liquipedia event wiki=%s page=%s event=%s\n", event.Wiki, event.Page, event.Event)
+	log.Printf("Recieved relevant webhook, running update functions")
 
 	// Kick async pipeline – call into your existing packages (/api, /bot, etc)
 	go func(e LiquipediaEvent) {
@@ -61,10 +60,10 @@ func (s *Server) LiquipediaWebhookHandler(w http.ResponseWriter, r *http.Request
 			return
 		}
 		// Need to add leaderboard storage and refactor calc function
-		//if err := RecalculateAndStoreLeaderboard(); err != nil {
-		//	log.Println("RecalculateAndStoreLeaderboard failed:", err)
-		//	return
-		//}
+		if err := s.api.GenerateLeaderboard(); err != nil {
+			log.Println("RecalculateAndStoreLeaderboard failed:", err)
+			return
+		}
 	}(event)
 
 	w.WriteHeader(http.StatusOK)
