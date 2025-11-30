@@ -9,6 +9,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"pickems-bot/api/external"
 	"pickems-bot/api/logic"
@@ -17,11 +18,14 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 // API provides methods for interacting with the pickems bot data layer
 type API struct {
-	Store store.Interface
+	Store       store.Interface
+	rateLimiter *rate.Limiter
 }
 
 // NewAPI creates a new API instance with the provided configuration
@@ -38,7 +42,8 @@ func NewAPI(dbName string, mongoURI string, page string, params string, round st
 	}
 
 	return &API{
-		Store: s,
+		Store:       s,
+		rateLimiter: rate.NewLimiter(rate.Every(time.Minute), 10), // Rate limit liquipedia calls to 60 per hour as per api guidelines
 	}, nil
 }
 
@@ -308,6 +313,15 @@ func (a *API) GetTournamentInfo() ([]string, error) {
 // PopulateMatches fetches scheduled match data and stores it in the DB. Needs to be run before other functions in this package will work properly.
 // It receives receiver pointer to API and returns nil, or an error if it occurs.
 func (a *API) PopulateMatches(scheduleOnly bool) error {
+	// Check rate limiter
+	if a.rateLimiter == nil {
+		return fmt.Errorf("rate limiter not initialised")
+	}
+	if !a.rateLimiter.Allow() {
+		log.Printf("Rate limit exceeded")
+		return fmt.Errorf("rate limiter limit reached")
+	}
+
 	// Populated Scheduled matches
 	scheduledMatches, err := external.FetchScheduledMatches(os.Getenv("LIQUIDPEDIADB_API_KEY"), a.Store.GetPage(), a.Store.GetOptionalParams())
 	if err != nil {
@@ -343,4 +357,21 @@ func getTwitchURL(streamURL string) string {
 		return "unknown"
 	}
 	return url
+}
+
+// UpdateMatchResults is a wrapper function for API.Store.FetchAndUpdateMatchResults() that enforces rate limiting
+// across the app and ensuring we comply with LiquipediaDB api specifications
+// Preconditions: Receives receiver pointer for api
+// Postconditions: Updates the match results database, or throws an error if rate limit has been reached or other error occurs
+func (a *API) UpdateMatchResults() error {
+	if a.rateLimiter == nil {
+		return fmt.Errorf("rate limiter not initialised")
+	}
+
+	if !a.rateLimiter.Allow() {
+		log.Println("Rate limiter is reached")
+		return fmt.Errorf("rate limiter exceeded, skipping match result update")
+	}
+
+	return a.Store.FetchAndUpdateMatchResults()
 }
