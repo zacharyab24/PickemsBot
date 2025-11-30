@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"pickems-bot/api/external"
 	"time"
@@ -81,7 +82,7 @@ func (s *Store) StoreMatchSchedule(scheduledMatches []external.ScheduledMatch) e
 	}
 	update := bson.M{"$set": upcomingMatchDoc}
 
-	fmt.Println("updating match schedule in db...")
+	log.Println("updating match schedule in db")
 
 	// Perform insert or update
 	if notFound {
