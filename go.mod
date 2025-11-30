@@ -11,6 +11,7 @@ require (
 	github.com/lithammer/fuzzysearch v1.1.8
 	github.com/stretchr/testify v1.10.0
 	go.mongodb.org/mongo-driver v1.17.3
+	golang.org/x/time v0.14.0
 )
 
 require (

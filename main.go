@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"pickems-bot/web"
 	"strings"
 
 	api "pickems-bot/api/api"
@@ -72,6 +73,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	err = apiInstance.GenerateLeaderboard()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	//Init bot
 	var discordToken string
@@ -83,6 +88,13 @@ func main() {
 		fmt.Println("Invalid \"test\" value. Should be true or false")
 	}
 	botInstance, err := bot.NewBot(discordToken, apiInstance)
+
+	// Start web server for webhooks
+	go func() {
+		if err := web.Start(web.Config{Addr: ":8080", API: apiInstance}); err != nil {
+			log.Fatalf("failed to start web server: %v", err)
+		}
+	}()
 
 	// Run bot
 	err = botInstance.Run()

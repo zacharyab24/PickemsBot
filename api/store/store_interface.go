@@ -28,6 +28,9 @@ type Interface interface {
 	GetPage() string
 	GetOptionalParams() string
 	GetClient() interface{ Disconnect(context.Context) error }
+	FetchAndUpdateMatchResults() error
+	StoreLeaderboard(leaderboard Leaderboard) error
+	FetchLeaderboardFromDB() ([]LeaderboardEntry, error)
 }
 
 // Ensure Store implements Interface
