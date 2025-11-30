@@ -73,6 +73,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	err = apiInstance.GenerateLeaderboard()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	//Init bot
 	var discordToken string
