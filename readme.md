@@ -44,3 +44,8 @@ the site using soup. Most of the data will be stored in our own database, as to 
 liquipedia 
 - `bot` will make api calls to GET and POST data, instead of doing its own database interacton and web scraping. This 
 will allow for a smoother experience, cleaner code, and  less errors.
+
+### v3.1
+Bot now spins up a web server that receives callbacks from Liquipedia when a page is updated. This means we automatically
+update our cached data, instead of relying on users making commands. This means responses are faster when previously the 
+cache would be expired. Some other minor improvements and changes have been made and test coverage has been added.

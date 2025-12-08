@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"pickems-bot/api/external"
 	"pickems-bot/api/shared"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -155,7 +156,23 @@ func ToMatchResult(r ResultRecord) (external.MatchResult, error) {
 
 // ScoreResult represents the result of scoring a user's predictions
 type ScoreResult struct {
-	Successes int
-	Pending   int
-	Failed    int
+	Successes int `bson:"successes"`
+	Pending   int `bson:"pending"`
+	Failed    int `bson:"failed"`
+}
+
+// LeaderboardEntry represents a single entry in the leaderboard for a user
+type LeaderboardEntry struct {
+	UserID      string `bson:"userid,omitempty"`
+	Username    string `bson:"username,omitempty"`
+	Score       int    `bson:"score,omitempty"`
+	ScoreResult `bson:",inline"`
+}
+
+// Leaderboard represents the tournament leaderboard stored in MongoDB
+type Leaderboard struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty"`
+	Round     string             `bson:"round,omitempty"`
+	UpdatedAt time.Time          `bson:"updated_at"`
+	Entries   []LeaderboardEntry `bson:"entries"`
 }

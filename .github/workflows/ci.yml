@@ -74,7 +74,7 @@ jobs:
 
       # 12. Run tests with coverage
       - name: Run tests
-        run: go test ./... -coverprofile=coverage.out -v
+        run: go test ./... -tags=test -coverprofile=coverage.out -v
 
       # 13. Enforce minimum coverage (80%)
       - name: Check coverage

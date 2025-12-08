@@ -9,9 +9,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
+	"log"
 	"pickems-bot/api/external"
-	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -26,37 +25,16 @@ func (s *Store) FetchMatchSchedule() ([]external.ScheduledMatch, error) {
 
 	// Get UpcomingMatchDoc result from db
 	var res UpcomingMatchDoc
-	var shouldRefresh bool
 	err := s.Collections.MatchSchedule.FindOne(context.TODO(), bson.D{{Key: "round", Value: s.Round}}, opts).Decode(&res)
 	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			shouldRefresh = true
-		}
 		return nil, fmt.Errorf("error fetching results from db: %w", err)
-	} else if res.TTL < time.Now().Unix() {
-		shouldRefresh = true
 	}
-
-	// Run if we need to refresh the data stored in the db (either there is no data stored or the TTL has experied)
-	if shouldRefresh {
-		// get new data from liquipediadb api
-		externalResults, err := external.FetchScheduledMatches(os.Getenv("LIQUIDPEDIADB_API_KEY"), s.Page, s.OptionalParams)
-		if err != nil {
-			return nil, err
-		}
-		err = s.StoreMatchSchedule(externalResults)
-		if err != nil {
-			return nil, err
-		}
-		return externalResults, nil
-	}
-
 	return res.ScheduledMatches, nil
 }
 
 // StoreMatchSchedule stores upcoming matches
 // Preconditions: Receives pointer for Store which contains DB information such as database name, collection and round
-// and slice slice of []external.ScheduledMatch containing the data to be stored
+// and slice of []external.ScheduledMatch containing the data to be stored
 // Postconditions: Updates the data stored in the db, returns error message if the operation was unsuccessful
 func (s *Store) StoreMatchSchedule(scheduledMatches []external.ScheduledMatch) error {
 	if len(scheduledMatches) == 0 {
@@ -66,7 +44,7 @@ func (s *Store) StoreMatchSchedule(scheduledMatches []external.ScheduledMatch) e
 	// Attempt to find an existing document
 	var raw bson.M
 	err := s.Collections.MatchSchedule.FindOne(context.TODO(), bson.M{"round": s.Round}).Decode(&raw)
-	notFound := err == mongo.ErrNoDocuments
+	notFound := errors.Is(err, mongo.ErrNoDocuments)
 
 	if err != nil && !notFound {
 		return fmt.Errorf("lookup for existing record failed: %w", err)
@@ -81,7 +59,7 @@ func (s *Store) StoreMatchSchedule(scheduledMatches []external.ScheduledMatch) e
 	}
 	update := bson.M{"$set": upcomingMatchDoc}
 
-	fmt.Println("updating match schedule in db...")
+	log.Println("updating match schedule in db")
 
 	// Perform insert or update
 	if notFound {

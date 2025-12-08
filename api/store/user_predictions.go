@@ -22,7 +22,7 @@ func (s *Store) StoreUserPrediction(userID string, userPrediction Prediction) er
 	// Attempt to find an existing document
 	var result Prediction
 	err := s.Collections.Predictions.FindOne(context.TODO(), bson.M{"userid": userID, "round": userPrediction.Round}).Decode(&result)
-	notFound := err == mongo.ErrNoDocuments
+	notFound := errors.Is(err, mongo.ErrNoDocuments)
 
 	if err != nil && !notFound {
 		return fmt.Errorf("lookup for existing prediction failed: %w", err)

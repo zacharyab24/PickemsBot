@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 // region NewAPI tests
@@ -256,9 +258,9 @@ func TestCheckPrediction_NoScheduledMatches(t *testing.T) {
 
 // endregion
 
-// region GetLeaderboard tests
+// region GenerateLeaderboard tests
 
-func TestGetLeaderboard_Success(t *testing.T) {
+func TestGenerateLeaderboard_Success(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.SetScheduledMatches([]external.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
 
@@ -295,6 +297,53 @@ func TestGetLeaderboard_Success(t *testing.T) {
 
 	api := &API{Store: mockStore}
 
+	err := api.GenerateLeaderboard()
+	if err != nil {
+		t.Errorf("Expected no error, got: %s", err.Error())
+	}
+
+	// Verify leaderboard was stored
+	if len(mockStore.Leaderboard) != 2 {
+		t.Errorf("Expected 2 leaderboard entries, got %d", len(mockStore.Leaderboard))
+	}
+}
+
+func TestGenerateLeaderboard_NoPredictions(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]external.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	mockStore.SetSwissResults(map[string]string{})
+
+	api := &API{Store: mockStore}
+
+	err := api.GenerateLeaderboard()
+	// When there are no predictions, GetAllUserPredictions returns mongo.ErrNoDocuments
+	if err == nil {
+		t.Error("Expected error when no predictions exist, got nil")
+	}
+}
+
+func TestGenerateLeaderboard_NoScheduledMatches(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+
+	api := &API{Store: mockStore}
+
+	err := api.GenerateLeaderboard()
+	if err == nil {
+		t.Error("Expected error when no scheduled matches, got nil")
+	}
+}
+
+func TestGetLeaderboard_Success(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+
+	// Pre-populate the leaderboard
+	mockStore.Leaderboard = []store.LeaderboardEntry{
+		{UserID: "user1", Username: "player1", Score: 5, ScoreResult: store.ScoreResult{Successes: 5, Pending: 0, Failed: 0}},
+		{UserID: "user2", Username: "player2", Score: 3, ScoreResult: store.ScoreResult{Successes: 3, Pending: 0, Failed: 0}},
+	}
+
+	api := &API{Store: mockStore}
+
 	result, err := api.GetLeaderboard()
 	if err != nil {
 		t.Errorf("Expected no error, got: %s", err.Error())
@@ -305,31 +354,15 @@ func TestGetLeaderboard_Success(t *testing.T) {
 	}
 }
 
-func TestGetLeaderboard_NoPredictions(t *testing.T) {
+func TestGetLeaderboard_NoLeaderboard(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.SetScheduledMatches([]external.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-	mockStore.SetSwissResults(map[string]string{})
-
-	api := &API{Store: mockStore}
-
-	result, err := api.GetLeaderboard()
-	if err != nil {
-		t.Errorf("Expected no error, got: %s", err.Error())
-	}
-
-	if !strings.Contains(result, "no user predictions") {
-		t.Errorf("Expected message about no predictions, got: %s", result)
-	}
-}
-
-func TestGetLeaderboard_NoScheduledMatches(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.FetchLeaderboardFromDBError = fmt.Errorf("no leaderboard found")
 
 	api := &API{Store: mockStore}
 
 	_, err := api.GetLeaderboard()
 	if err == nil {
-		t.Error("Expected error when no scheduled matches, got nil")
+		t.Error("Expected error when no leaderboard exists, got nil")
 	}
 }
 
@@ -583,6 +616,128 @@ func TestGetTwitchURL_UnknownStream(t *testing.T) {
 	result := getTwitchURL("unknown_stream")
 	if result != "unknown" {
 		t.Errorf("Expected 'unknown', got %s", result)
+	}
+}
+
+// endregion
+
+// region UpdateMatchResults tests
+
+func TestUpdateMatchResults_Success(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]external.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+
+	api := &API{
+		Store:       mockStore,
+		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10),
+	}
+
+	err := api.UpdateMatchResults()
+	if err != nil {
+		t.Errorf("Expected no error, got: %s", err.Error())
+	}
+}
+
+func TestUpdateMatchResults_RateLimiterNil(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+
+	api := &API{
+		Store:       mockStore,
+		rateLimiter: nil,
+	}
+
+	err := api.UpdateMatchResults()
+	if err == nil {
+		t.Error("Expected error when rate limiter is nil, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "rate limiter not initialised") {
+		t.Errorf("Expected rate limiter error, got: %s", err.Error())
+	}
+}
+
+func TestUpdateMatchResults_RateLimitExceeded(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+
+	// Create a rate limiter that's already exhausted
+	limiter := rate.NewLimiter(rate.Every(time.Hour), 1)
+	limiter.Allow() // exhaust the single token
+
+	api := &API{
+		Store:       mockStore,
+		rateLimiter: limiter,
+	}
+
+	err := api.UpdateMatchResults()
+	if err == nil {
+		t.Error("Expected error when rate limit exceeded, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "rate limiter exceeded") {
+		t.Errorf("Expected rate limit error, got: %s", err.Error())
+	}
+}
+
+func TestUpdateMatchResults_StoreError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.FetchAndUpdateMatchResultsError = fmt.Errorf("store error")
+
+	api := &API{
+		Store:       mockStore,
+		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10),
+	}
+
+	err := api.UpdateMatchResults()
+	if err == nil {
+		t.Error("Expected error from store, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "store error") {
+		t.Errorf("Expected store error, got: %s", err.Error())
+	}
+}
+
+// endregion
+
+// region PopulateMatches rate limiter tests
+
+func TestPopulateMatches_RateLimiterNil(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+
+	api := &API{
+		Store:       mockStore,
+		rateLimiter: nil,
+	}
+
+	err := api.PopulateMatches(true)
+	if err == nil {
+		t.Error("Expected error when rate limiter is nil, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "rate limiter not initialised") {
+		t.Errorf("Expected rate limiter error, got: %s", err.Error())
+	}
+}
+
+func TestPopulateMatches_RateLimitExceeded(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+
+	// Create a rate limiter that's already exhausted
+	limiter := rate.NewLimiter(rate.Every(time.Hour), 1)
+	limiter.Allow() // exhaust the single token
+
+	api := &API{
+		Store:       mockStore,
+		rateLimiter: limiter,
+	}
+
+	err := api.PopulateMatches(true)
+	if err == nil {
+		t.Error("Expected error when rate limit exceeded, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "rate limiter limit reached") {
+		t.Errorf("Expected rate limit error, got: %s", err.Error())
 	}
 }
 
