@@ -7,6 +7,7 @@
 package bot
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -155,10 +156,10 @@ func (b *Bot) checkPredictions(discord *discordgo.Session, message *discordgo.Me
 	user := shared.User{UserID: message.Author.ID, Username: message.Author.Username}
 	res, err := b.APIPtr.CheckPrediction(user)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			res = fmt.Sprintf("%s does not have any Pickems stored. Use $set to set your predictions\n", user.Username)
 		} else {
-			fmt.Println(err)
+			log.Println(err)
 			res = fmt.Sprintf("An error occured checking %s's Pickems", user.Username)
 		}
 	}
