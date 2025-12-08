@@ -297,4 +297,165 @@ func TestGetScheduledMatchesFromJSON_InvalidData(t *testing.T) {
 
 //endregion
 
-// TODO: Add comprehensive ParseMatchData tests with proper map[string]interface{} input
+// region ParseScheduledMatches tests
+
+func TestParseScheduledMatches_Success(t *testing.T) {
+	matchData := map[string]interface{}{
+		"finished": float64(0),
+		"date":     "2025-01-15 14:00:00",
+		"stream": map[string]interface{}{
+			"twitch": "esl_csgo",
+		},
+		"bestof": float64(3),
+		"match2opponents": []interface{}{
+			map[string]interface{}{"name": "Team A"},
+			map[string]interface{}{"name": "Team B"},
+		},
+	}
+
+	result, err := ParseScheduledMatches(matchData)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if result.Team1 != "Team A" {
+		t.Errorf("Expected Team A, got %s", result.Team1)
+	}
+	if result.Team2 != "Team B" {
+		t.Errorf("Expected Team B, got %s", result.Team2)
+	}
+	if result.BestOf != "3" {
+		t.Errorf("Expected 3, got %s", result.BestOf)
+	}
+	if result.Finished {
+		t.Error("Expected Finished to be false")
+	}
+}
+
+func TestParseScheduledMatches_FinishedMatch(t *testing.T) {
+	matchData := map[string]interface{}{
+		"finished": float64(1),
+		"date":     "2025-01-15 14:00:00",
+		"stream": map[string]interface{}{
+			"twitch": "esl_csgo",
+		},
+		"bestof": float64(3),
+		"match2opponents": []interface{}{
+			map[string]interface{}{"name": "Team A"},
+			map[string]interface{}{"name": "Team B"},
+		},
+	}
+
+	result, err := ParseScheduledMatches(matchData)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if !result.Finished {
+		t.Error("Expected Finished to be true")
+	}
+}
+
+func TestParseScheduledMatches_KickStream(t *testing.T) {
+	matchData := map[string]interface{}{
+		"finished": float64(0),
+		"date":     "2025-01-15 14:00:00",
+		"stream": map[string]interface{}{
+			"kick": "blast_tv",
+		},
+		"bestof": float64(3),
+		"match2opponents": []interface{}{
+			map[string]interface{}{"name": "Team A"},
+			map[string]interface{}{"name": "Team B"},
+		},
+	}
+
+	result, err := ParseScheduledMatches(matchData)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if result.StreamURL != "blast_tv" {
+		t.Errorf("Expected blast_tv, got %s", result.StreamURL)
+	}
+}
+
+func TestParseScheduledMatches_TBDTeam(t *testing.T) {
+	matchData := map[string]interface{}{
+		"finished": float64(0),
+		"date":     "2025-01-15 14:00:00",
+		"stream": map[string]interface{}{
+			"twitch": "esl_csgo",
+		},
+		"bestof": float64(3),
+		"match2opponents": []interface{}{
+			map[string]interface{}{"name": ""},
+			map[string]interface{}{"name": "Team B"},
+		},
+	}
+
+	result, err := ParseScheduledMatches(matchData)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if result.Team1 != "TBD" {
+		t.Errorf("Expected TBD, got %s", result.Team1)
+	}
+}
+
+func TestParseScheduledMatches_InvalidType(t *testing.T) {
+	_, err := ParseScheduledMatches("not a map")
+
+	if err == nil {
+		t.Fatal("Expected error for invalid type")
+	}
+}
+
+func TestParseScheduledMatches_MissingFinished(t *testing.T) {
+	matchData := map[string]interface{}{
+		"date": "2025-01-15 14:00:00",
+	}
+
+	_, err := ParseScheduledMatches(matchData)
+
+	if err == nil {
+		t.Fatal("Expected error for missing finished field")
+	}
+}
+
+func TestParseScheduledMatches_InvalidFinishedValue(t *testing.T) {
+	matchData := map[string]interface{}{
+		"finished": float64(2), // Invalid - should be 0 or 1
+		"date":     "2025-01-15 14:00:00",
+	}
+
+	_, err := ParseScheduledMatches(matchData)
+
+	if err == nil {
+		t.Fatal("Expected error for invalid finished value")
+	}
+}
+
+func TestParseScheduledMatches_NoStreamKeys(t *testing.T) {
+	matchData := map[string]interface{}{
+		"finished": float64(0),
+		"date":     "2025-01-15 14:00:00",
+		"stream": map[string]interface{}{
+			"youtube": "some_channel", // Neither twitch nor kick
+		},
+		"bestof": float64(3),
+		"match2opponents": []interface{}{
+			map[string]interface{}{"name": "Team A"},
+			map[string]interface{}{"name": "Team B"},
+		},
+	}
+
+	_, err := ParseScheduledMatches(matchData)
+
+	if err == nil {
+		t.Fatal("Expected error for missing twitch/kick keys")
+	}
+}
+
+// endregion

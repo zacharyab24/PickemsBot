@@ -158,7 +158,7 @@ print_stage 7 "Run tests with coverage"
 # Coverage file (use simple name in current directory to avoid path issues)
 COVERAGE_FILE="coverage.out"
 
-if go test ./... -coverprofile="$COVERAGE_FILE" -v 2>&1; then
+if CI=true go test ./... -tags=test -coverprofile="$COVERAGE_FILE" -v 2>&1; then
     print_success "All tests passed"
 else
     print_failure "Tests FAILED"

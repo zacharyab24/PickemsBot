@@ -13,6 +13,8 @@ import (
 	"os"
 	"testing"
 
+	apiPkg "pickems-bot/api/api"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -125,16 +127,64 @@ func TestLiquipediaWebhookHandler_IrrelevantPage(t *testing.T) {
 // Integration tests should be used to verify the full webhook flow.
 
 // TestLiquipediaWebhookHandler_RelevantEvent_ReturnsOK tests that relevant events return 200 OK
-// Note: This test is skipped because it triggers an async goroutine that panics with nil API
-// In production, the API will always be initialized.
+// This test uses a mock API to test the full flow
 func TestLiquipediaWebhookHandler_RelevantEvent_ReturnsOK(t *testing.T) {
-	t.Skip("Skipping test that triggers async goroutine with nil API - requires mock API for full testing")
+	// Set the PAGE environment variable
+	originalPage := os.Getenv("PAGE")
+	os.Setenv("PAGE", "BLAST/Premier/2025/World_Final")
+	defer os.Setenv("PAGE", originalPage)
+
+	// Create server with mock API from api package
+	mockStore := apiPkg.NewMockStore("swiss", "test_round")
+	mockStore.SetSwissResults(map[string]string{"Team A": "3-0"})
+	mockAPI := &apiPkg.API{Store: mockStore}
+
+	server := &Server{api: mockAPI}
+
+	event := LiquipediaEvent{
+		Wiki:  "counterstrike",
+		Page:  "BLAST/Premier/2025/World_Final",
+		Event: "update",
+	}
+	body, _ := json.Marshal(event)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/liquipedia", bytes.NewBuffer(body))
+	w := httptest.NewRecorder()
+
+	server.LiquipediaWebhookHandler(w, req)
+
+	// Should return OK and trigger async processing
+	assert.Equal(t, http.StatusOK, w.Code)
 }
 
 // TestLiquipediaWebhookHandler_SubPageMatch_ReturnsOK tests sub-page matching
-// Note: This test is skipped because it triggers an async goroutine that panics with nil API
 func TestLiquipediaWebhookHandler_SubPageMatch_ReturnsOK(t *testing.T) {
-	t.Skip("Skipping test that triggers async goroutine with nil API - requires mock API for full testing")
+	// Set the PAGE environment variable
+	originalPage := os.Getenv("PAGE")
+	os.Setenv("PAGE", "BLAST/Premier/2025/World_Final")
+	defer os.Setenv("PAGE", originalPage)
+
+	// Create server with mock API
+	mockStore := apiPkg.NewMockStore("swiss", "test_round")
+	mockStore.SetSwissResults(map[string]string{"Team A": "3-0"})
+	mockAPI := &apiPkg.API{Store: mockStore}
+
+	server := &Server{api: mockAPI}
+
+	event := LiquipediaEvent{
+		Wiki:  "counterstrike",
+		Page:  "BLAST/Premier/2025/World_Final/Opening_Stage", // Sub-page
+		Event: "update",
+	}
+	body, _ := json.Marshal(event)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/liquipedia", bytes.NewBuffer(body))
+	w := httptest.NewRecorder()
+
+	server.LiquipediaWebhookHandler(w, req)
+
+	// Should return OK and trigger async processing
+	assert.Equal(t, http.StatusOK, w.Code)
 }
 
 // endregion
