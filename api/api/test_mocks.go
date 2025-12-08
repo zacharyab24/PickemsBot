@@ -24,14 +24,20 @@ type MockStore struct {
 	Format           string
 
 	// Error injection for testing error paths
-	EnsureScheduledMatchesError error
-	GetValidTeamsError          error
-	StoreUserPredictionError    error
-	GetUserPredictionError      error
-	GetMatchResultsError        error
-	GetAllUserPredictionsError  error
-	FetchMatchScheduleError     error
-	StoreMatchScheduleError     error
+	EnsureScheduledMatchesError     error
+	GetValidTeamsError              error
+	StoreUserPredictionError        error
+	GetUserPredictionError          error
+	GetMatchResultsError            error
+	GetAllUserPredictionsError      error
+	FetchMatchScheduleError         error
+	StoreMatchScheduleError         error
+	FetchAndUpdateMatchResultsError error
+	StoreLeaderboardError           error
+	FetchLeaderboardFromDBError     error
+
+	// Leaderboard storage
+	Leaderboard []store.LeaderboardEntry
 
 	// Database and Round info
 	DatabaseName string
@@ -208,4 +214,29 @@ func (mc *mockClient) Disconnect(ctx context.Context) error {
 // GetClient returns the mock MongoDB client
 func (m *MockStore) GetClient() interface{ Disconnect(context.Context) error } {
 	return &mockClient{}
+}
+
+// FetchAndUpdateMatchResults mock implementation
+func (m *MockStore) FetchAndUpdateMatchResults() error {
+	if m.FetchAndUpdateMatchResultsError != nil {
+		return m.FetchAndUpdateMatchResultsError
+	}
+	return nil
+}
+
+// StoreLeaderboard mock implementation
+func (m *MockStore) StoreLeaderboard(leaderboard store.Leaderboard) error {
+	if m.StoreLeaderboardError != nil {
+		return m.StoreLeaderboardError
+	}
+	m.Leaderboard = leaderboard.Entries
+	return nil
+}
+
+// FetchLeaderboardFromDB mock implementation
+func (m *MockStore) FetchLeaderboardFromDB() ([]store.LeaderboardEntry, error) {
+	if m.FetchLeaderboardFromDBError != nil {
+		return nil, m.FetchLeaderboardFromDBError
+	}
+	return m.Leaderboard, nil
 }

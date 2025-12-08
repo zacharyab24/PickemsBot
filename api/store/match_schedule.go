@@ -44,7 +44,7 @@ func (s *Store) StoreMatchSchedule(scheduledMatches []external.ScheduledMatch) e
 	// Attempt to find an existing document
 	var raw bson.M
 	err := s.Collections.MatchSchedule.FindOne(context.TODO(), bson.M{"round": s.Round}).Decode(&raw)
-	notFound := err == mongo.ErrNoDocuments
+	notFound := errors.Is(err, mongo.ErrNoDocuments)
 
 	if err != nil && !notFound {
 		return fmt.Errorf("lookup for existing record failed: %w", err)

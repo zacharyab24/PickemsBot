@@ -1,4 +1,4 @@
-﻿/* leaderboard.go
+/* leaderboard.go
  * Contains the methods for interacting with the leaderboard collection
  * Authors: Zachary Bower
  */

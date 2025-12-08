@@ -161,6 +161,7 @@ type ScoreResult struct {
 	Failed    int `bson:"failed"`
 }
 
+// LeaderboardEntry represents a single entry in the leaderboard for a user
 type LeaderboardEntry struct {
 	UserID      string `bson:"userid,omitempty"`
 	Username    string `bson:"username,omitempty"`
@@ -168,6 +169,7 @@ type LeaderboardEntry struct {
 	ScoreResult `bson:",inline"`
 }
 
+// Leaderboard represents the tournament leaderboard stored in MongoDB
 type Leaderboard struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty"`
 	Round     string             `bson:"round,omitempty"`

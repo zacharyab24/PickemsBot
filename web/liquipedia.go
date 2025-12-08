@@ -1,4 +1,4 @@
-﻿package web
+package web
 
 import (
 	"encoding/json"
@@ -8,6 +8,7 @@ import (
 	"strings"
 )
 
+// LiquipediaEvent represents the webhook event payload from Liquipedia
 type LiquipediaEvent struct {
 	Wiki  string `json:"wiki"`
 	Page  string `json:"page"`
