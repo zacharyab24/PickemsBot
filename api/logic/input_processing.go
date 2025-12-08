@@ -206,7 +206,7 @@ func calculateEliminationScore(prediction store.Prediction, results map[string]s
 		if predictedProgress.Round == "Grand Final" && predictedProgress.Status == "advanced" {
 			response.WriteString(fmt.Sprintf("- %s to win the %s", team, predictedProgress.Round))
 		} else {
-			response.WriteString(fmt.Sprintf("- %s to make it to the %s", team, predictedProgress.Round))
+			response.WriteString(fmt.Sprintf("- %s to lose in the %s", team, predictedProgress.Round))
 		}
 
 		// Check if the  prediction was correct
