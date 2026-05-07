@@ -76,6 +76,18 @@ echo -e "${BLUE}ZPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
 echo ""
 
 # ============================================================================
+# Stage 0: Toolchain (CI uses go-version-file: go.mod; locally we rely on
+# Go's auto-toolchain to fetch the version pinned in go.mod when needed)
+# ============================================================================
+print_stage 0 "Toolchain"
+
+required=$(grep -E '^toolchain ' go.mod | awk '{print $2}')
+required=${required:-$(grep -E '^go ' go.mod | awk '{print $2}')}
+echo "go.mod requires: ${required}"
+echo "Installed:       $(go version)"
+echo "Resolved:        $(go env GOVERSION) (auto-toolchain on: $(go env GOTOOLCHAIN))"
+
+# ============================================================================
 # Stage 1: Download dependencies
 # ============================================================================
 run_stage 1 "Download Go modules" "go mod download"
