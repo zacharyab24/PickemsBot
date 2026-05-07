@@ -15,12 +15,49 @@ The following are discord messages that the bot will respond to. These can be in
 `$upcoming`: shows todays live and upcoming matches
 
 ## Usage
-TODO: Update commands for V3.
 
-Run the bot with `go run main.go -format="<format>" -url="<url>` \
-Alternatively use the docker image, this will provide a persistant bot so if you close the terminal the bot doesn't go offline. \
-Build the docker image with `docker build -t pickems-bot .` \
-Run the container with `docker run pickems-bot`  
+### Configuration
+
+The bot reads from two files:
+
+- `.env` — secrets only (Discord tokens, Mongo URI, Liquipedia API key). Not tracked in git.
+- `config.toml` — tournament settings (page, round, etc.). Tracked in git so the active tournament is committed alongside the code.
+
+Required `.env` keys:
+
+```
+DISCORD_PROD_TOKEN=...
+DISCORD_BETA_TOKEN=...
+MONGO_PROD_URI=...
+LIQUIDPEDIADB_API_KEY=...
+```
+
+### Generating config.toml for a new tournament
+
+Use the configure script — point it at any Liquipedia tournament page and it'll fetch the wikitext, find the available stages, and write `config.toml`:
+
+```bash
+go run ./scripts/configure -url https://liquipedia.net/counterstrike/Intel_Extreme_Masters/2026/Cologne
+```
+
+If the tournament has multiple stages, you'll get an interactive picker. Skip the prompt with `-stage`:
+
+```bash
+go run ./scripts/configure -url https://liquipedia.net/counterstrike/PGL/2026/Bucharest -stage Europe
+```
+
+### Running
+
+```bash
+go run .
+```
+
+Or via Docker (persistent — survives shell exit):
+
+```bash
+docker build -t pickems-bot .
+docker run --env-file .env -v "$PWD/config.toml:/app/config.toml:ro" pickems-bot
+```
 
 ## Version History
 ### v1.0

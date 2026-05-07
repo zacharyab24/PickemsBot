@@ -2,9 +2,9 @@
 
 /* main.go
  * The "main" method for running the bot. For details about the bot see `readme.md`
- * Usage: go run main.go -format="<format>" -url="<url>"
+ * Tournament settings live in config.toml (see `go run ./scripts/configure`).
+ * Secrets (Discord tokens, Mongo URI, Liquipedia API key) live in .env.
  * Authors: Zachary Bower
- * Last modified: 29/05/2025
  */
 
 package main
@@ -14,49 +14,26 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"pickems-bot/web"
 
 	api "pickems-bot/api/api"
 	bot "pickems-bot/bot"
+	"pickems-bot/config"
+	"pickems-bot/web"
 
 	"github.com/joho/godotenv"
 )
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
+	if err := godotenv.Load(); err != nil {
 		log.Fatal("Error loading .env file")
 	}
 
-	// Get tournament name, round, page, params and test from .env file
-	tournamentName := os.Getenv("TOURNAMENT_NAME")
-	round := os.Getenv("ROUND")
-	page := os.Getenv("PAGE")
-	params := os.Getenv("PARAMS")
-	test := os.Getenv("TEST")
-	upcomingOnly := os.Getenv("UPCOMING_ONLY")
-
-	// Default values if environmental variables not found
-	if tournamentName == "" {
-		tournamentName = "Blast_Austin_Major_2025"
-	}
-	if round == "" {
-		round = "Stage_1"
-	}
-	if page == "" {
-		page = "BLAST/Major/2025/Austin"
-	}
-	if test == "" {
-		test = "false"
-	}
-	if upcomingOnly == "" {
-		upcomingOnly = "false"
+	cfg, err := config.Load("config.toml")
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
 	}
 
-	// Init API
-	fullPage := fmt.Sprintf("%s/%s", page, round)
-	apiInstance, err := api.NewAPI(tournamentName, os.Getenv("MONGO_PROD_URI"), fullPage, params, round)
-
+	apiInstance, err := api.NewAPI(cfg.TournamentName, os.Getenv("MONGO_PROD_URI"), cfg.Page, cfg.Params, cfg.Round)
 	if err != nil {
 		log.Fatalf("failed to initialize API: %v", err)
 	}
@@ -66,40 +43,31 @@ func main() {
 		}
 	}()
 
-	isUpcomingOnly, err := convertStrToBool(upcomingOnly)
-	if err != nil {
-		log.Fatalf("failed to convert upcoming only: %v. Value should be true or false", err)
-	}
-	err = apiInstance.PopulateMatches(isUpcomingOnly)
-	if err != nil {
+	if err := apiInstance.PopulateMatches(cfg.UpcomingOnly); err != nil {
 		log.Fatal(err)
 	}
-	err = apiInstance.GenerateLeaderboard()
-	if err != nil {
+	if err := apiInstance.GenerateLeaderboard(); err != nil {
 		log.Fatal(err)
 	}
 
-	//Init bot
 	var discordToken string
-	if test == "false" { //Load production bot token
-		discordToken = os.Getenv("DISCORD_PROD_TOKEN")
-	} else if test == "true" {
+	if cfg.Test {
 		discordToken = os.Getenv("DISCORD_BETA_TOKEN")
 	} else {
-		fmt.Println("Invalid \"test\" value. Should be true or false")
+		discordToken = os.Getenv("DISCORD_PROD_TOKEN")
 	}
 	botInstance, err := bot.NewBot(discordToken, apiInstance)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	// Start web server for webhooks
 	go func() {
 		if err := web.Start(web.Config{Addr: ":8080", API: apiInstance}); err != nil {
 			log.Fatalf("failed to start web server: %v", err)
 		}
 	}()
 
-	// Run bot
-	err = botInstance.Run()
-	if err != nil {
+	if err := botInstance.Run(); err != nil {
 		log.Fatal(fmt.Errorf("an unrecoverable error occured whilst running the bot: %w", err))
 	}
 }

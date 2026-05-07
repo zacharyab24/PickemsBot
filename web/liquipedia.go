@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 )
 
@@ -40,14 +39,11 @@ func (s *Server) LiquipediaWebhookHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	expectedWiki := "counterstrike"
-	basePage := os.Getenv("PAGE")
-
-	if event.Wiki != expectedWiki {
+	if event.Wiki != "counterstrike" {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	if !isRelevantTournamentPage(event.Page, basePage) {
+	if !isRelevantTournamentPage(event.Page, s.api.Store.GetPage()) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
