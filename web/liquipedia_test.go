@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	apiPkg "pickems-bot/api/api"
@@ -99,16 +98,12 @@ func TestLiquipediaWebhookHandler_WrongWiki(t *testing.T) {
 }
 
 func TestLiquipediaWebhookHandler_IrrelevantPage(t *testing.T) {
-	// Set the PAGE environment variable
-	originalPage := os.Getenv("PAGE")
-	os.Setenv("PAGE", "BLAST/Premier/2025/World_Final")
-	defer os.Setenv("PAGE", originalPage)
-
-	server := &Server{api: nil}
+	mockStore := apiPkg.NewMockStore("swiss", "test_round")
+	server := &Server{api: &apiPkg.API{Store: mockStore}}
 
 	event := LiquipediaEvent{
 		Wiki:  "counterstrike",
-		Page:  "ESL/Pro_League/Season_20", // Different tournament
+		Page:  "ESL/Pro_League/Season_20", // Different tournament from MockStore page
 		Event: "update",
 	}
 	body, _ := json.Marshal(event)
@@ -129,12 +124,7 @@ func TestLiquipediaWebhookHandler_IrrelevantPage(t *testing.T) {
 // TestLiquipediaWebhookHandler_RelevantEvent_ReturnsOK tests that relevant events return 200 OK
 // This test uses a mock API to test the full flow
 func TestLiquipediaWebhookHandler_RelevantEvent_ReturnsOK(t *testing.T) {
-	// Set the PAGE environment variable
-	originalPage := os.Getenv("PAGE")
-	os.Setenv("PAGE", "BLAST/Premier/2025/World_Final")
-	defer os.Setenv("PAGE", originalPage)
-
-	// Create server with mock API from api package
+	// Create server with mock API from api package (mock GetPage returns "Test/Tournament/2025")
 	mockStore := apiPkg.NewMockStore("swiss", "test_round")
 	mockStore.SetSwissResults(map[string]string{"Team A": "3-0"})
 	mockAPI := &apiPkg.API{Store: mockStore}
@@ -143,7 +133,7 @@ func TestLiquipediaWebhookHandler_RelevantEvent_ReturnsOK(t *testing.T) {
 
 	event := LiquipediaEvent{
 		Wiki:  "counterstrike",
-		Page:  "BLAST/Premier/2025/World_Final",
+		Page:  "Test/Tournament/2025",
 		Event: "update",
 	}
 	body, _ := json.Marshal(event)
@@ -159,12 +149,7 @@ func TestLiquipediaWebhookHandler_RelevantEvent_ReturnsOK(t *testing.T) {
 
 // TestLiquipediaWebhookHandler_SubPageMatch_ReturnsOK tests sub-page matching
 func TestLiquipediaWebhookHandler_SubPageMatch_ReturnsOK(t *testing.T) {
-	// Set the PAGE environment variable
-	originalPage := os.Getenv("PAGE")
-	os.Setenv("PAGE", "BLAST/Premier/2025/World_Final")
-	defer os.Setenv("PAGE", originalPage)
-
-	// Create server with mock API
+	// Create server with mock API (mock GetPage returns "Test/Tournament/2025")
 	mockStore := apiPkg.NewMockStore("swiss", "test_round")
 	mockStore.SetSwissResults(map[string]string{"Team A": "3-0"})
 	mockAPI := &apiPkg.API{Store: mockStore}
@@ -173,7 +158,7 @@ func TestLiquipediaWebhookHandler_SubPageMatch_ReturnsOK(t *testing.T) {
 
 	event := LiquipediaEvent{
 		Wiki:  "counterstrike",
-		Page:  "BLAST/Premier/2025/World_Final/Opening_Stage", // Sub-page
+		Page:  "Test/Tournament/2025/Opening_Stage", // Sub-page
 		Event: "update",
 	}
 	body, _ := json.Marshal(event)
