@@ -12,6 +12,7 @@ import (
 	"log"
 	"os"
 	"pickems-bot/api/external"
+	"pickems-bot/api/format"
 	"pickems-bot/api/logic"
 	"pickems-bot/api/shared"
 	"pickems-bot/api/store"
@@ -285,27 +286,21 @@ func (a *API) GetTournamentInfo() ([]string, error) {
 	}
 
 	// Get valid team names
-	validTeams, format, err := a.Store.GetValidTeams()
+	validTeams, formatName, err := a.Store.GetValidTeams()
 	if err != nil {
 		return nil, err
 	}
 
-	// Get number of required teams
-	var requiredPredictions int
-	switch format {
-	case "swiss":
-		requiredPredictions = 10
-	case "single-elimination":
-		T := len(validTeams)
-		requiredPredictions = T / 2
-	default:
-		requiredPredictions = 0
+	f, err := format.Get(format.Kind(formatName))
+	if err != nil {
+		return nil, err
 	}
+	requiredPredictions := f.RequiredPredictions(len(validTeams))
 
 	var values []string
 	values = append(values, fmt.Sprintf("Tournament Name: %s", a.Store.GetDatabase().Name()))
 	values = append(values, fmt.Sprintf("Round: %s", a.Store.GetRound()))
-	values = append(values, fmt.Sprintf("Format: %s", format))
+	values = append(values, fmt.Sprintf("Format: %s", formatName))
 	values = append(values, fmt.Sprintf("Number of required teams: %d", requiredPredictions))
 	return values, nil
 }

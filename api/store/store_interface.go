@@ -7,7 +7,10 @@ package store
 
 import (
 	"context"
+
 	"pickems-bot/api/external"
+	"pickems-bot/api/format"
+	"pickems-bot/api/shared"
 )
 
 // Interface defines the methods that Store implements.
@@ -15,10 +18,10 @@ import (
 type Interface interface {
 	EnsureScheduledMatches() error
 	GetValidTeams() ([]string, string, error)
-	StoreUserPrediction(userID string, prediction Prediction) error
-	GetUserPrediction(userID string) (Prediction, error)
-	GetMatchResults() (external.MatchResult, error)
-	GetAllUserPredictions() ([]Prediction, error)
+	StoreUserPrediction(userID string, prediction shared.Prediction) error
+	GetUserPrediction(userID string) (shared.Prediction, error)
+	GetMatchResults() (format.MatchResult, error)
+	GetAllUserPredictions() ([]shared.Prediction, error)
 	FetchMatchSchedule() ([]external.ScheduledMatch, error)
 	StoreMatchSchedule(matches []external.ScheduledMatch) error
 

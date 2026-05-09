@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+
 	"pickems-bot/api/external"
-	"strings"
-	"time"
+	"pickems-bot/api/format"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -24,7 +24,7 @@ import (
 // It receives name of database as a string (e.g. user_pickems), receives name of collection as a string,
 // (e.g. PW Shanghai Major 2024_results, and round as string (e.g. stage_1).
 // It returns MatchResult interface if the operation was successful, or an error if it was not.
-func (s *Store) FetchMatchResultsFromDb() (ResultRecord, error) {
+func (s *Store) FetchMatchResultsFromDb() (format.MatchResult, error) {
 	s.Collections.MatchResults.Name()
 	opts := options.FindOne()
 
@@ -50,47 +50,28 @@ func (s *Store) FetchMatchResultsFromDb() (ResultRecord, error) {
 		return nil, fmt.Errorf("failed to marshal raw bson: %w", err)
 	}
 
-	// Decode results and map to correct struct for format
-	switch resultType {
-	case "swiss":
-		var swiss SwissResultRecord
-		if err := bson.Unmarshal(bsonBytes, &swiss); err != nil {
-			return nil, fmt.Errorf("failed to decode SwissResultRecord: %w", err)
-		}
-		return swiss, nil
-	case "single-elimination":
-		var elim EliminationResultRecord
-		if err := bson.Unmarshal(bsonBytes, &elim); err != nil {
-			return nil, fmt.Errorf("failed to decode EliminationResultRecord: %w", err)
-		}
-		return elim, nil
-	default:
+	f, err := format.Get(format.Kind(resultType))
+	if err != nil {
 		return nil, fmt.Errorf("unknown match result type: %s", resultType)
 	}
+	return f.DecodeBSON(bsonBytes)
 }
 
-// GetMatchResults gets match results from DB and converts it to a MatchResult struct
-// Preconditions: Receives store pointer
-// Postconditions: Returns MatchResult containing the latest match data, or an error if it occurs.
-func (s *Store) GetMatchResults() (external.MatchResult, error) {
-	// Get results stored in our db
-	dbResults, err := s.FetchMatchResultsFromDb()
-
+// GetMatchResults returns the raw format.MatchResult from the DB. Format-aware
+// conversion (record → MatchResult) is the caller's responsibility — it lives
+// in the api/format package, which can't be imported here without a cycle.
+func (s *Store) GetMatchResults() (format.MatchResult, error) {
+	rec, err := s.FetchMatchResultsFromDb()
 	if err != nil {
 		return nil, fmt.Errorf("error occured getting match results from db: %w", err)
 	}
-
-	matchResult, err := ToMatchResult(dbResults)
-	if err != nil {
-		return nil, err
-	}
-	return matchResult, nil
+	return rec, nil
 }
 
 // Helper function to get match data for a given liquipedia page. Note that the wiki is hard coded to counterstrike
 // Preconditions: Receives string containing liquipedia page (such as BLAST/Major/2025/Austin/Stage_1) and optional params (such as  &section=24 (this is not used in majors))
 // Postconditions: MatchResult interface containing either []MatchNode or map[string]string depending on the execution path, or error if it occurs
-func (s *Store) fetchMatchDataFromExternal() (external.MatchResult, error) {
+func (s *Store) fetchMatchDataFromExternal() (format.MatchResult, error) {
 	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", s.Page, s.OptionalParams)
 
 	// Get wikitext from url
@@ -100,7 +81,7 @@ func (s *Store) fetchMatchDataFromExternal() (external.MatchResult, error) {
 	}
 
 	// Get match2bracketid's from wikitext
-	ids, format, err := external.ExtractMatchListID(wikitext)
+	ids, formatName, err := external.ExtractMatchListID(wikitext)
 	if err != nil {
 		return nil, fmt.Errorf("error extracting match list: %w", err)
 	}
@@ -118,137 +99,50 @@ func (s *Store) fetchMatchDataFromExternal() (external.MatchResult, error) {
 		return nil, fmt.Errorf("error parsing match data: %w", err)
 	}
 
-	// Get return values depending on tournament type
-	switch format {
-	case "swiss":
-		scores, err := external.CalculateSwissScores(matchNodes)
-		if err != nil {
-			return nil, fmt.Errorf("error calculating swiss scores: %w", err)
-		}
-		return external.SwissResult{Scores: scores}, nil
-
-	case "single-elimination":
-		progression, err := external.GetEliminationResults(matchNodes)
-		if err != nil {
-			return nil, fmt.Errorf("error creating match tree: %w", err)
-		}
-		return external.EliminationResult{Progression: progression}, nil
-	case "double-elimination":
-		log.Println("Not implemented yet")
-		return nil, nil
-
-	default:
-		return nil, fmt.Errorf("unknown format type: %s", format)
+	f, err := format.Get(format.Kind(formatName))
+	if err != nil {
+		return nil, fmt.Errorf("unknown format type: %s", formatName)
 	}
+	return f.BuildFromMatchNodes(matchNodes, s.Round)
 }
 
-// StoreMatchResults stores match results in the db.
-// It receives name of database as a string (e.g. user_pickems), receives name of collection as a string, (e.g.)
-// PW Shanghai Major 2024_results, MatchResult interface containing the data to be stored, and round as a string (e.g. stage_1).
-// It updates the data stored in the db, returns error message if the operation was unsuccessful.
-func (s *Store) StoreMatchResults(matchResult external.MatchResult, upcomingMatches []external.ScheduledMatch) error {
-
-	// Attempt to find an existing document
+// StoreMatchResults persists a MatchResult to the DB. The record is BSON-marshalled
+// using its struct tags and tagged with a top-level "type" discriminator so
+// FetchMatchResultsFromDb can decode into the right concrete type later.
+// Format-agnostic: works for any registered format without code changes here.
+func (s *Store) StoreMatchResults(matchResult format.MatchResult) error {
 	var raw bson.M
 	err := s.Collections.MatchResults.FindOne(context.TODO(), bson.M{"round": s.Round}).Decode(&raw)
 	notFound := err == mongo.ErrNoDocuments
-
 	if err != nil && !notFound {
 		return fmt.Errorf("lookup for existing record failed: %w", err)
 	}
 
-	ttl := DetermineTTL(upcomingMatches)
-
-	var update bson.M
-	var newRecord interface{}
-	var filter = bson.M{"round": s.Round}
-
-	switch typed := matchResult.(type) {
-	case external.SwissResult:
-		update = bson.M{
-			"$set": bson.M{
-				"ttl":   ttl,
-				"teams": typed.Scores,
-			},
-		}
-		newRecord = bson.M{
-			"type":  typed.GetType(),
-			"round": s.Round,
-			"ttl":   ttl,
-			"teams": typed.Scores,
-		}
-
-	case external.EliminationResult:
-		update = bson.M{
-			"$set": bson.M{
-				"ttl":   ttl,
-				"teams": typed.Progression,
-			},
-		}
-		newRecord = bson.M{
-			"type":  typed.GetType(),
-			"round": s.Round,
-			"ttl":   ttl,
-			"teams": typed.Progression,
-		}
-
-	default:
-		return fmt.Errorf("unknown match result type: %s", matchResult.GetType())
+	// Marshal the record with its BSON tags, then inject the type discriminator.
+	doc := bson.M{"type": string(matchResult.GetType())}
+	bsonBytes, err := bson.Marshal(matchResult)
+	if err != nil {
+		return fmt.Errorf("failed to marshal match result: %w", err)
+	}
+	var recordMap bson.M
+	if err := bson.Unmarshal(bsonBytes, &recordMap); err != nil {
+		return fmt.Errorf("failed to unmarshal match result into bson.M: %w", err)
+	}
+	for k, v := range recordMap {
+		doc[k] = v
 	}
 
-	// Perform insert or update
+	filter := bson.M{"round": s.Round}
 	if notFound {
-		_, err := s.Collections.MatchResults.InsertOne(context.TODO(), newRecord)
-		if err != nil {
+		if _, err := s.Collections.MatchResults.InsertOne(context.TODO(), doc); err != nil {
 			return fmt.Errorf("failed to insert new match result: %w", err)
 		}
 		return nil
 	}
-
-	_, err = s.Collections.MatchResults.UpdateOne(context.TODO(), filter, update)
-	if err != nil {
+	if _, err := s.Collections.MatchResults.UpdateOne(context.TODO(), filter, bson.M{"$set": doc}); err != nil {
 		return fmt.Errorf("failed to update match result: %w", err)
 	}
 	return nil
-}
-
-// DetermineTTL calculates TTL for result caching. If there are ongoing matches this is shortTTL, else normalTTL. These
-// values are defined in a const within the function.
-// It receives slice of UpcomingMatch which contains information about the match.
-// It returns time.Duration with the value for the TTL.
-func DetermineTTL(matches []external.ScheduledMatch) int64 {
-	now := time.Now().Unix()
-
-	const (
-		shortTTL  = 3 * time.Minute  // When there is a match ongoing TTL is 3 minutes
-		normalTTL = 30 * time.Minute // Else it is 30
-	)
-
-	for _, match := range matches {
-		var estimatedMatchDuration int64
-		switch strings.ToLower(match.BestOf) {
-		case "1": //BO1 time estimate is 90 mins
-			estimatedMatchDuration = 1 * 60 * 90
-		case "3": //BO3 time estimate is 4 hours
-			estimatedMatchDuration = 4 * 60 * 60
-		case "5": // BO5 time estimate is 6 hours
-			estimatedMatchDuration = 6 * 60 * 60
-		default: // If there is different or missing BestOf value default to 3 hours
-			estimatedMatchDuration = 3 * 60 * 60
-		}
-
-		startTime := match.EpochTime
-		finishedTime := startTime + estimatedMatchDuration
-
-		// We are defining an ongoing match to be a match between the start time and estimated finish time
-		// It would be possible to check if the match has finished from the Liquipedia API but that adds an extra request
-		// to the rate limiter
-		if now >= startTime && now <= finishedTime {
-			return time.Now().Add(shortTTL).Unix()
-		}
-	}
-	// No ongoing match
-	return time.Now().Add(normalTTL).Unix()
 }
 
 // FetchAndUpdateMatchResults void function to fetch match results and update what is stored in the db
@@ -262,37 +156,13 @@ func (s *Store) FetchAndUpdateMatchResults() error {
 		return err
 	}
 
-	// Validate liquipedia data
-	switch externalResults.GetType() {
-	case "swiss":
-		swissResult, ok := externalResults.(external.SwissResult)
-		if !ok {
-			return fmt.Errorf("could not assert MatchResult to SwissResult")
-		}
-		if len(swissResult.Scores) == 0 {
-			return fmt.Errorf("no result returned from liquipediadb")
-		}
-	case "single-elimination":
-		elimResult, ok := externalResults.(external.EliminationResult)
-		if !ok {
-			return fmt.Errorf("could not assert MatchResult to EliminationResult")
-		}
-		if len(elimResult.Progression) == 0 {
-			return fmt.Errorf("no result returned from liquipediadb")
-		}
-	default:
-		return fmt.Errorf("unknown format type returned from liquipediadb")
-	}
-
-	// Get upcoming matches from db
-	upcomingMatches, err := s.FetchMatchSchedule()
-	if err != nil {
-		return err
+	// Validate liquipedia data — format-agnostic check via the unified interface
+	if len(externalResults.GetTeamNames()) == 0 {
+		return fmt.Errorf("no result returned from liquipediadb")
 	}
 
 	// Update match results in db
-	err = s.StoreMatchResults(externalResults, upcomingMatches)
-	if err != nil {
+	if err := s.StoreMatchResults(externalResults); err != nil {
 		return err
 	}
 

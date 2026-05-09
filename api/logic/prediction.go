@@ -7,9 +7,9 @@ package logic
 
 import (
 	"fmt"
-	"pickems-bot/api/shared"
-	"pickems-bot/api/store"
 	"slices"
+
+	"pickems-bot/api/shared"
 )
 
 // GeneratePrediction generates a user prediction object to be stored in db.
@@ -18,14 +18,14 @@ import (
 // swiss: teams[0..1]: win, teams[2..7]: advance and teams[8..9]: lose
 // single elim: teams[0]: gf winner, teams[1]: gf loser, teams[2..3]: sf loser, teams[4..7]: qf loser, teams[8-15]: b16 loser, teams[16-31]: b32 loser
 // Postconditions: Returns a Prediction that is ready to be inserted into the db, or returns an error that occurs
-func GeneratePrediction(user shared.User, format string, round string, teams []string, numRequiredTeams int) (store.Prediction, error) {
+func GeneratePrediction(user shared.User, format string, round string, teams []string, numRequiredTeams int) (shared.Prediction, error) {
 	// Check if slice of teams provided by the user has the correct amount of teams
 	if numRequiredTeams != len(teams) {
-		return store.Prediction{}, fmt.Errorf("this tournament requires %d teams but input was %d", numRequiredTeams, len(teams))
+		return shared.Prediction{}, fmt.Errorf("this tournament requires %d teams but input was %d", numRequiredTeams, len(teams))
 	}
 
 	// Set generic attributes for Prediction struct
-	prediction := store.Prediction{
+	prediction := shared.Prediction{
 		UserID:   user.UserID,
 		Username: user.Username,
 		Format:   format,

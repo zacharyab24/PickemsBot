@@ -9,7 +9,6 @@ import (
 
 	"pickems-bot/api/external"
 	"pickems-bot/api/shared"
-	"pickems-bot/api/store"
 )
 
 // Kind is the canonical string identifier for a tournament format.
@@ -26,6 +25,18 @@ const (
 	SingleElim Kind = "single-elimination"
 )
 
+// MatchResult is the unified interface implemented by every per-format result
+// type (SwissResult, EliminationResult, ...). The same value is used for
+// in-memory scoring and on-disk persistence — the BSON tags on the concrete
+// types define the storage layout.
+type MatchResult interface {
+	GetType() Kind
+	GetRound() string
+	// GetTeamNames returns just the team-name keys from the result. Useful for
+	// callers that need the roster without caring about per-format value shape.
+	GetTeamNames() []string
+}
+
 // Format is the strategy interface every tournament format implements.
 // Implementations live in their own file in this package and self-register
 // from init() via register().
@@ -34,17 +45,17 @@ type Format interface {
 
 	// Predictions
 	RequiredPredictions(teamCount int) int
-	GeneratePrediction(user shared.User, round string, teams []string) (store.Prediction, error)
+	GeneratePrediction(user shared.User, round string, teams []string) (shared.Prediction, error)
 
 	// Scoring
-	CalculateScore(p store.Prediction, r external.MatchResult) (store.ScoreResult, string, error)
+	CalculateScore(p shared.Prediction, r MatchResult) (shared.ScoreResult, string, error)
 
-	// Storage round-trip
-	ToRecord(r external.MatchResult, round string) store.ResultRecord
-	FromRecord(rec store.ResultRecord) (external.MatchResult, error)
+	// DB Interaction
+	DecodeBSON(bytes []byte) (MatchResult, error)
+	BuildFromMatchNodes(nodes []external.MatchNode, round string) (MatchResult, error)
 
 	// Parsing
-	ParseFromAPI(json string) (external.MatchResult, error)
+	ParseFromAPI(jsonResponse, round string) (MatchResult, error)
 }
 
 // registry holds every Format known to the package, keyed by Kind.

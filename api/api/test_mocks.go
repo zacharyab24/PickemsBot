@@ -8,7 +8,9 @@ package api
 import (
 	"context"
 	"fmt"
+
 	"pickems-bot/api/external"
+	"pickems-bot/api/format"
 	"pickems-bot/api/shared"
 	"pickems-bot/api/store"
 
@@ -18,8 +20,8 @@ import (
 // MockStore implements the Store interface for testing
 type MockStore struct {
 	// Storage for mock data
-	Predictions      map[string]store.Prediction
-	MatchResults     store.ResultRecord
+	Predictions      map[string]shared.Prediction
+	MatchResults     format.MatchResult
 	ScheduledMatches []external.ScheduledMatch
 	ValidTeams       []string
 	Format           string
@@ -61,9 +63,9 @@ func (m *mockDatabase) Name() string {
 // NewMockStore creates a new MockStore with default values
 func NewMockStore(format string, round string) *MockStore {
 	return &MockStore{
-		Predictions:      make(map[string]store.Prediction),
+		Predictions:      make(map[string]shared.Prediction),
 		ScheduledMatches: []external.ScheduledMatch{},
-		ValidTeams:       []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"},
+		ValidTeams:       []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J", "Team K", "Team L", "Team M", "Team N", "Team O", "Team P"},
 		Format:           format,
 		DatabaseName:     "test_db",
 		RoundName:        round,
@@ -92,7 +94,7 @@ func (m *MockStore) GetValidTeams() ([]string, string, error) {
 }
 
 // StoreUserPrediction mock implementation
-func (m *MockStore) StoreUserPrediction(userID string, prediction store.Prediction) error {
+func (m *MockStore) StoreUserPrediction(userID string, prediction shared.Prediction) error {
 	if m.StoreUserPredictionError != nil {
 		return m.StoreUserPredictionError
 	}
@@ -101,41 +103,35 @@ func (m *MockStore) StoreUserPrediction(userID string, prediction store.Predicti
 }
 
 // GetUserPrediction mock implementation
-func (m *MockStore) GetUserPrediction(userID string) (store.Prediction, error) {
+func (m *MockStore) GetUserPrediction(userID string) (shared.Prediction, error) {
 	if m.GetUserPredictionError != nil {
-		return store.Prediction{}, m.GetUserPredictionError
+		return shared.Prediction{}, m.GetUserPredictionError
 	}
 	pred, ok := m.Predictions[userID]
 	if !ok {
-		return store.Prediction{}, mongo.ErrNoDocuments
+		return shared.Prediction{}, mongo.ErrNoDocuments
 	}
 	return pred, nil
 }
 
 // GetMatchResults mock implementation
-func (m *MockStore) GetMatchResults() (external.MatchResult, error) {
+func (m *MockStore) GetMatchResults() (format.MatchResult, error) {
 	if m.GetMatchResultsError != nil {
 		return nil, m.GetMatchResultsError
 	}
 	if m.MatchResults == nil {
-		return external.SwissResult{Scores: make(map[string]string)}, nil
+		return format.SwissResult{Teams: make(map[string]string)}, nil
 	}
-
-	// Convert ResultRecord to MatchResult
-	result, err := store.ToMatchResult(m.MatchResults)
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
+	return m.MatchResults, nil
 }
 
 // GetAllUserPredictions mock implementation
-func (m *MockStore) GetAllUserPredictions() ([]store.Prediction, error) {
+func (m *MockStore) GetAllUserPredictions() ([]shared.Prediction, error) {
 	if m.GetAllUserPredictionsError != nil {
 		return nil, m.GetAllUserPredictionsError
 	}
 
-	var predictions []store.Prediction
+	var predictions []shared.Prediction
 	for _, pred := range m.Predictions {
 		predictions = append(predictions, pred)
 	}
@@ -168,18 +164,16 @@ func (m *MockStore) StoreMatchSchedule(matches []external.ScheduledMatch) error 
 
 // SetSwissResults sets up mock Swiss tournament results
 func (m *MockStore) SetSwissResults(scores map[string]string) {
-	m.MatchResults = store.SwissResultRecord{
+	m.MatchResults = format.SwissResult{
 		Round: m.RoundName,
-		TTL:   9999999999,
 		Teams: scores,
 	}
 }
 
 // SetEliminationResults sets up mock single-elimination tournament results
 func (m *MockStore) SetEliminationResults(progression map[string]shared.TeamProgress) {
-	m.MatchResults = store.EliminationResultRecord{
+	m.MatchResults = format.EliminationResult{
 		Round: m.RoundName,
-		TTL:   9999999999,
 		Teams: progression,
 	}
 	m.Format = "single-elimination"

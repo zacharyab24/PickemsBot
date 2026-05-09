@@ -7,12 +7,12 @@ package bot
 
 import (
 	"errors"
+	"strings"
+	"testing"
+
 	"pickems-bot/api/api"
 	"pickems-bot/api/external"
 	"pickems-bot/api/shared"
-	"pickems-bot/api/store"
-	"strings"
-	"testing"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/stretchr/testify/assert"
@@ -272,7 +272,7 @@ func TestCheckPredictions_WithPredictions(t *testing.T) {
 	})
 
 	// Store a prediction for the user
-	mockStore.StoreUserPrediction("user123", store.Prediction{
+	mockStore.StoreUserPrediction("user123", shared.Prediction{
 		UserID:   "user123",
 		Username: "TestUser",
 		Format:   "swiss",
