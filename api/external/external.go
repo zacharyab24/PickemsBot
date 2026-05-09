@@ -12,45 +12,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 )
-
-// FetchScheduledMatches Function to get scheduled matches, and return the results
-// Preconditions: Receives string containing api key
-// Returns slice of Scheduled matches or an error if it occurs
-func FetchScheduledMatches(apiKey string, page string, optionalParams string) ([]ScheduledMatch, error) {
-	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", page, optionalParams)
-
-	// Get wikitext
-	wikitext, err := GetWikitext(url)
-	if err != nil {
-		return nil, fmt.Errorf("error getting wikitext: %w", err)
-	}
-	// Get match2bracketid's from wikitext
-	ids, _, err := ExtractMatchListID(wikitext)
-	if err != nil {
-		return nil, fmt.Errorf("error extracting match list: %w", err)
-	}
-	// Get match data from liquipedia db
-	jsonResponse, err := GetLiquipediaMatchData(apiKey, ids)
-	if err != nil {
-		return nil, fmt.Errorf("error fetching match data from liquipedia api: %w", err)
-	}
-
-	// Get scheduled matches (if any) from jsonResponse
-	scheduledMatches, err := GetScheduledMatchesFromJSON(jsonResponse)
-	if err != nil {
-		return nil, err
-	}
-
-	// Sort slices by epoch time
-	sort.Slice(scheduledMatches, func(i, j int) bool {
-		return scheduledMatches[i].EpochTime < scheduledMatches[j].EpochTime
-	})
-
-	return scheduledMatches, nil
-}
 
 // GetWikitext fetches raw wikitext from a given URL. This function does not perform any parsing on the text.
 // It receives string that contains URL for liquipedia page we wish to parse

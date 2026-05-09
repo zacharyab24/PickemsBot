@@ -318,7 +318,7 @@ func (a *API) PopulateMatches(scheduleOnly bool) error {
 	}
 
 	// Populated Scheduled matches
-	scheduledMatches, err := external.FetchScheduledMatches(os.Getenv("LIQUIDPEDIADB_API_KEY"), a.Store.GetPage(), a.Store.GetOptionalParams())
+	scheduledMatches, err := FetchScheduledMatches(os.Getenv("LIQUIDPEDIADB_API_KEY"), a.Store.GetPage(), a.Store.GetOptionalParams())
 	if err != nil {
 		return err
 	}
@@ -337,6 +337,52 @@ func (a *API) PopulateMatches(scheduleOnly bool) error {
 		}
 	}
 	return nil
+}
+
+// FetchScheduledMatches Function to get scheduled matches, and return the results
+// Preconditions: Receives string containing api key
+// Returns slice of Scheduled matches or an error if it occurs
+func FetchScheduledMatches(apiKey string, page string, optionalParams string) ([]external.ScheduledMatch, error) {
+	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", page, optionalParams)
+
+	// Get wikitext
+	wikitext, err := external.GetWikitext(url)
+	if err != nil {
+		return nil, fmt.Errorf("error getting wikitext: %w", err)
+	}
+
+	kind, err := format.DetectKind(wikitext)
+	if err != nil {
+		return nil, err
+	}
+	f, err := format.Get(format.Kind(kind))
+	if err != nil {
+		return nil, fmt.Errorf("unknown match result type: %s", kind)
+	}
+
+	// Get match2bracketid's from wikitext
+	ids, _, err := f.ExtractMatchListIDs(wikitext)
+	if err != nil {
+		return nil, fmt.Errorf("error extracting match list: %w", err)
+	}
+	// Get match data from liquipedia db
+	jsonResponse, err := external.GetLiquipediaMatchData(apiKey, ids)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching match data from liquipedia api: %w", err)
+	}
+
+	// Get scheduled matches (if any) from jsonResponse
+	scheduledMatches, err := external.GetScheduledMatchesFromJSON(jsonResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	// Sort slices by epoch time
+	sort.Slice(scheduledMatches, func(i, j int) bool {
+		return scheduledMatches[i].EpochTime < scheduledMatches[j].EpochTime
+	})
+
+	return scheduledMatches, nil
 }
 
 // getTwitchURL is a helper function to get the twitch url from the liquipedia stream url.

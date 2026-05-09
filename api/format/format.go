@@ -6,6 +6,8 @@ package format
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 
 	"pickems-bot/api/external"
 	"pickems-bot/api/shared"
@@ -23,6 +25,8 @@ const (
 	Swiss Kind = "swiss"
 	// SingleElim is a single-elimination bracket format.
 	SingleElim Kind = "single-elimination"
+	// DoubleElim is not fully supported yet. Only exists for upcoming only mode
+	DoubleElim Kind = "double-elimination"
 )
 
 // MatchResult is the unified interface implemented by every per-format result
@@ -52,10 +56,10 @@ type Format interface {
 
 	// DB Interaction
 	DecodeBSON(bytes []byte) (MatchResult, error)
-	BuildFromMatchNodes(nodes []external.MatchNode, round string) (MatchResult, error)
 
 	// Parsing
-	ParseFromAPI(jsonResponse, round string) (MatchResult, error)
+	BuildFromMatchNodes(nodes []external.MatchNode, round string) (MatchResult, error)
+	ExtractMatchListIDs(wikitext string) ([]string, Kind, error)
 }
 
 // registry holds every Format known to the package, keyed by Kind.
@@ -100,4 +104,67 @@ func Names() []Kind {
 		out = append(out, name)
 	}
 	return out
+}
+
+// DetectKind determines the format (Kind) of a tournament from the wikitext
+func DetectKind(wikitext string) (Kind, error) {
+	// Regex to find ==Format== section in wikitext
+	re := regexp.MustCompile(`(?s)==\s*Format\s*==\s*(.*)`)
+	results := re.FindStringSubmatch(wikitext)
+
+	if len(results) > 1 {
+		formatSection := results[1] // format is listed on the second line of the format section in wikitext
+		switch {
+		case strings.Contains(strings.ToLower(formatSection), "swiss") && strings.Contains(strings.ToLower(formatSection), "single-elimination"):
+			// This case occurs when both styles are on a singular page. This doesnt occur during the major and is just here for testing
+			return Swiss, nil
+		case strings.Contains(strings.ToLower(formatSection), "swiss"):
+			return Swiss, nil
+		case strings.Contains(strings.ToLower(formatSection), "single-elimination"):
+			return SingleElim, nil
+		case strings.Contains(strings.ToLower(formatSection), "double-elimination"):
+			return DoubleElim, nil
+		default:
+			return "", fmt.Errorf("==Format==' section did not match any registered format (Kind)")
+		}
+	}
+	return "", fmt.Errorf("'==Format==' section found in wikitext")
+}
+
+func extractMatchListIds(wikitext string, re *regexp.Regexp) ([]string, Kind, error) {
+	ids := []string{}
+	format, err := DetectKind(wikitext)
+
+	if err != nil {
+		return nil, "", err
+	}
+	// Find regex matches
+	matches := re.FindAllStringSubmatch(wikitext, -1)
+	for _, match := range matches {
+		paramsText := match[1]
+
+		// Parse pipe ("|") seperated key value pairs from template
+		parts := strings.Split(paramsText, "|")
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(part, "id=") {
+				id := strings.TrimSpace(strings.TrimPrefix(part, "id="))
+
+				// Remove trailing html comments (some times occurs in single elim data)
+				reComment := regexp.MustCompile(`<!--.*?-->`)
+				id = reComment.ReplaceAllString(id, "")
+				id = strings.TrimSpace(id)
+
+				if id != "" {
+					ids = append(ids, id)
+				}
+				break // No need to parse more params
+			}
+		}
+	}
+
+	if len(ids) == 0 {
+		return nil, "", fmt.Errorf("no ids found")
+	}
+	return ids, format, nil
 }

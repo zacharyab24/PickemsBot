@@ -2,6 +2,9 @@ package format
 
 import (
 	"fmt"
+	"math"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"pickems-bot/api/external"
@@ -113,13 +116,128 @@ func (singleElimFormat) DecodeBSON(b []byte) (MatchResult, error) {
 // BuildFromMatchNodes assembles an EliminationResult from parsed match nodes.
 // Phase 3 will inline external.GetEliminationResults into this package.
 func (singleElimFormat) BuildFromMatchNodes(nodes []external.MatchNode, round string) (MatchResult, error) {
-	progression, err := external.GetEliminationResults(nodes)
+	progression, err := getEliminationResults(nodes)
 	if err != nil {
 		return nil, fmt.Errorf("single-elimination: error building progression: %w", err)
 	}
 	return EliminationResult{Round: round, Teams: progression}, nil
 }
 
-func (singleElimFormat) ParseFromAPI(jsonResponse, round string) (MatchResult, error) {
-	panic("format: singleElimFormat.ParseFromAPI not migrated yet (Phase 3)")
+// ExtractMatchListID parses wikitext and extracts the `Matchlist` id
+func (singleElimFormat) ExtractMatchListIDs(wikitext string) ([]string, Kind, error) {
+	var re *regexp.Regexp
+	re = regexp.MustCompile(`(?s)\{\{\s*Bracket\s*\|([^}]*)\}\}`) // {{ShowBracket ...}} templates used in single elim
+	return extractMatchListIds(wikitext, re)
+
+}
+
+// getEliminationResults processs a slice of match nodes and return a map of team name : TeamProgress. Called by BuildMatchNodes
+func getEliminationResults(matchNodes []external.MatchNode) (map[string]shared.TeamProgress, error) {
+	if len(matchNodes) == 0 {
+		return nil, fmt.Errorf("at least one match required, recieved 0")
+	}
+
+	// Ordered slice of rounds where [0] is the last match (grand final), and [n] is the first. This is where the limitation of 32 comes from
+	rounds, err := getRoundNames(len(matchNodes))
+	if err != nil {
+		return nil, err
+	}
+
+	results := make(map[string]shared.TeamProgress)
+
+	for _, match := range matchNodes {
+		roundNum, _, err := extractRoundAndMatchIDs(match.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		// Safely resolve stage and rank
+		round := fmt.Sprintf("Round %d", roundNum)
+		rank := -1
+		index := len(rounds) - roundNum
+		if index >= 0 && index < len(rounds) {
+			round = rounds[index]
+			rank = roundNum
+		}
+		// Assign initial progress (pending) for each team
+		for _, team := range []string{match.Team1, match.Team2} {
+			if team != "" {
+				existing, ok := results[team]
+				if !ok || rank > getRoundIndex(existing.Round, rounds) {
+					results[team] = shared.TeamProgress{
+						Round:  round,
+						Status: "pending",
+					}
+				}
+			}
+		}
+
+		// If there's a winner, update winner/loser status
+		if match.Winner != "TBD" && match.Winner != "" {
+			results[match.Winner] = shared.TeamProgress{
+				Round:  round,
+				Status: "advanced",
+			}
+
+			// Determine loser
+			var loser string
+			if match.Team1 == match.Winner {
+				loser = match.Team2
+			} else {
+				loser = match.Team1
+			}
+			if loser != "" {
+				results[loser] = shared.TeamProgress{
+					Round:  round,
+					Status: "eliminated",
+				}
+			}
+		}
+	}
+	return results, nil
+}
+
+// getRoundIndex is a helper function to get the index of a round from its name. Used in getEliminationResults
+func getRoundIndex(round string, rounds []string) int {
+	for i, name := range rounds {
+		if name == round {
+			return len(rounds) - i
+		}
+	}
+	return -1 // Unknown stage
+}
+
+// getRoundNames is a helper function to get the names of rounds for a single elim tournament, this is a hardcoded list with a limit of 32 matches
+func getRoundNames(numMatches int) ([]string, error) {
+	// Find the number of rounds, this way we can make sure the name mapping is correct
+	// numRounds = log_2 (numMatches + 1) since there are always n-1 matches for a single elim tournament with n teams
+	numRounds := int(math.Ceil(math.Log2(float64(numMatches + 1))))
+
+	// Hardcoded slice of round names
+	roundNames := []string{
+		"Grand Final",
+		"Semi Final",
+		"Quarter Final",
+		"Best of 16",
+		"Best of 32",
+	}
+
+	if numRounds > len(roundNames) {
+		return nil, fmt.Errorf("unsupported depth: only up to %d rounds supported", len(roundNames))
+	}
+
+	return roundNames[:numRounds], nil
+}
+
+// extractRoundAndMatchIDs is a helper function to get the round and match numbers from a MatchNode Id
+// Id is of the form <match2bracketid>_Rxx-Myyy (e.g. RSTxQ88PoQ_R03-M001)
+func extractRoundAndMatchIDs(id string) (round int, match int, err error) {
+	re := regexp.MustCompile(`_R(\d+)-M(\d+)$`)
+	matches := re.FindStringSubmatch(id)
+	if len(matches) != 3 {
+		return 0, 0, fmt.Errorf("invalid ID format: %s", id)
+	}
+	round, _ = strconv.Atoi(matches[1])
+	match, _ = strconv.Atoi(matches[2])
+	return round, match, nil
 }

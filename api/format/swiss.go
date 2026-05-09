@@ -2,6 +2,8 @@ package format
 
 import (
 	"fmt"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -129,8 +131,12 @@ func (swissFormat) CalculateScore(p shared.Prediction, r MatchResult) (shared.Sc
 	}, response.String(), nil
 }
 
-func (swissFormat) ParseFromAPI(jsonResponse, round string) (MatchResult, error) {
-	panic("format: swissFormat.ParseFromAPI not migrated yet (Phase 3)")
+// ExtractMatchListID parses wikitext and extracts the `Matchlist` id
+func (swissFormat) ExtractMatchListIDs(wikitext string) ([]string, Kind, error) {
+	var re *regexp.Regexp
+	re = regexp.MustCompile(`(?s)\{\{\s*Matchlist\s*\|([^}]*)\}\}`) // {{Matchlist ...}} templates used in swiss tournaments
+	return extractMatchListIds(wikitext, re)
+
 }
 
 // DecodeBSON unmarshals a Swiss BSON record back into a SwissResult.
@@ -145,7 +151,7 @@ func (swissFormat) DecodeBSON(b []byte) (MatchResult, error) {
 // BuildFromMatchNodes assembles a SwissResult from parsed match nodes.
 // Phase 3 will inline external.CalculateSwissScores into this package.
 func (swissFormat) BuildFromMatchNodes(nodes []external.MatchNode, round string) (MatchResult, error) {
-	scores, err := external.CalculateSwissScores(nodes)
+	scores, err := calculateSwissScores(nodes)
 	if err != nil {
 		return nil, fmt.Errorf("swiss: error calculating scores: %w", err)
 	}
@@ -216,4 +222,50 @@ func evaluateBucket(teams []string, scores map[string]string, classify func(wins
 		}
 	}
 	return shared.ScoreResult{Successes: succeeded, Pending: pending, Failed: failed}, nil
+}
+
+// CalculateSwissScores process match nodes and calculate swiss score. Called by BuildMatchNodes
+func calculateSwissScores(matchNodes []external.MatchNode) (map[string]string, error) {
+	var teams []string
+	wins := make(map[string]int)
+	loses := make(map[string]int)
+
+	for i := range matchNodes {
+		node := matchNodes[i]
+
+		// Check if teams are in teams slice
+		if !slices.Contains(teams, node.Team1) {
+			teams = append(teams, node.Team1)
+		}
+		if !slices.Contains(teams, node.Team2) {
+			teams = append(teams, node.Team2)
+		}
+
+		// Update win and loss maps
+		if node.Winner == "TBD" {
+			continue
+		}
+		if node.Winner == node.Team1 {
+			wins[node.Team1]++
+			loses[node.Team2]++
+		} else if node.Winner == node.Team2 {
+			wins[node.Team2]++
+			loses[node.Team1]++
+		} else {
+			// Unexpected winner value skip
+			continue
+		}
+
+	}
+
+	scores := make(map[string]string)
+	for _, team := range teams {
+		//Skip any placeholder teams names
+		if team == "TBD" {
+			continue
+		}
+		scores[team] = fmt.Sprintf("%d-%d", wins[team], loses[team])
+	}
+
+	return scores, nil
 }

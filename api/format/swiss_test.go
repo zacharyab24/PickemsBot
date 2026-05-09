@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"pickems-bot/api/external"
 	"pickems-bot/api/shared"
 
 	"github.com/stretchr/testify/assert"
@@ -166,3 +167,104 @@ func TestEvaluateBucket_AllScenarios(t *testing.T) {
 
 // FromRecord/ToRecord tests removed: those methods no longer exist after the
 // in-memory result and storage record types were unified.
+
+// region calculateSwissScores
+
+// TestCalculateSwissScores_AllWins tests team with all wins
+func TestCalculateSwissScores_AllWins(t *testing.T) {
+	matchNodes := []external.MatchNode{
+		{ID: "1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},
+		{ID: "2", Team1: "TeamA", Team2: "TeamC", Winner: "TeamA"},
+		{ID: "3", Team1: "TeamA", Team2: "TeamD", Winner: "TeamA"},
+	}
+	scores, err := calculateSwissScores(matchNodes)
+	assert.NoError(t, err)
+	assert.Equal(t, "3-0", scores["TeamA"])
+	assert.Equal(t, "0-1", scores["TeamB"])
+	assert.Equal(t, "0-1", scores["TeamC"])
+	assert.Equal(t, "0-1", scores["TeamD"])
+}
+
+// TestCalculateSwissScores_MixedResults tests mixed win/loss records
+func TestCalculateSwissScores_MixedResults(t *testing.T) {
+	matchNodes := []external.MatchNode{
+		{ID: "1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},
+		{ID: "2", Team1: "TeamA", Team2: "TeamC", Winner: "TeamC"},
+		{ID: "3", Team1: "TeamB", Team2: "TeamC", Winner: "TeamB"},
+	}
+	scores, err := calculateSwissScores(matchNodes)
+	assert.NoError(t, err)
+	assert.Equal(t, "1-1", scores["TeamA"])
+	assert.Equal(t, "1-1", scores["TeamB"])
+	assert.Equal(t, "1-1", scores["TeamC"])
+}
+
+// TestCalculateSwissScores_PendingMatches tests with TBD winners (pending matches)
+func TestCalculateSwissScores_PendingMatches(t *testing.T) {
+	matchNodes := []external.MatchNode{
+		{ID: "1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},
+		{ID: "2", Team1: "TeamA", Team2: "TeamC", Winner: "TBD"},
+		{ID: "3", Team1: "TeamB", Team2: "TeamC", Winner: "TBD"},
+	}
+	scores, err := calculateSwissScores(matchNodes)
+	assert.NoError(t, err)
+	assert.Equal(t, "1-0", scores["TeamA"])
+	assert.Equal(t, "0-1", scores["TeamB"])
+	assert.Equal(t, "0-0", scores["TeamC"])
+}
+
+// TestCalculateSwissScores_EmptyInput tests with no matches
+func TestCalculateSwissScores_EmptyInput(t *testing.T) {
+	scores, err := calculateSwissScores([]external.MatchNode{})
+	assert.NoError(t, err)
+	assert.Empty(t, scores)
+}
+
+// TestCalculateSwissScores_TBDTeamsExcluded tests that TBD teams are excluded
+func TestCalculateSwissScores_TBDTeamsExcluded(t *testing.T) {
+	matchNodes := []external.MatchNode{
+		{ID: "1", Team1: "TeamA", Team2: "TBD", Winner: "TeamA"},
+		{ID: "2", Team1: "TBD", Team2: "TeamB", Winner: "TeamB"},
+	}
+	scores, err := calculateSwissScores(matchNodes)
+	assert.NoError(t, err)
+	assert.Equal(t, "1-0", scores["TeamA"])
+	assert.Equal(t, "1-0", scores["TeamB"])
+	_, hasTBD := scores["TBD"]
+	assert.False(t, hasTBD)
+}
+
+// TestCalculateSwissScores_InvalidWinner tests handling of unexpected winner values
+func TestCalculateSwissScores_InvalidWinner(t *testing.T) {
+	matchNodes := []external.MatchNode{
+		{ID: "1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamC"}, // Invalid winner
+		{ID: "2", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},
+	}
+	scores, err := calculateSwissScores(matchNodes)
+	assert.NoError(t, err)
+	assert.Equal(t, "1-0", scores["TeamA"])
+	assert.Equal(t, "0-1", scores["TeamB"])
+}
+
+// endregion
+
+// region ExtractMatchListIDs
+
+// TestSwissExtractMatchListIDs_Basic tests Matchlist ID extraction
+func TestSwissExtractMatchListIDs_Basic(t *testing.T) {
+	wikitext := `
+== Format ==
+Swiss format tournament
+
+{{Matchlist|id=ABC123}}
+{{Matchlist|id=DEF456}}
+`
+	ids, kind, err := swissFormat{}.ExtractMatchListIDs(wikitext)
+	assert.NoError(t, err)
+	assert.Equal(t, Swiss, kind)
+	assert.Len(t, ids, 2)
+	assert.Contains(t, ids, "ABC123")
+	assert.Contains(t, ids, "DEF456")
+}
+
+// endregion

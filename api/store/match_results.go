@@ -80,8 +80,16 @@ func (s *Store) fetchMatchDataFromExternal() (format.MatchResult, error) {
 		return nil, fmt.Errorf("error fetching match2bracketid data: %w", err)
 	}
 
-	// Get match2bracketid's from wikitext
-	ids, formatName, err := external.ExtractMatchListID(wikitext)
+	// Detect format from wikitext, then dispatch to the per-format ID extractor.
+	kind, err := format.DetectKind(wikitext)
+	if err != nil {
+		return nil, fmt.Errorf("error detecting format: %w", err)
+	}
+	f, err := format.Get(kind)
+	if err != nil {
+		return nil, fmt.Errorf("unknown format type: %s", kind)
+	}
+	ids, _, err := f.ExtractMatchListIDs(wikitext)
 	if err != nil {
 		return nil, fmt.Errorf("error extracting match list: %w", err)
 	}
@@ -99,10 +107,6 @@ func (s *Store) fetchMatchDataFromExternal() (format.MatchResult, error) {
 		return nil, fmt.Errorf("error parsing match data: %w", err)
 	}
 
-	f, err := format.Get(format.Kind(formatName))
-	if err != nil {
-		return nil, fmt.Errorf("unknown format type: %s", formatName)
-	}
 	return f.BuildFromMatchNodes(matchNodes, s.Round)
 }
 
