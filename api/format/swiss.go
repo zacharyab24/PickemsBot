@@ -146,8 +146,7 @@ func (swissFormat) CalculateScore(p shared.Prediction, r MatchResult) (shared.Sc
 
 // ExtractMatchListID parses wikitext and extracts the `Matchlist` id
 func (swissFormat) ExtractMatchListIDs(wikitext string) ([]string, Kind, error) {
-	var re *regexp.Regexp
-	re = regexp.MustCompile(`(?s)\{\{\s*Matchlist\s*\|([^}]*)\}\}`) // {{Matchlist ...}} templates used in swiss tournaments
+	re := regexp.MustCompile(`(?s)\{\{\s*Matchlist\s*\|([^}]*)\}\}`) // {{Matchlist ...}} templates used in swiss tournaments
 	return extractMatchListIds(wikitext, re)
 
 }

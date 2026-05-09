@@ -137,8 +137,7 @@ func (singleElimFormat) BuildFromMatchNodes(nodes []external.MatchNode, round st
 
 // ExtractMatchListID parses wikitext and extracts the `Matchlist` id
 func (singleElimFormat) ExtractMatchListIDs(wikitext string) ([]string, Kind, error) {
-	var re *regexp.Regexp
-	re = regexp.MustCompile(`(?s)\{\{\s*Bracket\s*\|([^}]*)\}\}`) // {{ShowBracket ...}} templates used in single elim
+	re := regexp.MustCompile(`(?s)\{\{\s*Bracket\s*\|([^}]*)\}\}`) // {{ShowBracket ...}} templates used in single elim
 	return extractMatchListIds(wikitext, re)
 
 }
