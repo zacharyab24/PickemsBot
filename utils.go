@@ -17,9 +17,10 @@ func convertStrToBool(str string) (bool, error) {
 	str = strings.TrimSpace(str)
 	str = strings.ToLower(str)
 
-	if str == "true" {
+	switch str {
+	case "true":
 		return true, nil
-	} else if str == "false" {
+	case "false":
 		return false, nil
 	}
 	return false, fmt.Errorf("invalid boolean string")

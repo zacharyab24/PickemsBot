@@ -59,22 +59,18 @@ func (a *API) SetUserPrediction(user shared.User, inputTeams []string, round str
 	}
 
 	// Get valid team names
-	validTeams, format, err := a.Store.GetValidTeams()
+	validTeams, formatName, err := a.Store.GetValidTeams()
 	if err != nil {
 		return err
 	}
 
-	// Get number of required teams
-	var requiredPredictions int
-	switch format {
-	case "swiss":
-		requiredPredictions = 10
-	case "single-elimination":
-		T := len(validTeams)
-		requiredPredictions = T / 2
-	default:
-		return fmt.Errorf("unknown tournament format: %s", format)
+	f, err := format.Get(formatName)
+	if err != nil {
+		return fmt.Errorf("unknown tournament format: %s", formatName)
 	}
+
+	// Get number of required teams
+	requiredPredictions := f.RequiredPredictions(len(validTeams))
 
 	// Check num required teams is correct
 	if len(inputTeams) != requiredPredictions {
@@ -109,7 +105,7 @@ func (a *API) SetUserPrediction(user shared.User, inputTeams []string, round str
 	}
 
 	// Generate prediction struct
-	prediction, err := logic.GeneratePrediction(user, format, round, teams, requiredPredictions)
+	prediction, err := f.GeneratePrediction(user, round, teams)
 	if err != nil {
 		return err
 	}

@@ -6,15 +6,17 @@
 package bot
 
 import (
-	"pickems-bot/api/api"
-	"pickems-bot/api/external"
 	"strings"
 	"testing"
+
+	"pickems-bot/api/api"
+	"pickems-bot/api/external"
+	"pickems-bot/api/format"
 )
 
 // Create a mock API for testing
-func createMockAPI(format string) *api.API {
-	mockStore := api.NewMockStore(format, "test_round")
+func createMockAPI(kind format.Kind) *api.API {
+	mockStore := api.NewMockStore(kind, "test_round")
 	mockStore.SetScheduledMatches([]external.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
 	mockStore.SetSwissResults(map[string]string{
 		"Team A": "3-0",

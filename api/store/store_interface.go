@@ -17,7 +17,7 @@ import (
 // This allows for mocking in tests.
 type Interface interface {
 	EnsureScheduledMatches() error
-	GetValidTeams() ([]string, string, error)
+	GetValidTeams() ([]string, format.Kind, error)
 	StoreUserPrediction(userID string, prediction shared.Prediction) error
 	GetUserPrediction(userID string) (shared.Prediction, error)
 	GetMatchResults() (format.MatchResult, error)

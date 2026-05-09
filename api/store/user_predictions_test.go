@@ -10,6 +10,7 @@ import (
 	"os"
 	"testing"
 
+	"pickems-bot/api/format"
 	"pickems-bot/api/shared"
 
 	"github.com/stretchr/testify/assert"
@@ -442,9 +443,9 @@ func TestGetValidTeams_Swiss(t *testing.T) {
 		})
 		mt.AddMockResponses(swissDoc)
 
-		teams, format, err := store.GetValidTeams()
+		teams, kind, err := store.GetValidTeams()
 		require.NoError(t, err)
-		assert.Equal(t, "swiss", format)
+		assert.Equal(t, format.Swiss, kind)
 		assert.Len(t, teams, 3)
 		assert.Contains(t, teams, "Team A")
 		assert.Contains(t, teams, "Team B")
@@ -487,9 +488,9 @@ func TestGetValidTeams_Elimination(t *testing.T) {
 		})
 		mt.AddMockResponses(elimDoc)
 
-		teams, format, err := store.GetValidTeams()
+		teams, kind, err := store.GetValidTeams()
 		require.NoError(t, err)
-		assert.Equal(t, "single-elimination", format)
+		assert.Equal(t, format.SingleElim, kind)
 		assert.Len(t, teams, 2)
 		assert.Contains(t, teams, "Team X")
 		assert.Contains(t, teams, "Team Y")

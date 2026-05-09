@@ -58,7 +58,7 @@ func TestFetchMatchResultsFromDb_Swiss(t *testing.T) {
 
 		swissResult, ok := result.(format.SwissResult)
 		require.True(t, ok)
-		assert.Equal(t, "swiss", string(swissResult.GetType()))
+		assert.Equal(t, format.Swiss, swissResult.GetType())
 		assert.Equal(t, "test_round", swissResult.GetRound())
 		assert.Equal(t, "3-0", swissResult.Teams["Team A"])
 		assert.Equal(t, "3-1", swissResult.Teams["Team B"])
@@ -107,7 +107,7 @@ func TestFetchMatchResultsFromDb_Elimination(t *testing.T) {
 
 		elimResult, ok := result.(format.EliminationResult)
 		require.True(t, ok)
-		assert.Equal(t, "single-elimination", string(elimResult.GetType()))
+		assert.Equal(t, format.SingleElim, elimResult.GetType())
 		assert.Equal(t, "test_round", elimResult.GetRound())
 		assert.Equal(t, "semifinal", elimResult.Teams["Team X"].Round)
 		assert.Equal(t, "advanced", elimResult.Teams["Team X"].Status)
@@ -273,7 +273,7 @@ func TestGetMatchResults_SwissSuccess(t *testing.T) {
 		result, err := store.GetMatchResults()
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		assert.Equal(t, "swiss", string(result.GetType()))
+		assert.Equal(t, format.Swiss, result.GetType())
 
 		swissRecord, ok := result.(format.SwissResult)
 		require.True(t, ok)
@@ -315,7 +315,7 @@ func TestGetMatchResults_EliminationSuccess(t *testing.T) {
 		result, err := store.GetMatchResults()
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		assert.Equal(t, "single-elimination", string(result.GetType()))
+		assert.Equal(t, format.SingleElim, result.GetType())
 
 		elimRecord, ok := result.(format.EliminationResult)
 		require.True(t, ok)

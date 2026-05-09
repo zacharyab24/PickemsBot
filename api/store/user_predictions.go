@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 
+	"pickems-bot/api/format"
 	"pickems-bot/api/shared"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -103,12 +104,12 @@ func (s *Store) GetAllUserPredictions() ([]shared.Prediction, error) {
 // create and maintain a new collection that will require more api calls.
 // It receives db name, collection name and round strings.
 // It returns string slice containing valid team names for the round, or returns error if an issue occurs.
-func (s *Store) GetValidTeams() ([]string, string, error) {
+func (s *Store) GetValidTeams() ([]string, format.Kind, error) {
 	// Get results stored in our db
 	dbResults, err := s.FetchMatchResultsFromDb()
 	if err != nil {
 		return nil, "", err
 	}
 
-	return dbResults.GetTeamNames(), string(dbResults.GetType()), nil
+	return dbResults.GetTeamNames(), dbResults.GetType(), nil
 }

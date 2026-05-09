@@ -60,7 +60,20 @@ func (swissFormat) Name() Kind { return Swiss }
 func (swissFormat) RequiredPredictions(teamCount int) int { return 5 * teamCount / 8 }
 
 func (swissFormat) GeneratePrediction(user shared.User, round string, teams []string) (shared.Prediction, error) {
-	panic("format: swissFormat.GeneratePrediction not migrated yet (Phase 4)")
+	// Set generic attributes for Prediction struct
+	prediction := shared.Prediction{
+		UserID:   user.UserID,
+		Username: user.Username,
+		Format:   "swiss",
+		Round:    round,
+	}
+
+	win, advance, lose := setSwissPredictions(teams)
+	prediction.Win = win
+	prediction.Advance = advance
+	prediction.Lose = lose
+
+	return prediction, nil
 }
 
 func (swissFormat) CalculateScore(p shared.Prediction, r MatchResult) (shared.ScoreResult, string, error) {
@@ -268,4 +281,18 @@ func calculateSwissScores(matchNodes []external.MatchNode) (map[string]string, e
 	}
 
 	return scores, nil
+}
+
+// setSwissPredictions is a helper to bind the input string slice to the 3 output slices: win, advance and lose
+func setSwissPredictions(teams []string) ([]string, []string, []string) {
+	numTeams := len(teams)
+	numWin := numTeams / 8
+	numAdvance := numTeams / 2
+	numLose := 5 * numTeams / 8
+
+	win := teams[0:numWin]
+	advance := teams[numWin:numAdvance]
+	lose := teams[numAdvance:numLose]
+
+	return win, advance, lose
 }

@@ -24,7 +24,7 @@ type MockStore struct {
 	MatchResults     format.MatchResult
 	ScheduledMatches []external.ScheduledMatch
 	ValidTeams       []string
-	Format           string
+	Format           format.Kind
 
 	// Error injection for testing error paths
 	EnsureScheduledMatchesError     error
@@ -61,12 +61,12 @@ func (m *mockDatabase) Name() string {
 }
 
 // NewMockStore creates a new MockStore with default values
-func NewMockStore(format string, round string) *MockStore {
+func NewMockStore(kind format.Kind, round string) *MockStore {
 	return &MockStore{
 		Predictions:      make(map[string]shared.Prediction),
 		ScheduledMatches: []external.ScheduledMatch{},
 		ValidTeams:       []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J", "Team K", "Team L", "Team M", "Team N", "Team O", "Team P"},
-		Format:           format,
+		Format:           kind,
 		DatabaseName:     "test_db",
 		RoundName:        round,
 		Round:            round,
@@ -86,7 +86,7 @@ func (m *MockStore) EnsureScheduledMatches() error {
 }
 
 // GetValidTeams mock implementation
-func (m *MockStore) GetValidTeams() ([]string, string, error) {
+func (m *MockStore) GetValidTeams() ([]string, format.Kind, error) {
 	if m.GetValidTeamsError != nil {
 		return nil, "", m.GetValidTeamsError
 	}
@@ -176,7 +176,7 @@ func (m *MockStore) SetEliminationResults(progression map[string]shared.TeamProg
 		Round: m.RoundName,
 		Teams: progression,
 	}
-	m.Format = "single-elimination"
+	m.Format = format.SingleElim
 	// Update valid teams from progression
 	m.ValidTeams = make([]string, 0, len(progression))
 	for team := range progression {
