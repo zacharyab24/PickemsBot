@@ -125,6 +125,8 @@ run_stage 4 "Go vet" "go vet ./..."
 # ============================================================================
 print_stage 5 "Lint (golint)"
 
+export PATH="$(go env GOPATH)/bin:$PATH"
+
 # Check if golint is installed, install if not
 if ! command -v golint &> /dev/null; then
     print_warning "golint not found, installing..."

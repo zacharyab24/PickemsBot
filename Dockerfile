@@ -1,15 +1,28 @@
-# Start from Go base image
-FROM golang:1.24-alpine
+# Stage 1: build the binary
+FROM golang:1.26 AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Copy go mod and source
-COPY ../go.mod ./
-COPY .. ./
+COPY go.mod go.sum ./
+RUN go mod download
 
-# Build the app
-RUN go build -o pickems
+COPY . ./
+RUN CGO_ENABLED=0 GOOS=linux go build -o pickems .
 
-# Command to run the app
+# Stage 2: runtime image with Chromium for the bracket renderer
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
+    ca-certificates \
+    fonts-liberation \
+    && ln -s /usr/bin/chromium /usr/bin/chromium-browser \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=builder /app/pickems .
+COPY resources/ resources/
+COPY config.toml .
+
 CMD ["./pickems"]
