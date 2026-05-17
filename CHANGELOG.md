@@ -1,28 +1,45 @@
 # Changelog
 
-## v3.1
+## 3.2
+Match format rework and `$results` command:
+- Reworked the match result layer to support multiple tournament formats (Swiss, single-elimination) through a shared `MatchResult` interface and format-specific implementations. Swiss and single-elimination formats now each have their own result type, scoring logic, and BSON encoding, making it straightforward to add new formats (e.g. double-elimination) in the future.
+- Extended `MatchNode` with `Score` (series score e.g. `2-1` for BoX, map score e.g. `13-10` for BO1) and `Section` (round label e.g. `Round 1`, `Upper Bracket Round 2`) to carry enough information to reconstruct a full bracket across all supported formats.
+- Persists raw match node data to a new `match_nodes` MongoDB collection after each update, decoupling bracket display from match result scoring.
+- Added `$results` command — sends the current bracket as a rendered image in Discord.
+- Integrated [`pickems-renderer`](https://github.com/zacharyab24/pickems-renderer) for bracket image generation; the renderer is triggered asynchronously after each Liquipedia webhook update.
+- Migrated the storage layer to a `store.Interface` to allow mock injection in tests.
+- Dockerfile reworked to a multi-stage build (Go 1.26 builder + `debian:bookworm-slim` runtime) with Chromium installed to support the bracket renderer.
+
+Also includes changes from PRs #32 and #33:
+- (#32) Added `scripts/configure` — a CLI tool that reads a Liquipedia tournament page and generates `config.toml`. Tournament settings are now tracked in git separately from secrets, which remain in `.env`.
+- (#33) Fixed CI workflow vulnerability check stage and updated govulncheck integration.
+
+## 3.1
 Bot now spins up a web server that receives callbacks from Liquipedia when a page is updated. This means we automatically
 update our cached data, instead of relying on users making commands. This means responses are faster when previously the
 cache would be expired. Some other minor improvements and changes have been made and test coverage has been added.
 
-## v3.0
-Reworking the application into two parts: `api` and `bot`
-- `api` is a restful api that is used for data retrieval. Lookups will be to the Liquipedia Database instead of scraping
-the site using soup. Most of the data will be stored in our own database, as to not exceed the usage requirements of the
-liquipedia
-- `bot` will make api calls to GET and POST data, instead of doing its own database interaction and web scraping. This
-will allow for a smoother experience, cleaner code, and less errors.
+## 3.0
+- Reworked the application into two parts: `api` and `bot`
+    - `api` is a restful api that is used for data retrieval. Lookups will be to the Liquipedia Database instead of scraping
+    the site using soup. Most of the data will be stored in our own database, as to not exceed the usage requirements of the
+    liquipedia
+    - `bot` will make api calls to GET and POST data, instead of doing its own database interaction and web scraping. This
+    will allow for a smoother experience, cleaner code, and less errors.
+- fuzzy string matching: exact string matches are no longer required for entering team names during predictions. Example usage:
+    - `fq` -> `FlyQuest`
+    - `mongols` -> `"The MongolZ"`
 
-## v2.0
+## 2.0
 Updated the code base to use Go instead of Python.
 Updated to work with upcoming Perfect World Shanghai Major as well as be more expandable for other tournaments through the use of command line flags (not user facing).
 
-## v1.1
+## 1.1
 Added upcoming match support. This may still be broken. I have to wait for today's matches to be finished to check. \
 Updated help command. \
 Updated formatting for check command.
 
-## v1.0
+## 1.0
 Launched bot. \
 Added allowing any capitalisation of teams. \
 Added error handling for incorrect inputs.
