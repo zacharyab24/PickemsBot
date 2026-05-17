@@ -1,5 +1,6 @@
 .env
 /pickems-bot
+/main
 .idea
 *.exe
 *.out
