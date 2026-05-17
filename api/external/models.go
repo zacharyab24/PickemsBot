@@ -7,10 +7,12 @@ package external
 
 // MatchNode represents a single match in a tournament bracket
 type MatchNode struct {
-	ID     string
-	Team1  string
-	Team2  string
-	Winner string
+	ID      string `bson:"id"`
+	Team1   string `bson:"team1"`
+	Team2   string `bson:"team2"`
+	Winner  string `bson:"winner"`
+	Score   string `bson:"score"`   // series score ("2-1") for BoX, map score ("13-10") for BO1; "" if unfinished
+	Section string `bson:"section"` // round label from Liquipedia (e.g. "Round 1", "Upper Bracket Round 2")
 }
 
 // ScheduledMatch represents a scheduled match with timing and streaming information

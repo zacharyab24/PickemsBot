@@ -7,6 +7,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"pickems-bot/api/external"
 	"pickems-bot/api/format"
@@ -27,6 +28,15 @@ func NewMockStore(dbName string, mongoURI string) (*Store, error) {
 func CreateTestStore(mongoURI string) (*Store, func(), error) {
 	store, err := NewMockStore("test_pickems", mongoURI)
 	if err != nil {
+		return nil, nil, err
+	}
+
+	// Verify the connection is actually reachable before proceeding.
+	// mongo.Connect is lazy — it doesn't dial until the first operation.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := store.Client.Ping(ctx, nil); err != nil {
+		store.Client.Disconnect(context.TODO())
 		return nil, nil, err
 	}
 
