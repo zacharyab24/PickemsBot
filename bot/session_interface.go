@@ -5,12 +5,17 @@
 
 package bot
 
-import "github.com/bwmarrin/discordgo"
+import (
+	"io"
+
+	"github.com/bwmarrin/discordgo"
+)
 
 // DiscordSession defines the Discord session methods used by the bot.
 // This interface allows for easy mocking in tests.
 type DiscordSession interface {
 	ChannelMessageSend(channelID string, content string, options ...discordgo.RequestOption) (*discordgo.Message, error)
+	ChannelFileSend(channelID string, name string, r io.Reader, options ...discordgo.RequestOption) (*discordgo.Message, error)
 }
 
 // Ensure *discordgo.Session implements DiscordSession

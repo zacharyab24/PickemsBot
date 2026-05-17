@@ -147,7 +147,7 @@ func TestFetchMatchNodesFromDb_Success(t *testing.T) {
 		})
 		mt.AddMockResponses(doc)
 
-		nodes, err := store.FetchMatchNodesFromDb()
+		nodes, _, err := store.FetchMatchNodesFromDb()
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 		assert.Equal(t, "abc_0001", nodes[0].ID)
@@ -178,7 +178,7 @@ func TestFetchMatchNodesFromDb_NotFound(t *testing.T) {
 
 		mt.AddMockResponses(mtest.CreateCursorResponse(0, "test.match_nodes", mtest.FirstBatch))
 
-		nodes, err := store.FetchMatchNodesFromDb()
+		nodes, _, err := store.FetchMatchNodesFromDb()
 		assert.Equal(t, mongo.ErrNoDocuments, err)
 		assert.Nil(t, nodes)
 	})
@@ -216,7 +216,7 @@ func TestMatchNodes_WithRealDB(t *testing.T) {
 		err := store.StoreMatchNodes(nodes, format.Swiss)
 		require.NoError(t, err)
 
-		fetched, err := store.FetchMatchNodesFromDb()
+		fetched, _, err := store.FetchMatchNodesFromDb()
 		require.NoError(t, err)
 		require.Len(t, fetched, 2)
 
@@ -239,7 +239,7 @@ func TestMatchNodes_WithRealDB(t *testing.T) {
 		err := store.StoreMatchNodes(updated, format.Swiss)
 		require.NoError(t, err)
 
-		fetched, err := store.FetchMatchNodesFromDb()
+		fetched, _, err := store.FetchMatchNodesFromDb()
 		require.NoError(t, err)
 		require.Len(t, fetched, 1)
 		assert.Equal(t, "Team B", fetched[0].Winner)

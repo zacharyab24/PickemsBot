@@ -47,17 +47,19 @@ func (s *Store) StoreMatchNodes(nodes []external.MatchNode, kind format.Kind) er
 	return nil
 }
 
-// FetchMatchNodesFromDb retrieves the raw []MatchNode slice for the configured round.
-func (s *Store) FetchMatchNodesFromDb() ([]external.MatchNode, error) {
+// FetchMatchNodesFromDb retrieves the raw []MatchNode slice for the configured round, and the format.Kind of the round
+// format.Kind could potentially be an empty string if legacy data is fetched, so callers should check that
+func (s *Store) FetchMatchNodesFromDb() ([]external.MatchNode, format.Kind, error) {
 	var doc struct {
-		Nodes []external.MatchNode `bson:"nodes"`
+		Nodes  []external.MatchNode `bson:"nodes"`
+		Format format.Kind          `bson:"format"`
 	}
 	err := s.Collections.MatchNodes.FindOne(context.TODO(), bson.M{"round": s.Round}).Decode(&doc)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, err
+			return nil, "", err
 		}
-		return nil, fmt.Errorf("error fetching match nodes from db: %w", err)
+		return nil, "", fmt.Errorf("error fetching match nodes from db: %w", err)
 	}
-	return doc.Nodes, nil
+	return doc.Nodes, doc.Format, nil
 }

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"pickems-bot/api/shared"
 	"strings"
 
@@ -133,6 +134,23 @@ func (b *Bot) upcomingMatchesHandler(session DiscordSession, message *discordgo.
 	session.ChannelMessageSend(message.ChannelID, res.String())
 }
 
+// resultsHandler handles the $results command withing a DiscordSession interface
+// the results image should be stored in <project-root>/resources/result.png.
+// Creating / updating the results image is a slow process and should be handled when we update the match results db via a goroutine
+func (b *Bot) resultsHandler(session DiscordSession, message *discordgo.MessageCreate) {
+	outputPath := "resources/result.png"
+
+	// Load image from disk
+	f, err := os.Open(outputPath)
+	if err != nil {
+		session.ChannelMessageSend(message.ChannelID, "An error fetching the match results")
+		log.Printf("open png: %v", err)
+		return
+	}
+
+	session.ChannelFileSend(message.ChannelID, outputPath, f)
+}
+
 // newMessageHandler routes messages to appropriate handlers with a DiscordSession interface
 // botUserID is the bot's user ID to prevent self-responses
 func (b *Bot) newMessageHandler(session DiscordSession, message *discordgo.MessageCreate, botUserID string) {
@@ -163,5 +181,8 @@ func (b *Bot) newMessageHandler(session DiscordSession, message *discordgo.Messa
 
 	case startsWith(message.Content, "$upcoming"):
 		b.upcomingMatchesHandler(session, message)
+
+	case startsWith(message.Content, "$result"):
+		b.resultsHandler(session, message)
 	}
 }

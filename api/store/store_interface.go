@@ -32,6 +32,7 @@ type Interface interface {
 	GetOptionalParams() string
 	GetClient() interface{ Disconnect(context.Context) error }
 	FetchAndUpdateMatchResults() error
+	FetchMatchNodesFromDb() ([]external.MatchNode, format.Kind, error)
 	StoreLeaderboard(leaderboard Leaderboard) error
 	FetchLeaderboardFromDB() ([]LeaderboardEntry, error)
 }

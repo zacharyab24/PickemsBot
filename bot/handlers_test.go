@@ -553,6 +553,37 @@ func TestCheckPredictions_GenericError(t *testing.T) {
 
 // endregion
 
+// region results tests
+
+func TestResults_Success(t *testing.T) {
+	t.Chdir("..") // bot/ → repo root, where resources/result.png lives
+
+	bot := createTestBot("swiss")
+	mockSession := NewMockDiscordSession()
+	message := createMockMessage("$results", "user123", "TestUser", "channel123")
+
+	bot.resultsHandler(mockSession, message)
+
+	require.Len(t, mockSession.SentFiles, 1)
+	assert.Equal(t, "channel123", mockSession.SentFiles[0].ChannelID)
+	assert.Equal(t, "resources/result.png", mockSession.SentFiles[0].Name)
+}
+
+func TestResults_FileNotFound(t *testing.T) {
+	// No chdir — bot/ has no resources/result.png, so os.Open will fail
+	bot := createTestBot("swiss")
+	mockSession := NewMockDiscordSession()
+	message := createMockMessage("$results", "user123", "TestUser", "channel123")
+
+	bot.resultsHandler(mockSession, message)
+
+	require.Len(t, mockSession.SentMessages, 1)
+	assert.Contains(t, mockSession.SentMessages[0].Content, "error")
+	assert.Len(t, mockSession.SentFiles, 0)
+}
+
+// endregion
+
 // region mock session tests
 
 func TestMockSession_ErrorToReturn(t *testing.T) {
