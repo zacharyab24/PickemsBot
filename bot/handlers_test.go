@@ -7,12 +7,13 @@ package bot
 
 import (
 	"errors"
-	"pickems-bot/api/api"
-	"pickems-bot/api/external"
-	"pickems-bot/api/shared"
-	"pickems-bot/api/store"
 	"strings"
 	"testing"
+
+	"pickems-bot/api/api"
+	"pickems-bot/api/external"
+	"pickems-bot/api/format"
+	"pickems-bot/api/shared"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/stretchr/testify/assert"
@@ -20,8 +21,8 @@ import (
 )
 
 // createTestBot creates a Bot instance with a mock API for testing
-func createTestBot(format string) *Bot {
-	mockStore := api.NewMockStore(format, "test_round")
+func createTestBot(kind format.Kind) *Bot {
+	mockStore := api.NewMockStore(kind, "test_round")
 	mockStore.SetScheduledMatches([]external.ScheduledMatch{
 		{Team1: "Team A", Team2: "Team B", BestOf: "3", EpochTime: 1700000000},
 		{Team1: "Team C", Team2: "Team D", BestOf: "3", EpochTime: 1700010000},
@@ -272,7 +273,7 @@ func TestCheckPredictions_WithPredictions(t *testing.T) {
 	})
 
 	// Store a prediction for the user
-	mockStore.StoreUserPrediction("user123", store.Prediction{
+	mockStore.StoreUserPrediction("user123", shared.Prediction{
 		UserID:   "user123",
 		Username: "TestUser",
 		Format:   "swiss",

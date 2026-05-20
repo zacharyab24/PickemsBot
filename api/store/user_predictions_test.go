@@ -10,6 +10,9 @@ import (
 	"os"
 	"testing"
 
+	"pickems-bot/api/format"
+	"pickems-bot/api/shared"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson"
@@ -40,7 +43,7 @@ func TestStoreUserPrediction_InsertNew(t *testing.T) {
 		// Mock InsertOne success
 		mt.AddMockResponses(mtest.CreateSuccessResponse())
 
-		prediction := Prediction{
+		prediction := shared.Prediction{
 			UserID:   "user123",
 			Username: "testuser",
 			Format:   "swiss",
@@ -86,7 +89,7 @@ func TestStoreUserPrediction_UpdateExisting(t *testing.T) {
 		}
 		mt.AddMockResponses(first, getMore, updateSuccess)
 
-		prediction := Prediction{
+		prediction := shared.Prediction{
 			UserID:   "user123",
 			Username: "testuser",
 			Format:   "swiss",
@@ -123,7 +126,7 @@ func TestStoreUserPrediction_FindOneError(t *testing.T) {
 			Message: "database error",
 		}))
 
-		prediction := Prediction{
+		prediction := shared.Prediction{
 			UserID: "user123",
 			Round:  "test_round",
 		}
@@ -161,7 +164,7 @@ func TestStoreUserPrediction_InsertError(t *testing.T) {
 			Message: "duplicate key error",
 		}))
 
-		prediction := Prediction{
+		prediction := shared.Prediction{
 			UserID: "user123",
 			Round:  "test_round",
 		}
@@ -203,7 +206,7 @@ func TestStoreUserPrediction_UpdateError(t *testing.T) {
 			Message: "update failed",
 		}))
 
-		prediction := Prediction{
+		prediction := shared.Prediction{
 			UserID: "user123",
 			Round:  "test_round",
 		}
@@ -277,7 +280,7 @@ func TestGetUserPrediction_NotFound(t *testing.T) {
 		prediction, err := store.GetUserPrediction("nonexistent")
 		assert.Error(t, err)
 		assert.Equal(t, mongo.ErrNoDocuments, err)
-		assert.Equal(t, Prediction{}, prediction)
+		assert.Equal(t, shared.Prediction{}, prediction)
 	})
 }
 
@@ -308,7 +311,7 @@ func TestGetUserPrediction_DatabaseError(t *testing.T) {
 		prediction, err := store.GetUserPrediction("user123")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "error fetching results from db")
-		assert.Equal(t, Prediction{}, prediction)
+		assert.Equal(t, shared.Prediction{}, prediction)
 	})
 }
 
@@ -440,9 +443,9 @@ func TestGetValidTeams_Swiss(t *testing.T) {
 		})
 		mt.AddMockResponses(swissDoc)
 
-		teams, format, err := store.GetValidTeams()
+		teams, kind, err := store.GetValidTeams()
 		require.NoError(t, err)
-		assert.Equal(t, "swiss", format)
+		assert.Equal(t, format.Swiss, kind)
 		assert.Len(t, teams, 3)
 		assert.Contains(t, teams, "Team A")
 		assert.Contains(t, teams, "Team B")
@@ -485,9 +488,9 @@ func TestGetValidTeams_Elimination(t *testing.T) {
 		})
 		mt.AddMockResponses(elimDoc)
 
-		teams, format, err := store.GetValidTeams()
+		teams, kind, err := store.GetValidTeams()
 		require.NoError(t, err)
-		assert.Equal(t, "single-elimination", format)
+		assert.Equal(t, format.SingleElim, kind)
 		assert.Len(t, teams, 2)
 		assert.Contains(t, teams, "Team X")
 		assert.Contains(t, teams, "Team Y")
@@ -544,7 +547,7 @@ func TestStoreUserPrediction_Integration(t *testing.T) {
 			},
 		}
 
-		prediction := Prediction{
+		prediction := shared.Prediction{
 			UserID:   "user123",
 			Username: "testuser",
 			Format:   "swiss",

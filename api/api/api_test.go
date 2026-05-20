@@ -197,7 +197,7 @@ func TestCheckPrediction_Success(t *testing.T) {
 	mockStore.SetScheduledMatches([]external.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
 
 	// Set up a prediction
-	pred := store.Prediction{
+	pred := shared.Prediction{
 		UserID:   "user1",
 		Username: "testuser",
 		Format:   "swiss",
@@ -265,7 +265,7 @@ func TestGenerateLeaderboard_Success(t *testing.T) {
 	mockStore.SetScheduledMatches([]external.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
 
 	// Set up multiple predictions
-	pred1 := store.Prediction{
+	pred1 := shared.Prediction{
 		UserID:   "user1",
 		Username: "player1",
 		Format:   "swiss",
@@ -274,7 +274,7 @@ func TestGenerateLeaderboard_Success(t *testing.T) {
 		Advance:  []string{"Team C", "Team D", "Team E", "Team F", "Team G", "Team H"},
 		Lose:     []string{"Team I", "Team J"},
 	}
-	pred2 := store.Prediction{
+	pred2 := shared.Prediction{
 		UserID:   "user2",
 		Username: "player2",
 		Format:   "swiss",
@@ -338,8 +338,8 @@ func TestGetLeaderboard_Success(t *testing.T) {
 
 	// Pre-populate the leaderboard
 	mockStore.Leaderboard = []store.LeaderboardEntry{
-		{UserID: "user1", Username: "player1", Score: 5, ScoreResult: store.ScoreResult{Successes: 5, Pending: 0, Failed: 0}},
-		{UserID: "user2", Username: "player2", Score: 3, ScoreResult: store.ScoreResult{Successes: 3, Pending: 0, Failed: 0}},
+		{UserID: "user1", Username: "player1", Score: 5, ScoreResult: shared.ScoreResult{Successes: 5, Pending: 0, Failed: 0}},
+		{UserID: "user2", Username: "player2", Score: 3, ScoreResult: shared.ScoreResult{Successes: 3, Pending: 0, Failed: 0}},
 	}
 
 	api := &API{Store: mockStore}

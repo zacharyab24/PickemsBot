@@ -7,7 +7,10 @@ package store
 
 import (
 	"context"
+
 	"pickems-bot/api/external"
+	"pickems-bot/api/format"
+	"pickems-bot/api/shared"
 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -70,13 +73,13 @@ func CreateSampleScheduledMatches() []external.ScheduledMatch {
 	}
 }
 
-// CreateSamplePrediction creates sample Prediction data for testing.
-func CreateSamplePrediction(userID, username, format, round string) Prediction {
-	if format == "swiss" {
-		return Prediction{
+// CreateSamplePrediction creates sample shared.Prediction data for testing.
+func CreateSamplePrediction(userID, username string, kind format.Kind, round string) shared.Prediction {
+	if kind == format.Swiss {
+		return shared.Prediction{
 			UserID:   userID,
 			Username: username,
-			Format:   format,
+			Format:   string(kind),
 			Round:    round,
 			Win:      []string{"Team A", "Team B"},
 			Advance:  []string{"Team C", "Team D", "Team E", "Team F", "Team G", "Team H"},
@@ -84,10 +87,10 @@ func CreateSamplePrediction(userID, username, format, round string) Prediction {
 		}
 	}
 	// single-elimination format
-	return Prediction{
+	return shared.Prediction{
 		UserID:   userID,
 		Username: username,
-		Format:   format,
+		Format:   string(kind),
 		Round:    round,
 	}
 }

@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"pickems-bot/api/shared"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson"
@@ -199,7 +201,7 @@ func TestStoreLeaderboard_InsertNew(t *testing.T) {
 					UserID:   "user1",
 					Username: "TestUser1",
 					Score:    10,
-					ScoreResult: ScoreResult{
+					ScoreResult: shared.ScoreResult{
 						Successes: 5,
 						Pending:   3,
 						Failed:    2,
@@ -434,11 +436,11 @@ func TestStoreLeaderboard_MultipleEntries(t *testing.T) {
 			Round:     "test_round",
 			UpdatedAt: time.Now(),
 			Entries: []LeaderboardEntry{
-				{UserID: "user1", Username: "FirstPlace", Score: 100, ScoreResult: ScoreResult{Successes: 50, Pending: 0, Failed: 0}},
-				{UserID: "user2", Username: "SecondPlace", Score: 90, ScoreResult: ScoreResult{Successes: 45, Pending: 0, Failed: 5}},
-				{UserID: "user3", Username: "ThirdPlace", Score: 80, ScoreResult: ScoreResult{Successes: 40, Pending: 0, Failed: 10}},
-				{UserID: "user4", Username: "FourthPlace", Score: 70, ScoreResult: ScoreResult{Successes: 35, Pending: 0, Failed: 15}},
-				{UserID: "user5", Username: "FifthPlace", Score: 60, ScoreResult: ScoreResult{Successes: 30, Pending: 0, Failed: 20}},
+				{UserID: "user1", Username: "FirstPlace", Score: 100, ScoreResult: shared.ScoreResult{Successes: 50, Pending: 0, Failed: 0}},
+				{UserID: "user2", Username: "SecondPlace", Score: 90, ScoreResult: shared.ScoreResult{Successes: 45, Pending: 0, Failed: 5}},
+				{UserID: "user3", Username: "ThirdPlace", Score: 80, ScoreResult: shared.ScoreResult{Successes: 40, Pending: 0, Failed: 10}},
+				{UserID: "user4", Username: "FourthPlace", Score: 70, ScoreResult: shared.ScoreResult{Successes: 35, Pending: 0, Failed: 15}},
+				{UserID: "user5", Username: "FifthPlace", Score: 60, ScoreResult: shared.ScoreResult{Successes: 30, Pending: 0, Failed: 20}},
 			},
 		}
 

@@ -55,7 +55,6 @@ func (s *Store) StoreMatchSchedule(scheduledMatches []external.ScheduledMatch) e
 	upcomingMatchDoc := UpcomingMatchDoc{
 		Round:            s.Round,
 		ScheduledMatches: scheduledMatches,
-		TTL:              DetermineTTL(scheduledMatches),
 	}
 	update := bson.M{"$set": upcomingMatchDoc}
 

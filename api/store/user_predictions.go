@@ -10,17 +10,20 @@ import (
 	"errors"
 	"fmt"
 
+	"pickems-bot/api/format"
+	"pickems-bot/api/shared"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // StoreUserPrediction stores user predictions in the db
-// Preconditions: Receives strings containing db name, collection name and userID, and Prediction containing the users predictions
+// Preconditions: Receives strings containing db name, collection name and userID, and shared.Prediction containing the users predictions
 // Postconditions: Stores or updates the user's prediction stored in the db, or returns an error if the operations was unsuccessful
-func (s *Store) StoreUserPrediction(userID string, userPrediction Prediction) error {
+func (s *Store) StoreUserPrediction(userID string, userPrediction shared.Prediction) error {
 	// Attempt to find an existing document
-	var result Prediction
+	var result shared.Prediction
 	err := s.Collections.Predictions.FindOne(context.TODO(), bson.M{"userid": userID, "round": userPrediction.Round}).Decode(&result)
 	notFound := errors.Is(err, mongo.ErrNoDocuments)
 
@@ -56,16 +59,16 @@ func (s *Store) StoreUserPrediction(userID string, userPrediction Prediction) er
 // GetUserPrediction does DB lookup and gets prediction for a user
 // Preconditions: Receives strings containing db name, collection name and userID
 // Postconditions: Returns a user's prediction if it exists, or an error if it occurs
-func (s *Store) GetUserPrediction(userID string) (Prediction, error) {
+func (s *Store) GetUserPrediction(userID string) (shared.Prediction, error) {
 	opts := options.FindOne()
 
-	var result Prediction
+	var result shared.Prediction
 	err := s.Collections.Predictions.FindOne(context.TODO(), bson.M{"userid": userID, "round": s.Round}, opts).Decode(&result)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			return Prediction{}, err
+			return shared.Prediction{}, err
 		}
-		return Prediction{}, fmt.Errorf("error fetching results from db: %w", err)
+		return shared.Prediction{}, fmt.Errorf("error fetching results from db: %w", err)
 	}
 
 	return result, nil
@@ -74,7 +77,7 @@ func (s *Store) GetUserPrediction(userID string) (Prediction, error) {
 // GetAllUserPredictions does DB lookup and gets predictions for all users with predictions stored for a round. Used in leaderboard calculations.
 // It receives strings containing database name, collection name and round.
 // It returns slice of Predictions or an error if it occurs.
-func (s *Store) GetAllUserPredictions() ([]Prediction, error) {
+func (s *Store) GetAllUserPredictions() ([]shared.Prediction, error) {
 	// Filter query to match documents where the round is the round sting input to the function
 	filter := bson.D{{Key: "round", Value: s.Round}}
 
@@ -88,7 +91,7 @@ func (s *Store) GetAllUserPredictions() ([]Prediction, error) {
 	}
 
 	// Unpack the cursor into a slice
-	var results []Prediction
+	var results []shared.Prediction
 	if err = cursor.All(context.TODO(), &results); err != nil {
 		return nil, fmt.Errorf("error unpacking cursor into slice of predictions: %w", err)
 	}
@@ -101,30 +104,12 @@ func (s *Store) GetAllUserPredictions() ([]Prediction, error) {
 // create and maintain a new collection that will require more api calls.
 // It receives db name, collection name and round strings.
 // It returns string slice containing valid team names for the round, or returns error if an issue occurs.
-func (s *Store) GetValidTeams() ([]string, string, error) {
+func (s *Store) GetValidTeams() ([]string, format.Kind, error) {
 	// Get results stored in our db
 	dbResults, err := s.FetchMatchResultsFromDb()
 	if err != nil {
 		return nil, "", err
 	}
 
-	var teamNames []string
-
-	// Type assertion to determine the concrete type and extract team names
-	switch result := dbResults.(type) {
-	case SwissResultRecord:
-		// For Swiss format, Teams is map[string]string
-		for teamName := range result.Teams {
-			teamNames = append(teamNames, teamName)
-		}
-	case EliminationResultRecord:
-		// For Elimination format, Progression is map[string]*TeamProgress
-		for teamName := range result.Teams {
-			teamNames = append(teamNames, teamName)
-		}
-	default:
-		return nil, "", fmt.Errorf("unknown result record type: %T", result)
-	}
-
-	return teamNames, dbResults.GetType(), nil
+	return dbResults.GetTeamNames(), dbResults.GetType(), nil
 }
