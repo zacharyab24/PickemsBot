@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"pickems-bot/api/external"
 )
 
 func TestGet_ReturnsRegisteredFormats(t *testing.T) {
@@ -44,77 +45,113 @@ func TestRegister_PanicsOnDuplicate(t *testing.T) {
 	assert.Panics(t, func() { register(swissFormat{}) })
 }
 
-// region DetectKind
+// region DetectKindFromMatchNodes
 
-func TestDetectKind_Swiss(t *testing.T) {
-	wikitext := `
-== Format ==
-* The tournament uses a Swiss format
-* Teams play best of 3 matches
-`
-	kind, err := DetectKind(wikitext)
+func nodes(sections ...string) []external.MatchNode {
+	out := make([]external.MatchNode, len(sections))
+	for i, s := range sections {
+		out[i] = external.MatchNode{Section: s}
+	}
+	return out
+}
+
+func TestDetectKindFromMatchNodes_Swiss(t *testing.T) {
+	kind, err := DetectKindFromMatchNodes(nodes("Round 1", "Round 2", "Round 3"))
 	assert.NoError(t, err)
 	assert.Equal(t, Swiss, kind)
 }
 
-func TestDetectKind_SingleElimination(t *testing.T) {
-	wikitext := `
-== Format ==
-* Single-elimination bracket
-* Best of 5 grand final
-`
-	kind, err := DetectKind(wikitext)
+func TestDetectKindFromMatchNodes_SingleElim(t *testing.T) {
+	kind, err := DetectKindFromMatchNodes(nodes("Quarterfinal", "Semifinal", "Grand Final"))
 	assert.NoError(t, err)
 	assert.Equal(t, SingleElim, kind)
 }
 
-func TestDetectKind_DoubleElimination(t *testing.T) {
-	wikitext := `
-== Format ==
-* Double-elimination bracket
-* Upper and lower bracket
-`
-	kind, err := DetectKind(wikitext)
+func TestDetectKindFromMatchNodes_DoubleElim(t *testing.T) {
+	kind, err := DetectKindFromMatchNodes(nodes("Upper Bracket Round 1", "Lower Bracket Round 1", "Grand Final"))
 	assert.NoError(t, err)
 	assert.Equal(t, DoubleElim, kind)
 }
 
-func TestDetectKind_BothFormatsPrefersSwiss(t *testing.T) {
-	wikitext := `
-== Format ==
-* Swiss stage followed by single-elimination playoffs
-`
-	kind, err := DetectKind(wikitext)
+func TestDetectKindFromMatchNodes_DoubleElimTakesPriorityOverSwiss(t *testing.T) {
+	// "lower" keyword present alongside "round" — should resolve to DoubleElim
+	kind, err := DetectKindFromMatchNodes(nodes("Upper Bracket Round 1", "Lower Bracket Round 1"))
+	assert.NoError(t, err)
+	assert.Equal(t, DoubleElim, kind)
+}
+
+func TestDetectKindFromMatchNodes_CaseInsensitive(t *testing.T) {
+	kind, err := DetectKindFromMatchNodes(nodes("ROUND 1", "ROUND 2"))
 	assert.NoError(t, err)
 	assert.Equal(t, Swiss, kind)
 }
 
-func TestDetectKind_CaseInsensitive(t *testing.T) {
-	wikitext := `
-== Format ==
-* SWISS FORMAT tournament
-`
-	kind, err := DetectKind(wikitext)
-	assert.NoError(t, err)
-	assert.Equal(t, Swiss, kind)
-}
-
-func TestDetectKind_NoFormatSection(t *testing.T) {
-	wikitext := `
-== Tournament ==
-* Some tournament info
-`
-	_, err := DetectKind(wikitext)
+func TestDetectKindFromMatchNodes_NoMatchingSections(t *testing.T) {
+	_, err := DetectKindFromMatchNodes(nodes("Group A", "Group B"))
 	assert.Error(t, err)
 }
 
-func TestDetectKind_UnrecognizedFormat(t *testing.T) {
-	wikitext := `
-== Format ==
-* Round-robin format
-`
-	_, err := DetectKind(wikitext)
+func TestDetectKindFromMatchNodes_EmptyNodes(t *testing.T) {
+	_, err := DetectKindFromMatchNodes([]external.MatchNode{})
 	assert.Error(t, err)
+}
+
+// endregion
+
+// region FilterNodesByKind
+
+func TestFilterNodesByKind_SwissKeepsOnlyRoundSections(t *testing.T) {
+	input := nodes("Round 1", "Round 2", "Playoffs", "Showmatch", "Grand Final")
+	got := FilterNodesByKind(input, Swiss)
+	assert.Len(t, got, 2)
+	assert.Equal(t, "Round 1", got[0].Section)
+	assert.Equal(t, "Round 2", got[1].Section)
+}
+
+func TestFilterNodesByKind_SwissCaseInsensitive(t *testing.T) {
+	input := nodes("ROUND 1", "round 2", "Bracket Stage")
+	got := FilterNodesByKind(input, Swiss)
+	assert.Len(t, got, 2)
+}
+
+func TestFilterNodesByKind_SwissEmptyResult(t *testing.T) {
+	input := nodes("Playoffs", "Grand Final", "Showmatch")
+	got := FilterNodesByKind(input, Swiss)
+	assert.Empty(t, got)
+}
+
+func TestFilterNodesByKind_SingleElimKeepsBracketSections(t *testing.T) {
+	input := nodes("Quarterfinal", "Semifinal", "Grand Final")
+	got := FilterNodesByKind(input, SingleElim)
+	assert.Len(t, got, 3)
+}
+
+func TestFilterNodesByKind_SingleElimLiquipediaBracketTemplate(t *testing.T) {
+	// Liquipedia bracket templates use section names like "Bracket/8", "Bracket/4"
+	input := nodes("Bracket/8", "Bracket/4", "Bracket/2", "Bracket/1")
+	got := FilterNodesByKind(input, SingleElim)
+	assert.Len(t, got, 4)
+}
+
+func TestFilterNodesByKind_SingleElimMixedPage(t *testing.T) {
+	// PGL-Major-style page: Swiss rounds + playoffs bracket + showmatch
+	input := nodes("Round 1", "Round 2", "Round 3", "Bracket/8", "Showmatch")
+	got := FilterNodesByKind(input, SingleElim)
+	assert.Len(t, got, 1)
+	assert.Equal(t, "Bracket/8", got[0].Section)
+}
+
+func TestFilterNodesByKind_SingleElimPlayoffsKeyword(t *testing.T) {
+	input := nodes("Playoffs", "Round 1", "Showmatch")
+	got := FilterNodesByKind(input, SingleElim)
+	assert.Len(t, got, 1)
+	assert.Equal(t, "Playoffs", got[0].Section)
+}
+
+func TestFilterNodesByKind_DoubleElimPassesThrough(t *testing.T) {
+	input := nodes("Upper Bracket Round 1", "Lower Bracket Round 1", "Grand Final")
+	got := FilterNodesByKind(input, DoubleElim)
+	assert.Equal(t, input, got)
 }
 
 // endregion

@@ -252,23 +252,3 @@ func TestCalculateSwissScores_InvalidWinner(t *testing.T) {
 
 // endregion
 
-// region ExtractMatchListIDs
-
-// TestSwissExtractMatchListIDs_Basic tests Matchlist ID extraction
-func TestSwissExtractMatchListIDs_Basic(t *testing.T) {
-	wikitext := `
-== Format ==
-Swiss format tournament
-
-{{Matchlist|id=ABC123}}
-{{Matchlist|id=DEF456}}
-`
-	ids, kind, err := swissFormat{}.ExtractMatchListIDs(wikitext)
-	assert.NoError(t, err)
-	assert.Equal(t, Swiss, kind)
-	assert.Len(t, ids, 2)
-	assert.Contains(t, ids, "ABC123")
-	assert.Contains(t, ids, "DEF456")
-}
-
-// endregion

@@ -29,9 +29,10 @@ type Interface interface {
 	GetDatabase() interface{ Name() string }
 	GetRound() string
 	GetPage() string
-	GetOptionalParams() string
+	GetFormat() string
 	GetClient() interface{ Disconnect(context.Context) error }
 	FetchAndUpdateMatchResults() error
+	FetchAndUpdateMatchResultsFromJSON(jsonResponse string) error
 	FetchMatchNodesFromDb() ([]external.MatchNode, format.Kind, error)
 	StoreLeaderboard(leaderboard Leaderboard) error
 	FetchLeaderboardFromDB() ([]LeaderboardEntry, error)
@@ -55,9 +56,9 @@ func (s *Store) GetPage() string {
 	return s.Page
 }
 
-// GetOptionalParams returns optional query parameters
-func (s *Store) GetOptionalParams() string {
-	return s.OptionalParams
+// GetFormat returns the optional format override (empty string = auto-detect)
+func (s *Store) GetFormat() string {
+	return s.Format
 }
 
 // GetClient returns the MongoDB client

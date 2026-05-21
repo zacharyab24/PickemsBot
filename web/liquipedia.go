@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	api "pickems-bot/api/api"
 	"pickems-bot/api/external"
 	"strings"
@@ -73,9 +74,14 @@ func (s *Server) LiquipediaWebhookHandler(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusOK)
 }
 
+const resultImagePath = "resources/result.png"
+
 // RenderResultsImage fetches match nodes from the DB and regenerates the result image on disk.
 // It is called at startup and after each webhook update to ensure the image is always current.
 func RenderResultsImage(a *api.API) error {
+	if err := os.MkdirAll("resources", 0755); err != nil {
+		return fmt.Errorf("failed to create resources directory: %w", err)
+	}
 	nodes, kind, err := a.Store.FetchMatchNodesFromDb()
 	if err != nil {
 		return fmt.Errorf("failed to fetch match nodes: %w", err)
@@ -84,7 +90,7 @@ func RenderResultsImage(a *api.API) error {
 		return fmt.Errorf("kind was empty, cannot generate results image")
 	}
 	renderNodes := toRenderNodes(nodes)
-	if err := render.RenderBracket(renderNodes, string(kind), a.Store.GetRound(), "resources/result.png"); err != nil {
+	if err := render.RenderBracket(renderNodes, string(kind), a.Store.GetRound(), resultImagePath); err != nil {
 		return fmt.Errorf("RenderBracket failed: %w", err)
 	}
 	return nil

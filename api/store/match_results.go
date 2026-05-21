@@ -68,50 +68,61 @@ func (s *Store) GetMatchResults() (format.MatchResult, error) {
 	return rec, nil
 }
 
-// Helper function to get match data for a given liquipedia page. Note that the wiki is hard coded to counterstrike
-// Preconditions: Receives string containing liquipedia page (such as BLAST/Major/2025/Austin/Stage_1) and optional params (such as  &section=24 (this is not used in majors))
-// Postconditions: MatchResult interface and raw []MatchNode slice, or error if it occurs
-func (s *Store) fetchMatchDataFromExternal() (format.MatchResult, []external.MatchNode, error) {
-	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", s.Page, s.OptionalParams)
-
-	// Get wikitext from url
-	wikitext, err := external.GetWikitext(url)
-	if err != nil {
-		return nil, nil, fmt.Errorf("error fetching match2bracketid data: %w", err)
-	}
-
-	// Detect format from wikitext, then dispatch to the per-format ID extractor.
-	kind, err := format.DetectKind(wikitext)
-	if err != nil {
-		return nil, nil, fmt.Errorf("error detecting format: %w", err)
-	}
-	f, err := format.Get(kind)
-	if err != nil {
-		return nil, nil, fmt.Errorf("unknown format type: %s", kind)
-	}
-	ids, _, err := f.ExtractMatchListIDs(wikitext)
-	if err != nil {
-		return nil, nil, fmt.Errorf("error extracting match list: %w", err)
-	}
-
-	// Get JSON match data filtered by match2bracketid
-	liquipediaDBApiKey := os.Getenv("LIQUIDPEDIADB_API_KEY")
-	jsonResponse, err := external.GetLiquipediaMatchData(liquipediaDBApiKey, ids)
-	if err != nil {
-		return nil, nil, fmt.Errorf("error fetching match data from liquipedia api: %w", err)
-	}
-
-	// Get match nodes from jsonResponse
+// updateMatchResultsFromJSON parses match nodes from a LiquipediaDB JSON response,
+// detects the tournament format, builds the MatchResult, and persists both the
+// result and the raw nodes. This is the shared core used by both fetch paths.
+func (s *Store) updateMatchResultsFromJSON(jsonResponse string) error {
 	matchNodes, err := external.GetMatchNodesFromJSON(jsonResponse)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error parsing match data: %w", err)
+		return fmt.Errorf("error parsing match data: %w", err)
+	}
+
+	// Use the config-level format override when set; otherwise auto-detect from
+	// the section keywords present in the match nodes. The override is needed
+	// when a single Liquipedia page contains multiple stages (e.g. Swiss group
+	// stage AND a single-elimination playoffs bracket) and auto-detection would
+	// resolve to the wrong format.
+	var kind format.Kind
+	if s.Format != "" {
+		kind = format.Kind(s.Format)
+		if _, err := format.Get(kind); err != nil {
+			return fmt.Errorf("invalid format override %q in config: %w", s.Format, err)
+		}
+	} else {
+		kind, err = format.DetectKindFromMatchNodes(matchNodes)
+		if err != nil {
+			return fmt.Errorf("error detecting format from match nodes: %w", err)
+		}
+	}
+
+	// Filter out matches that don't belong to the detected/configured format
+	// (e.g. remove playoffs and showmatch sections when targeting Swiss rounds,
+	// or remove Swiss rounds when targeting a playoffs bracket).
+	matchNodes = format.FilterNodesByKind(matchNodes, kind)
+
+	f, err := format.Get(kind)
+	if err != nil {
+		return fmt.Errorf("unknown format type: %s", kind)
 	}
 
 	result, err := f.BuildFromMatchNodes(matchNodes, s.Round)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
-	return result, matchNodes, nil
+
+	if len(result.GetTeamNames()) == 0 {
+		return fmt.Errorf("no result returned from liquipediadb")
+	}
+
+	if err := s.StoreMatchResults(result); err != nil {
+		return err
+	}
+
+	if err := s.StoreMatchNodes(matchNodes, result.GetType()); err != nil {
+		log.Printf("warning: failed to store match nodes: %v", err)
+	}
+
+	return nil
 }
 
 // StoreMatchResults persists a MatchResult to the DB. The record is BSON-marshalled
@@ -153,31 +164,25 @@ func (s *Store) StoreMatchResults(matchResult format.MatchResult) error {
 	return nil
 }
 
-// FetchAndUpdateMatchResults void function to fetch match results and update what is stored in the db
-// Preconditions: DB has been initialised, store pointer is initialised
+// FetchAndUpdateMatchResults fetches match data from LiquipediaDB and persists
+// the results. Used by the webhook-triggered update path (UpdateMatchResults).
+// Preconditions: DB has been initialised, LIQUIDPEDIADB_API_KEY env var set
 // Postconditions: Updates match results for configured tournament in DB
 func (s *Store) FetchAndUpdateMatchResults() error {
 	log.Println("updating match results stored in db...")
-	// Get data from LiquipediaDB api
-	externalResults, matchNodes, err := s.fetchMatchDataFromExternal()
+	jsonResponse, err := external.GetLiquipediaMatchDataByPage(os.Getenv("LIQUIDPEDIADB_API_KEY"), s.Page)
 	if err != nil {
-		return err
+		return fmt.Errorf("error fetching match data from liquipedia api: %w", err)
 	}
+	return s.updateMatchResultsFromJSON(jsonResponse)
+}
 
-	// Validate liquipedia data — format-agnostic check via the unified interface
-	if len(externalResults.GetTeamNames()) == 0 {
-		return fmt.Errorf("no result returned from liquipediadb")
-	}
-
-	// Update match results in db
-	if err := s.StoreMatchResults(externalResults); err != nil {
-		return err
-	}
-
-	// Persist raw nodes for results display and bracket rendering (non-critical)
-	if err := s.StoreMatchNodes(matchNodes, externalResults.GetType()); err != nil {
-		log.Printf("warning: failed to store match nodes: %v", err)
-	}
-
-	return nil
+// FetchAndUpdateMatchResultsFromJSON persists match results from a pre-fetched
+// LiquipediaDB JSON response. Used by PopulateMatches to avoid a duplicate API
+// call when the same JSON was already fetched for the schedule.
+// Preconditions: jsonResponse is a valid LiquipediaDB /match response
+// Postconditions: Updates match results for configured tournament in DB
+func (s *Store) FetchAndUpdateMatchResultsFromJSON(jsonResponse string) error {
+	log.Println("updating match results stored in db...")
+	return s.updateMatchResultsFromJSON(jsonResponse)
 }

@@ -27,7 +27,6 @@ func TestLoad_AllFields(t *testing.T) {
 tournament_name = "MyEvent_2026"
 page = "Foo/2026/Bar/Stage_1"
 round = "Stage_1"
-params = "&section=24"
 upcoming_only = true
 test = true
 `)
@@ -37,12 +36,11 @@ test = true
 	assert.Equal(t, "MyEvent_2026", cfg.TournamentName)
 	assert.Equal(t, "Foo/2026/Bar/Stage_1", cfg.Page)
 	assert.Equal(t, "Stage_1", cfg.Round)
-	assert.Equal(t, "&section=24", cfg.Params)
 	assert.True(t, cfg.UpcomingOnly)
 	assert.True(t, cfg.Test)
 }
 
-func TestLoad_DefaultBoolsAndOptionalParams(t *testing.T) {
+func TestLoad_DefaultBools(t *testing.T) {
 	path := writeTemp(t, `
 tournament_name = "X"
 page = "Y/Z"
@@ -51,7 +49,6 @@ round = "Z"
 
 	cfg, err := Load(path)
 	assert.NoError(t, err)
-	assert.Equal(t, "", cfg.Params)
 	assert.False(t, cfg.UpcomingOnly)
 	assert.False(t, cfg.Test)
 }

@@ -24,7 +24,6 @@ type tournamentConfig struct {
 	Name         string
 	Page         string
 	Round        string
-	Params       string
 	UpcomingOnly bool
 	Test         bool
 }
@@ -168,7 +167,6 @@ func writeConfig(path string, c tournamentConfig) error {
 	fmt.Fprintf(f, "tournament_name = %q\n", c.Name)
 	fmt.Fprintf(f, "page           = %q\n", c.Page)
 	fmt.Fprintf(f, "round          = %q\n", c.Round)
-	fmt.Fprintf(f, "params         = %q\n", c.Params)
 	fmt.Fprintf(f, "upcoming_only  = %t\n", c.UpcomingOnly)
 	fmt.Fprintf(f, "test           = %t\n", c.Test)
 	return nil

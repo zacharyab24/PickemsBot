@@ -35,7 +35,8 @@ type MockStore struct {
 	GetAllUserPredictionsError      error
 	FetchMatchScheduleError         error
 	StoreMatchScheduleError         error
-	FetchAndUpdateMatchResultsError error
+	FetchAndUpdateMatchResultsError         error
+	FetchAndUpdateMatchResultsFromJSONError error
 	StoreLeaderboardError           error
 	FetchLeaderboardFromDBError     error
 
@@ -209,8 +210,8 @@ func (m *MockStore) GetPage() string {
 	return "Test/Tournament/2025"
 }
 
-// GetOptionalParams returns optional parameters
-func (m *MockStore) GetOptionalParams() string {
+// GetFormat returns the format override (empty = auto-detect)
+func (m *MockStore) GetFormat() string {
 	return ""
 }
 
@@ -230,6 +231,14 @@ func (m *MockStore) GetClient() interface{ Disconnect(context.Context) error } {
 func (m *MockStore) FetchAndUpdateMatchResults() error {
 	if m.FetchAndUpdateMatchResultsError != nil {
 		return m.FetchAndUpdateMatchResultsError
+	}
+	return nil
+}
+
+// FetchAndUpdateMatchResultsFromJSON mock implementation
+func (m *MockStore) FetchAndUpdateMatchResultsFromJSON(_ string) error {
+	if m.FetchAndUpdateMatchResultsFromJSONError != nil {
+		return m.FetchAndUpdateMatchResultsFromJSONError
 	}
 	return nil
 }

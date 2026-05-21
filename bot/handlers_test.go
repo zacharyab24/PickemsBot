@@ -7,6 +7,8 @@ package bot
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -552,7 +554,12 @@ func TestCheckPredictions_GenericError(t *testing.T) {
 // region results tests
 
 func TestResults_Success(t *testing.T) {
-	t.Chdir("..") // bot/ → repo root, where resources/result.png lives
+	// Set up a self-contained temp dir with a dummy result.png so the handler
+	// can open it without depending on a pre-generated file on disk.
+	tmpDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "resources"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "resources", "result.png"), []byte("dummy png"), 0644))
+	t.Chdir(tmpDir)
 
 	bot := createTestBot("swiss")
 	mockSession := NewMockDiscordSession()

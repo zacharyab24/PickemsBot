@@ -30,14 +30,12 @@ type API struct {
 }
 
 // NewAPI creates a new API instance with the provided configuration
-func NewAPI(dbName string, mongoURI string, page string, params string, round string) (*API, error) {
+func NewAPI(dbName string, mongoURI string, page string, format string, round string) (*API, error) {
 	if dbName == "" || page == "" || round == "" {
 		return nil, fmt.Errorf("dbName, page, and round are required")
 	}
-	// Append round to page string
-	//page = fmt.Sprintf("%s/%s", page, round)
 
-	s, err := store.NewStore(dbName, mongoURI, page, params, round)
+	s, err := store.NewStore(dbName, mongoURI, page, format, round)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize store: %w", err)
 	}
@@ -307,10 +305,12 @@ func (a *API) GetTournamentInfo() (TournamentInfo, error) {
 	}, nil
 }
 
-// PopulateMatches fetches scheduled match data and stores it in the DB. Needs to be run before other functions in this package will work properly.
-// It receives receiver pointer to API and returns nil, or an error if it occurs.
+// PopulateMatches fetches all match data for the tournament page in a single
+// LiquipediaDB call and stores both the match schedule and (when scheduleOnly
+// is false) the match results. Using one API call avoids a duplicate request
+// that would otherwise be made by the separate schedule and result fetchers.
+// Preconditions: Receives receiver pointer to API and returns nil, or an error if it occurs.
 func (a *API) PopulateMatches(scheduleOnly bool) error {
-	// Check rate limiter
 	if a.rateLimiter == nil {
 		return fmt.Errorf("rate limiter not initialised")
 	}
@@ -319,70 +319,28 @@ func (a *API) PopulateMatches(scheduleOnly bool) error {
 		return fmt.Errorf("rate limiter limit reached")
 	}
 
-	// Populated Scheduled matches
-	scheduledMatches, err := FetchScheduledMatches(os.Getenv("LIQUIDPEDIADB_API_KEY"), a.Store.GetPage(), a.Store.GetOptionalParams())
+	jsonResponse, err := external.GetLiquipediaMatchDataByPage(os.Getenv("LIQUIDPEDIADB_API_KEY"), a.Store.GetPage())
+	if err != nil {
+		return fmt.Errorf("error fetching match data from liquipedia api: %w", err)
+	}
+
+	scheduledMatches, err := external.GetScheduledMatchesFromJSON(jsonResponse)
 	if err != nil {
 		return err
 	}
-
-	// Populate Scheduled Matches
-	err = a.Store.StoreMatchSchedule(scheduledMatches)
-	if err != nil {
+	sort.Slice(scheduledMatches, func(i, j int) bool {
+		return scheduledMatches[i].EpochTime < scheduledMatches[j].EpochTime
+	})
+	if err = a.Store.StoreMatchSchedule(scheduledMatches); err != nil {
 		return err
 	}
 
-	if !scheduleOnly { // Only run if scheduleOnly is false, this way we can store upcoming matches of unsupported match structures
-		if err = a.Store.FetchAndUpdateMatchResults(); err != nil {
+	if !scheduleOnly {
+		if err = a.Store.FetchAndUpdateMatchResultsFromJSON(jsonResponse); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// FetchScheduledMatches Function to get scheduled matches, and return the results
-// Preconditions: Receives string containing api key
-// Returns slice of Scheduled matches or an error if it occurs
-func FetchScheduledMatches(apiKey string, page string, optionalParams string) ([]external.ScheduledMatch, error) {
-	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", page, optionalParams)
-
-	// Get wikitext
-	wikitext, err := external.GetWikitext(url)
-	if err != nil {
-		return nil, fmt.Errorf("error getting wikitext: %w", err)
-	}
-
-	kind, err := format.DetectKind(wikitext)
-	if err != nil {
-		return nil, err
-	}
-	f, err := format.Get(format.Kind(kind))
-	if err != nil {
-		return nil, fmt.Errorf("unknown match result type: %s", kind)
-	}
-
-	// Get match2bracketid's from wikitext
-	ids, _, err := f.ExtractMatchListIDs(wikitext)
-	if err != nil {
-		return nil, fmt.Errorf("error extracting match list: %w", err)
-	}
-	// Get match data from liquipedia db
-	jsonResponse, err := external.GetLiquipediaMatchData(apiKey, ids)
-	if err != nil {
-		return nil, fmt.Errorf("error fetching match data from liquipedia api: %w", err)
-	}
-
-	// Get scheduled matches (if any) from jsonResponse
-	scheduledMatches, err := external.GetScheduledMatchesFromJSON(jsonResponse)
-	if err != nil {
-		return nil, err
-	}
-
-	// Sort slices by epoch time
-	sort.Slice(scheduledMatches, func(i, j int) bool {
-		return scheduledMatches[i].EpochTime < scheduledMatches[j].EpochTime
-	})
-
-	return scheduledMatches, nil
 }
 
 // getTwitchURL is a helper function to get the twitch url from the liquipedia stream url.

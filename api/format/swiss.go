@@ -2,7 +2,6 @@ package format
 
 import (
 	"fmt"
-	"regexp"
 	"slices"
 	"strconv"
 
@@ -191,13 +190,6 @@ func (swissFormat) CalculateScore(p shared.Prediction, r MatchResult) (ScoreRepo
 			Failed:    failed,
 		},
 	}, nil
-}
-
-// ExtractMatchListID parses wikitext and extracts the `Matchlist` id
-func (swissFormat) ExtractMatchListIDs(wikitext string) ([]string, Kind, error) {
-	re := regexp.MustCompile(`(?s)\{\{\s*Matchlist\s*\|([^}]*)\}\}`) // {{Matchlist ...}} templates used in swiss tournaments
-	return extractMatchListIds(wikitext, re)
-
 }
 
 // DecodeBSON unmarshals a Swiss BSON record back into a SwissResult.
