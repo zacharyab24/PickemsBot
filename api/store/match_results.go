@@ -70,44 +70,48 @@ func (s *Store) GetMatchResults() (format.MatchResult, error) {
 
 // Helper function to get match data for a given liquipedia page. Note that the wiki is hard coded to counterstrike
 // Preconditions: Receives string containing liquipedia page (such as BLAST/Major/2025/Austin/Stage_1) and optional params (such as  &section=24 (this is not used in majors))
-// Postconditions: MatchResult interface containing either []MatchNode or map[string]string depending on the execution path, or error if it occurs
-func (s *Store) fetchMatchDataFromExternal() (format.MatchResult, error) {
+// Postconditions: MatchResult interface and raw []MatchNode slice, or error if it occurs
+func (s *Store) fetchMatchDataFromExternal() (format.MatchResult, []external.MatchNode, error) {
 	url := fmt.Sprintf("https://liquipedia.net/counterstrike/%s?action=raw%s", s.Page, s.OptionalParams)
 
 	// Get wikitext from url
 	wikitext, err := external.GetWikitext(url)
 	if err != nil {
-		return nil, fmt.Errorf("error fetching match2bracketid data: %w", err)
+		return nil, nil, fmt.Errorf("error fetching match2bracketid data: %w", err)
 	}
 
 	// Detect format from wikitext, then dispatch to the per-format ID extractor.
 	kind, err := format.DetectKind(wikitext)
 	if err != nil {
-		return nil, fmt.Errorf("error detecting format: %w", err)
+		return nil, nil, fmt.Errorf("error detecting format: %w", err)
 	}
 	f, err := format.Get(kind)
 	if err != nil {
-		return nil, fmt.Errorf("unknown format type: %s", kind)
+		return nil, nil, fmt.Errorf("unknown format type: %s", kind)
 	}
 	ids, _, err := f.ExtractMatchListIDs(wikitext)
 	if err != nil {
-		return nil, fmt.Errorf("error extracting match list: %w", err)
+		return nil, nil, fmt.Errorf("error extracting match list: %w", err)
 	}
 
 	// Get JSON match data filtered by match2bracketid
 	liquipediaDBApiKey := os.Getenv("LIQUIDPEDIADB_API_KEY")
 	jsonResponse, err := external.GetLiquipediaMatchData(liquipediaDBApiKey, ids)
 	if err != nil {
-		return nil, fmt.Errorf("error fetching match data from liquipedia api: %w", err)
+		return nil, nil, fmt.Errorf("error fetching match data from liquipedia api: %w", err)
 	}
 
 	// Get match nodes from jsonResponse
 	matchNodes, err := external.GetMatchNodesFromJSON(jsonResponse)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing match data: %w", err)
+		return nil, nil, fmt.Errorf("error parsing match data: %w", err)
 	}
 
-	return f.BuildFromMatchNodes(matchNodes, s.Round)
+	result, err := f.BuildFromMatchNodes(matchNodes, s.Round)
+	if err != nil {
+		return nil, nil, err
+	}
+	return result, matchNodes, nil
 }
 
 // StoreMatchResults persists a MatchResult to the DB. The record is BSON-marshalled
@@ -155,7 +159,7 @@ func (s *Store) StoreMatchResults(matchResult format.MatchResult) error {
 func (s *Store) FetchAndUpdateMatchResults() error {
 	log.Println("updating match results stored in db...")
 	// Get data from LiquipediaDB api
-	externalResults, err := s.fetchMatchDataFromExternal()
+	externalResults, matchNodes, err := s.fetchMatchDataFromExternal()
 	if err != nil {
 		return err
 	}
@@ -168,6 +172,11 @@ func (s *Store) FetchAndUpdateMatchResults() error {
 	// Update match results in db
 	if err := s.StoreMatchResults(externalResults); err != nil {
 		return err
+	}
+
+	// Persist raw nodes for results display and bracket rendering (non-critical)
+	if err := s.StoreMatchNodes(matchNodes, externalResults.GetType()); err != nil {
+		log.Printf("warning: failed to store match nodes: %v", err)
 	}
 
 	return nil

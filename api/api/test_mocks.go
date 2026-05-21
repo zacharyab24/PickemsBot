@@ -234,6 +234,11 @@ func (m *MockStore) FetchAndUpdateMatchResults() error {
 	return nil
 }
 
+// FetchMatchNodesFromDb mock implementation
+func (m *MockStore) FetchMatchNodesFromDb() ([]external.MatchNode, format.Kind, error) {
+	return nil, "", nil
+}
+
 // StoreLeaderboard mock implementation
 func (m *MockStore) StoreLeaderboard(leaderboard store.Leaderboard) error {
 	if m.StoreLeaderboardError != nil {

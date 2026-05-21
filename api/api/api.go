@@ -326,9 +326,7 @@ func (a *API) PopulateMatches(scheduleOnly bool) error {
 	}
 
 	if !scheduleOnly { // Only run if scheduleOnly is false, this way we can store upcoming matches of unsupported match structures
-		// Populate Match Results -> due to some spaghetti code, this also populates match schedule
-		_, err = a.Store.GetMatchResults()
-		if err != nil {
+		if err = a.Store.FetchAndUpdateMatchResults(); err != nil {
 			return err
 		}
 	}

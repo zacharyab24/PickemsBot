@@ -135,11 +135,46 @@ func ParseMatchData(result interface{}) (*MatchNode, error) {
 		winner = teams[winnerIndex-1]
 	}
 
+	score := ""
+	if isFinished {
+		bestOfFloat, ok := match["bestof"].(float64)
+		if ok {
+			if int(bestOfFloat) == 1 {
+				games, ok := match["match2games"].([]interface{})
+				if ok && len(games) > 0 {
+					if g, ok := games[0].(map[string]interface{}); ok {
+						if scores, ok := g["scores"].([]interface{}); ok && len(scores) == 2 {
+							s1, ok1 := scores[0].(float64)
+							s2, ok2 := scores[1].(float64)
+							if ok1 && ok2 {
+								score = fmt.Sprintf("%d-%d", int(s1), int(s2))
+							}
+						}
+					}
+				}
+			} else {
+				opp1, ok1 := opponentsRaw[0].(map[string]interface{})
+				opp2, ok2 := opponentsRaw[1].(map[string]interface{})
+				if ok1 && ok2 {
+					s1, ok1 := opp1["score"].(float64)
+					s2, ok2 := opp2["score"].(float64)
+					if ok1 && ok2 {
+						score = fmt.Sprintf("%d-%d", int(s1), int(s2))
+					}
+				}
+			}
+		}
+	}
+
+	section, _ := match["section"].(string)
+
 	return &MatchNode{
-		ID:     matchIDStr,
-		Team1:  teams[0],
-		Team2:  teams[1],
-		Winner: winner,
+		ID:      matchIDStr,
+		Team1:   teams[0],
+		Team2:   teams[1],
+		Winner:  winner,
+		Score:   score,
+		Section: section,
 	}, nil
 }
 
@@ -176,22 +211,13 @@ func ParseScheduledMatches(result interface{}) (*ScheduledMatch, error) {
 	epoch := parsedTime.Unix()
 
 	// Get Twitch URL
-	streamMap, ok := match["stream"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("error mapping stream to map")
-	}
-
-	streamURLRaw, ok := streamMap["twitch"]
-	if !ok {
-		streamURLRaw, ok = streamMap["kick"]
-		if !ok {
-			return nil, fmt.Errorf("twitch or kick keys not found in stream map")
+	streamURL := ""
+	if streamMap, ok := match["stream"].(map[string]interface{}); ok {
+		if raw, ok := streamMap["twitch"]; ok {
+			streamURL, _ = raw.(string)
+		} else if raw, ok := streamMap["kick"]; ok {
+			streamURL, _ = raw.(string)
 		}
-	}
-
-	streamURL, ok := streamURLRaw.(string)
-	if !ok {
-		return nil, fmt.Errorf("stream url is not a string")
 	}
 
 	// Get bestOf

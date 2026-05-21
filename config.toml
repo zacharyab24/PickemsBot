@@ -1,8 +1,0 @@
-# Tournament configuration. Generated/updated by `go run ./scripts/configure`.
-
-tournament_name = "Blast_Austin_Major_2025"
-page           = "BLAST/Major/2025/Austin/Stage_1"
-round          = "Stage_1"
-params         = ""
-upcoming_only  = false
-test           = false

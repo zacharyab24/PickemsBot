@@ -5,12 +5,18 @@
 
 package bot
 
-import "github.com/bwmarrin/discordgo"
+import (
+	"io"
+
+	"github.com/bwmarrin/discordgo"
+)
 
 // MockDiscordSession implements DiscordSession for testing purposes
 type MockDiscordSession struct {
 	// SentMessages stores all messages sent during tests
 	SentMessages []MockMessage
+	// SentFiles stores all files sent during tests
+	SentFiles []MockFileMessage
 	// ErrorToReturn allows tests to simulate errors
 	ErrorToReturn error
 }
@@ -19,6 +25,24 @@ type MockDiscordSession struct {
 type MockMessage struct {
 	ChannelID string
 	Content   string
+}
+
+// MockFileMessage represents a file sent to a channel
+type MockFileMessage struct {
+	ChannelID string
+	Name      string
+}
+
+// ChannelFileSend implements DiscordSession.ChannelFileSend
+func (m *MockDiscordSession) ChannelFileSend(channelID string, name string, r io.Reader, options ...discordgo.RequestOption) (*discordgo.Message, error) {
+	if m.ErrorToReturn != nil {
+		return nil, m.ErrorToReturn
+	}
+	m.SentFiles = append(m.SentFiles, MockFileMessage{
+		ChannelID: channelID,
+		Name:      name,
+	})
+	return &discordgo.Message{ID: "mock_message_id", ChannelID: channelID}, nil
 }
 
 // ChannelMessageSend implements DiscordSession.ChannelMessageSend

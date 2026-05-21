@@ -31,6 +31,7 @@ func TestStoreUserPrediction_InsertNew(t *testing.T) {
 			Collections: struct {
 				Predictions   *mongo.Collection
 				MatchResults  *mongo.Collection
+				MatchNodes    *mongo.Collection
 				MatchSchedule *mongo.Collection
 				Leaderboard   *mongo.Collection
 			}{
@@ -69,6 +70,7 @@ func TestStoreUserPrediction_UpdateExisting(t *testing.T) {
 			Collections: struct {
 				Predictions   *mongo.Collection
 				MatchResults  *mongo.Collection
+				MatchNodes    *mongo.Collection
 				MatchSchedule *mongo.Collection
 				Leaderboard   *mongo.Collection
 			}{
@@ -113,6 +115,7 @@ func TestStoreUserPrediction_FindOneError(t *testing.T) {
 			Collections: struct {
 				Predictions   *mongo.Collection
 				MatchResults  *mongo.Collection
+				MatchNodes    *mongo.Collection
 				MatchSchedule *mongo.Collection
 				Leaderboard   *mongo.Collection
 			}{
@@ -148,6 +151,7 @@ func TestStoreUserPrediction_InsertError(t *testing.T) {
 			Collections: struct {
 				Predictions   *mongo.Collection
 				MatchResults  *mongo.Collection
+				MatchNodes    *mongo.Collection
 				MatchSchedule *mongo.Collection
 				Leaderboard   *mongo.Collection
 			}{
@@ -186,6 +190,7 @@ func TestStoreUserPrediction_UpdateError(t *testing.T) {
 			Collections: struct {
 				Predictions   *mongo.Collection
 				MatchResults  *mongo.Collection
+				MatchNodes    *mongo.Collection
 				MatchSchedule *mongo.Collection
 				Leaderboard   *mongo.Collection
 			}{
@@ -228,6 +233,7 @@ func TestGetUserPrediction_Success(t *testing.T) {
 			Collections: struct {
 				Predictions   *mongo.Collection
 				MatchResults  *mongo.Collection
+				MatchNodes    *mongo.Collection
 				MatchSchedule *mongo.Collection
 				Leaderboard   *mongo.Collection
 			}{
@@ -267,6 +273,7 @@ func TestGetUserPrediction_NotFound(t *testing.T) {
 			Collections: struct {
 				Predictions   *mongo.Collection
 				MatchResults  *mongo.Collection
+				MatchNodes    *mongo.Collection
 				MatchSchedule *mongo.Collection
 				Leaderboard   *mongo.Collection
 			}{
@@ -295,6 +302,7 @@ func TestGetUserPrediction_DatabaseError(t *testing.T) {
 			Collections: struct {
 				Predictions   *mongo.Collection
 				MatchResults  *mongo.Collection
+				MatchNodes    *mongo.Collection
 				MatchSchedule *mongo.Collection
 				Leaderboard   *mongo.Collection
 			}{
@@ -326,6 +334,7 @@ func TestGetAllUserPredictions_Success(t *testing.T) {
 			Collections: struct {
 				Predictions   *mongo.Collection
 				MatchResults  *mongo.Collection
+				MatchNodes    *mongo.Collection
 				MatchSchedule *mongo.Collection
 				Leaderboard   *mongo.Collection
 			}{
@@ -366,6 +375,7 @@ func TestGetAllUserPredictions_Empty(t *testing.T) {
 			Collections: struct {
 				Predictions   *mongo.Collection
 				MatchResults  *mongo.Collection
+				MatchNodes    *mongo.Collection
 				MatchSchedule *mongo.Collection
 				Leaderboard   *mongo.Collection
 			}{
@@ -393,6 +403,7 @@ func TestGetAllUserPredictions_FindError(t *testing.T) {
 			Collections: struct {
 				Predictions   *mongo.Collection
 				MatchResults  *mongo.Collection
+				MatchNodes    *mongo.Collection
 				MatchSchedule *mongo.Collection
 				Leaderboard   *mongo.Collection
 			}{
@@ -424,6 +435,7 @@ func TestGetValidTeams_Swiss(t *testing.T) {
 			Collections: struct {
 				Predictions   *mongo.Collection
 				MatchResults  *mongo.Collection
+				MatchNodes    *mongo.Collection
 				MatchSchedule *mongo.Collection
 				Leaderboard   *mongo.Collection
 			}{
@@ -464,6 +476,7 @@ func TestGetValidTeams_Elimination(t *testing.T) {
 			Collections: struct {
 				Predictions   *mongo.Collection
 				MatchResults  *mongo.Collection
+				MatchNodes    *mongo.Collection
 				MatchSchedule *mongo.Collection
 				Leaderboard   *mongo.Collection
 			}{
@@ -508,6 +521,7 @@ func TestGetValidTeams_FetchError(t *testing.T) {
 			Collections: struct {
 				Predictions   *mongo.Collection
 				MatchResults  *mongo.Collection
+				MatchNodes    *mongo.Collection
 				MatchSchedule *mongo.Collection
 				Leaderboard   *mongo.Collection
 			}{
@@ -540,6 +554,7 @@ func TestStoreUserPrediction_Integration(t *testing.T) {
 			Collections: struct {
 				Predictions   *mongo.Collection
 				MatchResults  *mongo.Collection
+				MatchNodes    *mongo.Collection
 				MatchSchedule *mongo.Collection
 				Leaderboard   *mongo.Collection
 			}{

@@ -25,7 +25,7 @@ import (
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-		log.Fatal("Error loading .env file")
+		log.Println("No .env file found, using environment variables")
 	}
 
 	cfg, err := config.Load("config.toml")
@@ -48,6 +48,13 @@ func main() {
 	}
 	if err := apiInstance.GenerateLeaderboard(); err != nil {
 		log.Fatal(err)
+	}
+
+	// Regenerate the result image on startup so it always reflects the current
+	// tournament/bracket. The image on disk can be stale if the bot was previously
+	// run against a different tournament and the file was not cleared between restarts.
+	if err := web.RenderResultsImage(apiInstance); err != nil {
+		log.Printf("warning: could not render results image on startup: %v", err)
 	}
 
 	var discordToken string
