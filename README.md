@@ -19,7 +19,7 @@ The following are discord messages that the bot will respond to. These can be in
 The bot reads from two files:
 
 - `.env` — secrets only (Discord tokens, Mongo URI, Liquipedia API key). Not tracked in git.
-- `config.toml` — tournament settings (page, round, etc.). Tracked in git so the active tournament is committed alongside the code.
+- `config.toml` — tournament settings (page, round, etc.). Not tracked in git; generate it with `go run ./scripts/configure` (see below).
 
 Required `.env` keys:
 

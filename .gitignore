@@ -5,3 +5,5 @@
 *.exe
 *.out
 coverage
+config.toml
+resources/result.png
