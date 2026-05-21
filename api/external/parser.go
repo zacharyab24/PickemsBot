@@ -211,22 +211,13 @@ func ParseScheduledMatches(result interface{}) (*ScheduledMatch, error) {
 	epoch := parsedTime.Unix()
 
 	// Get Twitch URL
-	streamMap, ok := match["stream"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("error mapping stream to map")
-	}
-
-	streamURLRaw, ok := streamMap["twitch"]
-	if !ok {
-		streamURLRaw, ok = streamMap["kick"]
-		if !ok {
-			return nil, fmt.Errorf("twitch or kick keys not found in stream map")
+	streamURL := ""
+	if streamMap, ok := match["stream"].(map[string]interface{}); ok {
+		if raw, ok := streamMap["twitch"]; ok {
+			streamURL, _ = raw.(string)
+		} else if raw, ok := streamMap["kick"]; ok {
+			streamURL, _ = raw.(string)
 		}
-	}
-
-	streamURL, ok := streamURLRaw.(string)
-	if !ok {
-		return nil, fmt.Errorf("stream url is not a string")
 	}
 
 	// Get bestOf

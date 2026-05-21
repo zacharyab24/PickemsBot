@@ -50,6 +50,13 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Regenerate the result image on startup so it always reflects the current
+	// tournament/bracket. The image on disk can be stale if the bot was previously
+	// run against a different tournament and the file was not cleared between restarts.
+	if err := web.RenderResultsImage(apiInstance); err != nil {
+		log.Printf("warning: could not render results image on startup: %v", err)
+	}
+
 	var discordToken string
 	if cfg.Test {
 		discordToken = os.Getenv("DISCORD_BETA_TOKEN")

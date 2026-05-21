@@ -2,8 +2,10 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	api "pickems-bot/api/api"
 	"pickems-bot/api/external"
 	"strings"
 
@@ -63,22 +65,29 @@ func (s *Server) LiquipediaWebhookHandler(w http.ResponseWriter, r *http.Request
 			log.Println("RecalculateAndStoreLeaderboard failed:", err)
 			return
 		}
-		nodes, kind, err := s.api.Store.FetchMatchNodesFromDb()
-		if err != nil {
-			log.Println("FetchMatchNodesFromDb failed: ", err)
-			return
-		}
-		if kind == "" {
-			log.Println("kind was empty, cannot generate results render")
-			return
-		}
-		renderNodes := toRenderNodes(nodes)
-		if err := render.RenderBracket(renderNodes, string(kind), s.api.Store.GetRound(), "resources/result.png"); err != nil {
-			log.Println("RenderBracket failed: ", err)
+		if err := RenderResultsImage(s.api); err != nil {
+			log.Println("RenderResultsImage failed:", err)
 		}
 	}(event)
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// RenderResultsImage fetches match nodes from the DB and regenerates the result image on disk.
+// It is called at startup and after each webhook update to ensure the image is always current.
+func RenderResultsImage(a *api.API) error {
+	nodes, kind, err := a.Store.FetchMatchNodesFromDb()
+	if err != nil {
+		return fmt.Errorf("failed to fetch match nodes: %w", err)
+	}
+	if kind == "" {
+		return fmt.Errorf("kind was empty, cannot generate results image")
+	}
+	renderNodes := toRenderNodes(nodes)
+	if err := render.RenderBracket(renderNodes, string(kind), a.Store.GetRound(), "resources/result.png"); err != nil {
+		return fmt.Errorf("RenderBracket failed: %w", err)
+	}
+	return nil
 }
 
 // toRenderNodes converts external.MatchNode slice to the renderer's input type.
