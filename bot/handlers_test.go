@@ -135,8 +135,7 @@ func TestTeams_Success(t *testing.T) {
 	require.Len(t, mockSession.SentMessages, 1)
 	msg := mockSession.GetLastMessage()
 	assert.Equal(t, "channel123", msg.ChannelID)
-	assert.Contains(t, msg.Content, "Valid teams")
-	// Should contain team names
+	assert.Contains(t, msg.Content, "Teams in this Stage")
 	assert.Contains(t, msg.Content, "Team")
 }
 
@@ -233,7 +232,7 @@ func TestSetPredictions_InvalidInput(t *testing.T) {
 
 	require.Len(t, mockSession.SentMessages, 1)
 	msg := mockSession.GetLastMessage()
-	assert.Contains(t, msg.Content, "error")
+	assert.Contains(t, strings.ToLower(msg.Content), "error")
 }
 
 // endregion
@@ -251,10 +250,7 @@ func TestCheckPredictions_NoPredictions(t *testing.T) {
 	msg := mockSession.GetLastMessage()
 	assert.Equal(t, "channel123", msg.ChannelID)
 	// Should indicate no predictions stored
-	assert.True(t,
-		strings.Contains(msg.Content, "does not have any Pickems") ||
-			strings.Contains(msg.Content, "error"),
-	)
+	assert.Contains(t, strings.ToLower(msg.Content), "error")
 }
 
 func TestCheckPredictions_WithPredictions(t *testing.T) {
@@ -344,7 +340,7 @@ func TestNewMessage_RoutesTeamsCommand(t *testing.T) {
 	bot.newMessageHandler(mockSession, message, "bot_id")
 
 	require.Len(t, mockSession.SentMessages, 1)
-	assert.Contains(t, mockSession.GetLastMessage().Content, "Valid teams")
+	assert.Contains(t, mockSession.GetLastMessage().Content, "Teams in this Stage")
 }
 
 func TestNewMessage_IgnoresUnknownCommands(t *testing.T) {
@@ -578,7 +574,7 @@ func TestResults_FileNotFound(t *testing.T) {
 	bot.resultsHandler(mockSession, message)
 
 	require.Len(t, mockSession.SentMessages, 1)
-	assert.Contains(t, mockSession.SentMessages[0].Content, "error")
+	assert.Contains(t, strings.ToLower(mockSession.SentMessages[0].Content), "error")
 	assert.Len(t, mockSession.SentFiles, 0)
 }
 

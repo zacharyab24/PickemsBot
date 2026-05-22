@@ -28,14 +28,25 @@ func TestSingleElimCalculateScore_AllSucceeded(t *testing.T) {
 		},
 	}
 
-	scoreResult, report, err := singleElimFormat{}.CalculateScore(prediction, results)
+	report, err := singleElimFormat{}.CalculateScore(prediction, results)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 2, scoreResult.Successes)
-	assert.Equal(t, 0, scoreResult.Pending)
-	assert.Equal(t, 0, scoreResult.Failed)
-	assert.Contains(t, report, "Team A to win the Grand Final")
-	assert.Contains(t, report, "Team B to lose in the Semifinal")
+	assert.Equal(t, 2, report.GetScore().Successes)
+	assert.Equal(t, 0, report.GetScore().Pending)
+	assert.Equal(t, 0, report.GetScore().Failed)
+
+	r := report.(SingleElimReport)
+	var foundA, foundB bool
+	for _, p := range r.Predictions {
+		if p.Team == "Team A" && p.ToWin && p.Round == "Grand Final" {
+			foundA = true
+		}
+		if p.Team == "Team B" && !p.ToWin && p.Round == "Semifinal" {
+			foundB = true
+		}
+	}
+	assert.True(t, foundA, "expected Team A predicted as Grand Final winner")
+	assert.True(t, foundB, "expected Team B predicted as Semifinal loser")
 }
 
 // TestSingleElimCalculateScore_PendingWhenResultMissing tests a team that hasn't played yet.
@@ -51,10 +62,10 @@ func TestSingleElimCalculateScore_PendingWhenResultMissing(t *testing.T) {
 		},
 	}
 
-	scoreResult, _, err := singleElimFormat{}.CalculateScore(prediction, results)
+	report, err := singleElimFormat{}.CalculateScore(prediction, results)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 1, scoreResult.Pending)
+	assert.Equal(t, 1, report.GetScore().Pending)
 }
 
 // TestSingleElimCalculateScore_PendingWhenStatusPending tests an in-progress match.
@@ -70,10 +81,10 @@ func TestSingleElimCalculateScore_PendingWhenStatusPending(t *testing.T) {
 		},
 	}
 
-	scoreResult, _, err := singleElimFormat{}.CalculateScore(prediction, results)
+	report, err := singleElimFormat{}.CalculateScore(prediction, results)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 1, scoreResult.Pending)
+	assert.Equal(t, 1, report.GetScore().Pending)
 }
 
 // TestSingleElimCalculateScore_FailedOnMismatch tests a wrong-round prediction.
@@ -89,10 +100,10 @@ func TestSingleElimCalculateScore_FailedOnMismatch(t *testing.T) {
 		},
 	}
 
-	scoreResult, _, err := singleElimFormat{}.CalculateScore(prediction, results)
+	report, err := singleElimFormat{}.CalculateScore(prediction, results)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 1, scoreResult.Failed)
+	assert.Equal(t, 1, report.GetScore().Failed)
 }
 
 // TestSingleElimCalculateScore_EmptyPrediction errors when prediction has no entries.
@@ -106,7 +117,7 @@ func TestSingleElimCalculateScore_EmptyPrediction(t *testing.T) {
 		},
 	}
 
-	_, _, err := singleElimFormat{}.CalculateScore(prediction, results)
+	_, err := singleElimFormat{}.CalculateScore(prediction, results)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot be empty")
@@ -123,7 +134,7 @@ func TestSingleElimCalculateScore_EmptyResults(t *testing.T) {
 		Teams: map[string]shared.TeamProgress{},
 	}
 
-	_, _, err := singleElimFormat{}.CalculateScore(prediction, results)
+	_, err := singleElimFormat{}.CalculateScore(prediction, results)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot be empty")
@@ -131,7 +142,7 @@ func TestSingleElimCalculateScore_EmptyResults(t *testing.T) {
 
 // TestSingleElimCalculateScore_WrongResultType ensures we error rather than panic.
 func TestSingleElimCalculateScore_WrongResultType(t *testing.T) {
-	_, _, err := singleElimFormat{}.CalculateScore(shared.Prediction{}, SwissResult{})
+	_, err := singleElimFormat{}.CalculateScore(shared.Prediction{}, SwissResult{})
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "expected EliminationResult")

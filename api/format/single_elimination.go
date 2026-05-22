@@ -6,13 +6,32 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
-	"strings"
 
 	"pickems-bot/api/external"
 	"pickems-bot/api/shared"
 
 	"go.mongodb.org/mongo-driver/bson"
 )
+
+// ElimPredictionEntry is the per-team result for a single-elimination prediction.
+type ElimPredictionEntry struct {
+	Team   string
+	Round  string
+	ToWin  bool         // true = predicted to win the Grand Final; false = predicted to be eliminated here
+	Status BucketStatus
+}
+
+// SingleElimReport is the structured result returned by singleElimFormat.CalculateScore.
+type SingleElimReport struct {
+	Predictions []ElimPredictionEntry
+	Score       shared.ScoreResult
+}
+
+// FormatKind implements ScoreReport.
+func (SingleElimReport) FormatKind() Kind { return SingleElim }
+
+// GetScore implements ScoreReport.
+func (s SingleElimReport) GetScore() shared.ScoreResult { return s.Score }
 
 // EliminationResult is the unified in-memory + on-disk representation of a
 // single-elimination bracket's progression data. Teams maps team name →
@@ -65,55 +84,60 @@ func (singleElimFormat) GeneratePrediction(user shared.User, round string, teams
 	return prediction, nil
 }
 
-func (singleElimFormat) CalculateScore(p shared.Prediction, r MatchResult) (shared.ScoreResult, string, error) {
+func (singleElimFormat) CalculateScore(p shared.Prediction, r MatchResult) (ScoreReport, error) {
 	result, ok := r.(EliminationResult)
 	if !ok {
-		return shared.ScoreResult{}, "", fmt.Errorf("single-elimination: expected EliminationResult, got %T", r)
+		return nil, fmt.Errorf("single-elimination: expected EliminationResult, got %T", r)
 	}
 	results := result.Teams
 
 	if len(p.Progression) == 0 || len(results) == 0 {
-		return shared.ScoreResult{}, "", fmt.Errorf("prediction progress or results progress cannot be empty")
+		return nil, fmt.Errorf("prediction progress or results progress cannot be empty")
 	}
 
 	var succeeded, pending, failed int
-	var response strings.Builder
+	predictions := make([]ElimPredictionEntry, 0, len(p.Progression))
 
 	for team, predictedProgress := range p.Progression {
 		resultProgress, found := results[team]
 
-		if predictedProgress.Round == "Grand Final" && predictedProgress.Status == "advanced" {
-			response.WriteString(fmt.Sprintf("- %s to win the %s", team, predictedProgress.Round))
-		} else {
-			response.WriteString(fmt.Sprintf("- %s to lose in the %s", team, predictedProgress.Round))
-		}
+		toWin := predictedProgress.Round == "Grand Final" && predictedProgress.Status == "advanced"
 
-		var status bucketStatus
+		var status BucketStatus
 		switch {
 		case !found || resultProgress.Status == "pending":
-			status = statusPending
+			status = StatusPending
 		case predictedProgress.Round == resultProgress.Round && predictedProgress.Status == resultProgress.Status:
-			status = statusSucceeded
+			status = StatusSucceeded
 		default:
-			status = statusFailed
+			status = StatusFailed
 		}
 
-		response.WriteString(fmt.Sprintf(" %s\n", status))
+		predictions = append(predictions, ElimPredictionEntry{
+			Team:   team,
+			Round:  predictedProgress.Round,
+			ToWin:  toWin,
+			Status: status,
+		})
+
 		switch status {
-		case statusSucceeded:
+		case StatusSucceeded:
 			succeeded++
-		case statusPending:
+		case StatusPending:
 			pending++
-		case statusFailed:
+		case StatusFailed:
 			failed++
 		}
 	}
 
-	return shared.ScoreResult{
-		Successes: succeeded,
-		Pending:   pending,
-		Failed:    failed,
-	}, response.String(), nil
+	return SingleElimReport{
+		Predictions: predictions,
+		Score: shared.ScoreResult{
+			Successes: succeeded,
+			Pending:   pending,
+			Failed:    failed,
+		},
+	}, nil
 }
 
 // DecodeBSON unmarshals a single-elim BSON record back into an EliminationResult.
@@ -137,7 +161,7 @@ func (singleElimFormat) BuildFromMatchNodes(nodes []external.MatchNode, round st
 
 // ExtractMatchListID parses wikitext and extracts the `Matchlist` id
 func (singleElimFormat) ExtractMatchListIDs(wikitext string) ([]string, Kind, error) {
-	re := regexp.MustCompile(`(?s)\{\{\s*Bracket\s*\|([^}]*)\}\}`) // {{ShowBracket ...}} templates used in single elim
+	re := regexp.MustCompile(`(?s)\{\{\s*(?:Show)?Bracket\s*\|([^}]*)\}\}`) // {{Bracket ...}} and {{ShowBracket ...}} templates used in single elim
 	return extractMatchListIds(wikitext, re)
 
 }

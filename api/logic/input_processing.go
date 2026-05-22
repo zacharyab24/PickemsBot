@@ -60,10 +60,10 @@ func CheckTeamNames(predictionTeams []string, validTeams []string) ([]string, []
 // CalculateUserScore calculates a user's score based on their predictions by
 // dispatching through the format registry — the per-format scoring lives in
 // the api/format package.
-func CalculateUserScore(userPrediction shared.Prediction, results format.MatchResult) (shared.ScoreResult, string, error) {
+func CalculateUserScore(userPrediction shared.Prediction, results format.MatchResult) (format.ScoreReport, error) {
 	f, err := format.Get(format.Kind(results.GetType()))
 	if err != nil {
-		return shared.ScoreResult{}, "", err
+		return nil, err
 	}
 	return f.CalculateScore(userPrediction, results)
 }

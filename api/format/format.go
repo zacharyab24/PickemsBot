@@ -41,6 +41,14 @@ type MatchResult interface {
 	GetTeamNames() []string
 }
 
+// ScoreReport is the structured result of CalculateScore. Callers that need
+// format-specific data (e.g. to build a Discord embed) do a type switch on
+// the concrete type (SwissReport, SingleElimReport, …).
+type ScoreReport interface {
+	FormatKind() Kind
+	GetScore() shared.ScoreResult
+}
+
 // Format is the strategy interface every tournament format implements.
 // Implementations live in their own file in this package and self-register
 // from init() via register().
@@ -52,7 +60,7 @@ type Format interface {
 	GeneratePrediction(user shared.User, round string, teams []string) (shared.Prediction, error)
 
 	// Scoring
-	CalculateScore(p shared.Prediction, r MatchResult) (shared.ScoreResult, string, error)
+	CalculateScore(p shared.Prediction, r MatchResult) (ScoreReport, error)
 
 	// DB Interaction
 	DecodeBSON(bytes []byte) (MatchResult, error)

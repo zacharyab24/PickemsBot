@@ -121,28 +121,28 @@ func (a *API) SetUserPrediction(user shared.User, inputTeams []string, round str
 
 // CheckPrediction contains the logic required to check a prediction.
 // It receives a user struct and receiver pointer to api.
-// It returns a string containing the results of the user's predictions, or an error if it occurs.
-func (a *API) CheckPrediction(user shared.User) (string, error) {
+// It returns a ScoreReport containing the results of the user's predictions, or an error if it occurs.
+func (a *API) CheckPrediction(user shared.User) (format.ScoreReport, error) {
 	err := a.Store.EnsureScheduledMatches()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	// Fetch prediction from db
 	doc, err := a.Store.GetUserPrediction(user.UserID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// Fetch match results from db
 	results, err := a.Store.GetMatchResults()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// Evaluate scores
-	_, report, err := logic.CalculateUserScore(doc, results)
+	report, err := logic.CalculateUserScore(doc, results)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	return report, nil
 }
@@ -175,10 +175,11 @@ func (a *API) GenerateLeaderboard() error {
 	// Iterate over each user's predictions, calculate their score and append the leaderboardEntry to the leaderboard object
 	for _, pred := range preds {
 		var leaderboardEntry store.LeaderboardEntry
-		scores, _, err := logic.CalculateUserScore(pred, results)
+		scoreReport, err := logic.CalculateUserScore(pred, results)
 		if err != nil {
 			return err
 		}
+		scores := scoreReport.GetScore()
 
 		leaderboardEntry.UserID = pred.UserID
 		leaderboardEntry.Username = pred.Username
@@ -200,11 +201,11 @@ func (a *API) GenerateLeaderboard() error {
 // GetLeaderboard fetches the leaderboard from the db and generates a response string
 // Preconditions: Receives receiver pointer to api
 // Postconditions: Returns a string with the summary of the leaderboard for this round of the tournament
-func (a *API) GetLeaderboard() (string, error) {
+func (a *API) GetLeaderboard() ([]LeaderboardUser, error) {
 	// Fetch leaderboard from DB
 	entries, err := a.Store.FetchLeaderboardFromDB()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// Order the leaderboard in descending order so that the user with the highest score appear at the top. Note score = successes - failures and there is no tie breaker
@@ -213,13 +214,18 @@ func (a *API) GetLeaderboard() (string, error) {
 	})
 
 	// Generate Response string
-	var response strings.Builder
-	response.WriteString("The users with the best pickems are:\n")
+	response := make([]LeaderboardUser, 0, len(entries))
 	for i, user := range entries {
-		response.WriteString(fmt.Sprintf("%d. %s, %d successes, %d failures\n", i+1, user.Username, user.ScoreResult.Successes, user.ScoreResult.Failed))
+		entry := LeaderboardUser{
+			Username:  user.Username,
+			Rank:      i + 1,
+			Successes: user.ScoreResult.Successes,
+			Failures:  user.ScoreResult.Failed,
+		}
+		response = append(response, entry)
 	}
 
-	return response.String(), nil
+	return response, nil
 }
 
 // GetTeams gets a list of all valid team names.
@@ -241,10 +247,8 @@ func (a *API) GetTeams() ([]string, error) {
 	return validTeams, nil
 }
 
-// GetUpcomingMatches gets the upcoming matches for this round of the tournament.
-// It receives receiver pointer to api. Will only follow the correct path if the scheduled matches data has been initialized.
-// It returns a string slice containing all upcoming matches in this round.
-func (a *API) GetUpcomingMatches() ([]string, error) {
+// GetUpcomingMatches gets the upcoming matches for this round of the tournament. Will only follow the correct path if the scheduled matches data has been initialized.
+func (a *API) GetUpcomingMatches() ([]external.ScheduledMatch, error) {
 	err := a.Store.EnsureScheduledMatches()
 	if err != nil {
 		return nil, err
@@ -255,7 +259,7 @@ func (a *API) GetUpcomingMatches() ([]string, error) {
 		return nil, err
 	}
 
-	var matches []string
+	var matches []external.ScheduledMatch
 	for _, match := range scheduledMatches {
 		// upcomingMatches contains all matches for a round in tournament, not just future ones, however in this function
 		// we only care about the ones in the future, so if the start time is before now, don't add it to the response
@@ -263,42 +267,44 @@ func (a *API) GetUpcomingMatches() ([]string, error) {
 		if match.EpochTime < time.Now().Unix() || match.Finished {
 			continue
 		}
-		streamURL := getTwitchURL(match.StreamURL)
-		if streamURL == "unknown" {
-			matches = append(matches, fmt.Sprintf("- %s VS %s (bo%s): <t:%d>\n", match.Team1, match.Team2, match.BestOf, match.EpochTime))
+		// Pre-process stream URL into a full link the handler can use directly
+		url := getTwitchURL(match.StreamURL)
+		if url == "unknown" {
+			match.StreamURL = ""
 		} else {
-			matches = append(matches, fmt.Sprintf("- %s VS %s (bo%s): <t:%d>: %s\n", match.Team1, match.Team2, match.BestOf, match.EpochTime, streamURL))
+			match.StreamURL = url
 		}
+		matches = append(matches, match)
 	}
 	return matches, nil
 }
 
 // GetTournamentInfo gets the following information about the tournament: Tournament Name, Round, Format, RequiredPredictions.
 // It returns a string slice with the contents attribute : value containing the information listed above.
-func (a *API) GetTournamentInfo() ([]string, error) {
+func (a *API) GetTournamentInfo() (TournamentInfo, error) {
 	err := a.Store.EnsureScheduledMatches()
 	if err != nil {
-		return nil, err
+		return TournamentInfo{}, err
 	}
 
 	// Get valid team names
 	validTeams, formatName, err := a.Store.GetValidTeams()
 	if err != nil {
-		return nil, err
+		return TournamentInfo{}, err
 	}
 
 	f, err := format.Get(format.Kind(formatName))
 	if err != nil {
-		return nil, err
+		return TournamentInfo{}, err
 	}
 	requiredPredictions := f.RequiredPredictions(len(validTeams))
 
-	var values []string
-	values = append(values, fmt.Sprintf("Tournament Name: %s", a.Store.GetDatabase().Name()))
-	values = append(values, fmt.Sprintf("Round: %s", a.Store.GetRound()))
-	values = append(values, fmt.Sprintf("Format: %s", formatName))
-	values = append(values, fmt.Sprintf("Number of required teams: %d", requiredPredictions))
-	return values, nil
+	return TournamentInfo{
+		TournamentName: a.Store.GetDatabase().Name(),
+		Round:          a.Store.GetRound(),
+		Format:         string(formatName),
+		NumTeams:       requiredPredictions,
+	}, nil
 }
 
 // PopulateMatches fetches scheduled match data and stores it in the DB. Needs to be run before other functions in this package will work properly.

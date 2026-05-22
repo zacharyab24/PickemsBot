@@ -11,3 +11,19 @@ type ScoreResult struct {
 	Pending   int
 	Failed    int
 }
+
+// TournamentInfo provides metadata for the configured tournament
+type TournamentInfo struct {
+	TournamentName string
+	Round          string
+	Format         string
+	NumTeams       int
+}
+
+// LeaderboardUser represents a single user on the leaderboard
+type LeaderboardUser struct {
+	Username  string
+	Rank      int
+	Successes int
+	Failures  int
+}

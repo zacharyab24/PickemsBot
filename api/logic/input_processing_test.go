@@ -114,15 +114,16 @@ func TestCalculateUserScore_SwissSuccess(t *testing.T) {
 		},
 	}
 
-	scoreResult, report, err := CalculateUserScore(prediction, results)
+	report, err := CalculateUserScore(prediction, results)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 7, scoreResult.Successes)
-	assert.Equal(t, 0, scoreResult.Pending)
-	assert.Equal(t, 0, scoreResult.Failed)
-	assert.Contains(t, report, "[3-0]")
-	assert.Contains(t, report, "[3-1, 3-2]")
-	assert.Contains(t, report, "[0-3]")
+	assert.Equal(t, 7, report.GetScore().Successes)
+	assert.Equal(t, 0, report.GetScore().Pending)
+	assert.Equal(t, 0, report.GetScore().Failed)
+	swissReport := report.(format.SwissReport)
+	assert.Len(t, swissReport.WinPicks, 3)
+	assert.Len(t, swissReport.AdvancePicks, 2)
+	assert.Len(t, swissReport.LosePicks, 2)
 }
 
 // TestCalculateUserScore_SwissPending tests Swiss score with pending matches
@@ -142,13 +143,12 @@ func TestCalculateUserScore_SwissPending(t *testing.T) {
 		},
 	}
 
-	scoreResult, report, err := CalculateUserScore(prediction, results)
+	report, err := CalculateUserScore(prediction, results)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 0, scoreResult.Successes)
-	assert.Equal(t, 3, scoreResult.Pending)
-	assert.Equal(t, 0, scoreResult.Failed)
-	assert.Contains(t, report, "[Pending]")
+	assert.Equal(t, 0, report.GetScore().Successes)
+	assert.Equal(t, 3, report.GetScore().Pending)
+	assert.Equal(t, 0, report.GetScore().Failed)
 }
 
 // TestCalculateUserScore_SwissFailed tests Swiss score with failed predictions
@@ -168,13 +168,12 @@ func TestCalculateUserScore_SwissFailed(t *testing.T) {
 		},
 	}
 
-	scoreResult, report, err := CalculateUserScore(prediction, results)
+	report, err := CalculateUserScore(prediction, results)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 0, scoreResult.Successes)
-	assert.Equal(t, 0, scoreResult.Pending)
-	assert.Equal(t, 3, scoreResult.Failed)
-	assert.Contains(t, report, "[Failed]")
+	assert.Equal(t, 0, report.GetScore().Successes)
+	assert.Equal(t, 0, report.GetScore().Pending)
+	assert.Equal(t, 3, report.GetScore().Failed)
 }
 
 // TestCalculateUserScore_SwissMixedResults tests Swiss score with mixed results
@@ -191,18 +190,18 @@ func TestCalculateUserScore_SwissMixedResults(t *testing.T) {
 			"Team A": "3-0", // Success
 			"Team B": "2-0", // Pending
 			"Team C": "3-1", // Success
-			"Team D": "2-1", // Pending
+			"Team D": "1-0", // Pending
 			"Team E": "0-3", // Success
 			"Team F": "3-2", // Failed (won when should lose)
 		},
 	}
 
-	scoreResult, _, err := CalculateUserScore(prediction, results)
+	report, err := CalculateUserScore(prediction, results)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 3, scoreResult.Successes)
-	assert.Equal(t, 2, scoreResult.Pending)
-	assert.Equal(t, 1, scoreResult.Failed)
+	assert.Equal(t, 3, report.GetScore().Successes)
+	assert.Equal(t, 2, report.GetScore().Pending)
+	assert.Equal(t, 1, report.GetScore().Failed)
 }
 
 // TestCalculateUserScore_EliminationSuccess tests elimination bracket scoring with successful predictions
@@ -224,14 +223,23 @@ func TestCalculateUserScore_EliminationSuccess(t *testing.T) {
 		},
 	}
 
-	scoreResult, report, err := CalculateUserScore(prediction, results)
+	report, err := CalculateUserScore(prediction, results)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 3, scoreResult.Successes)
-	assert.Equal(t, 0, scoreResult.Pending)
-	assert.Equal(t, 0, scoreResult.Failed)
-	assert.Contains(t, report, "Team A to win the Grand Final")
-	assert.Contains(t, report, "[Succeeded]")
+	assert.Equal(t, 3, report.GetScore().Successes)
+	assert.Equal(t, 0, report.GetScore().Pending)
+	assert.Equal(t, 0, report.GetScore().Failed)
+	elimReport := report.(format.SingleElimReport)
+	var teamA *format.ElimPredictionEntry
+	for i := range elimReport.Predictions {
+		if elimReport.Predictions[i].Team == "Team A" {
+			teamA = &elimReport.Predictions[i]
+			break
+		}
+	}
+	assert.NotNil(t, teamA)
+	assert.True(t, teamA.ToWin)
+	assert.Equal(t, format.StatusSucceeded, teamA.Status)
 }
 
 // TestCalculateUserScore_EliminationPending tests elimination with pending results
@@ -251,13 +259,12 @@ func TestCalculateUserScore_EliminationPending(t *testing.T) {
 		},
 	}
 
-	scoreResult, report, err := CalculateUserScore(prediction, results)
+	report, err := CalculateUserScore(prediction, results)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 0, scoreResult.Successes)
-	assert.Equal(t, 2, scoreResult.Pending)
-	assert.Equal(t, 0, scoreResult.Failed)
-	assert.Contains(t, report, "[Pending]")
+	assert.Equal(t, 0, report.GetScore().Successes)
+	assert.Equal(t, 2, report.GetScore().Pending)
+	assert.Equal(t, 0, report.GetScore().Failed)
 }
 
 // TestCalculateUserScore_EliminationFailed tests elimination with failed predictions
@@ -277,13 +284,12 @@ func TestCalculateUserScore_EliminationFailed(t *testing.T) {
 		},
 	}
 
-	scoreResult, report, err := CalculateUserScore(prediction, results)
+	report, err := CalculateUserScore(prediction, results)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 0, scoreResult.Successes)
-	assert.Equal(t, 0, scoreResult.Pending)
-	assert.Equal(t, 2, scoreResult.Failed)
-	assert.Contains(t, report, "[Failed]")
+	assert.Equal(t, 0, report.GetScore().Successes)
+	assert.Equal(t, 0, report.GetScore().Pending)
+	assert.Equal(t, 2, report.GetScore().Failed)
 }
 
 // TestCalculateUserScore_EliminationTeamNotInResults tests when predicted team not in results
@@ -301,13 +307,12 @@ func TestCalculateUserScore_EliminationTeamNotInResults(t *testing.T) {
 		},
 	}
 
-	scoreResult, report, err := CalculateUserScore(prediction, results)
+	report, err := CalculateUserScore(prediction, results)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 0, scoreResult.Successes)
-	assert.Equal(t, 1, scoreResult.Pending) // Missing team counts as pending
-	assert.Equal(t, 0, scoreResult.Failed)
-	assert.Contains(t, report, "[Pending]")
+	assert.Equal(t, 0, report.GetScore().Successes)
+	assert.Equal(t, 1, report.GetScore().Pending) // Missing team counts as pending
+	assert.Equal(t, 0, report.GetScore().Failed)
 }
 
 // UnknownResult is a mock type for testing unknown result types
@@ -325,7 +330,7 @@ func TestCalculateUserScore_UnknownType(t *testing.T) {
 
 	results := UnknownResult{}
 
-	_, _, err := CalculateUserScore(prediction, results)
+	_, err := CalculateUserScore(prediction, results)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown format")
