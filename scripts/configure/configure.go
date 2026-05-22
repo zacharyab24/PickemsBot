@@ -24,6 +24,7 @@ type tournamentConfig struct {
 	Name         string
 	Page         string
 	Round        string
+	Format       string // empty = auto-detect; set to "swiss" or "single-elimination" for multi-stage pages
 	UpcomingOnly bool
 	Test         bool
 }
@@ -167,6 +168,7 @@ func writeConfig(path string, c tournamentConfig) error {
 	fmt.Fprintf(f, "tournament_name = %q\n", c.Name)
 	fmt.Fprintf(f, "page           = %q\n", c.Page)
 	fmt.Fprintf(f, "round          = %q\n", c.Round)
+	fmt.Fprintf(f, "format         = %q\n", c.Format)
 	fmt.Fprintf(f, "upcoming_only  = %t\n", c.UpcomingOnly)
 	fmt.Fprintf(f, "test           = %t\n", c.Test)
 	return nil
