@@ -22,6 +22,7 @@ import (
 func main() {
 	tourneyURL := flag.String("url", "", "Liquipedia tournament URL (required)")
 	stage := flag.String("stage", "", "Stage name to use (skips interactive picker)")
+	format := flag.String("format", "", `Format override: "swiss" or "single-elimination". Leave empty to auto-detect (fine for single-stage tournaments; required when a page contains multiple stages)`)
 	out := flag.String("out", "config.toml", "Output config file path")
 	flag.Parse()
 
@@ -61,9 +62,10 @@ func main() {
 	}
 
 	cfg := tournamentConfig{
-		Name:  mongoSafe(tournamentName),
-		Page:  chosenPage,
-		Round: chosenStage,
+		Name:   mongoSafe(tournamentName),
+		Page:   chosenPage,
+		Round:  chosenStage,
+		Format: *format,
 	}
 
 	if err := writeConfig(*out, cfg); err != nil {

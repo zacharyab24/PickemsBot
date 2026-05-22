@@ -175,7 +175,10 @@ func (a *API) GenerateLeaderboard() error {
 		var leaderboardEntry store.LeaderboardEntry
 		scoreReport, err := logic.CalculateUserScore(pred, results)
 		if err != nil {
-			return err
+			// Skip predictions that can't be scored — most likely a stale entry
+			// stored by an older code version or a different format for this round.
+			log.Printf("warning: skipping prediction for user %s (round=%s): %v", pred.Username, pred.Round, err)
+			continue
 		}
 		scores := scoreReport.GetScore()
 

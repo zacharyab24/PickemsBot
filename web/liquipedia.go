@@ -8,6 +8,7 @@ import (
 	"os"
 	api "pickems-bot/api/api"
 	"pickems-bot/api/external"
+	"pickems-bot/api/format"
 	"strings"
 
 	"github.com/zacharyab24/pickems-renderer/render"
@@ -89,6 +90,16 @@ func RenderResultsImage(a *api.API) error {
 	if kind == "" {
 		return fmt.Errorf("kind was empty, cannot generate results image")
 	}
+	// Trim 3rd-place consolation match and normalise section names so the
+	// renderer places each match in the correct column. Liquipedia returns
+	// all bracket nodes with Section = "Bracket/8" (the template name), but
+	// the renderer groups by Section to build columns and only recognises
+	// names like "Quarterfinals", "Semifinals", "Grand Final".
+	if kind == format.SingleElim {
+		nodes = format.TrimSingleElimNodes(nodes)
+		nodes = format.NormalizeSingleElimSections(nodes)
+	}
+
 	renderNodes := toRenderNodes(nodes)
 	if err := render.RenderBracket(renderNodes, string(kind), a.Store.GetRound(), resultImagePath); err != nil {
 		return fmt.Errorf("RenderBracket failed: %w", err)

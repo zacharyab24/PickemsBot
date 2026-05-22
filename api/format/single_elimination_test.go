@@ -498,3 +498,68 @@ func TestExtractRoundAndMatchIDs_MissingRound(t *testing.T) {
 
 // endregion
 
+// region NormalizeSingleElimSections
+
+func TestNormalizeSingleElimSections_AllSame_Bracket8(t *testing.T) {
+	// 7-node Bracket/8: all sections "Bracket/8" → should become QF/SF/GF
+	nodes := []external.MatchNode{
+		{Section: "Bracket/8"}, // QF
+		{Section: "Bracket/8"}, // QF
+		{Section: "Bracket/8"}, // QF
+		{Section: "Bracket/8"}, // QF
+		{Section: "Bracket/8"}, // SF
+		{Section: "Bracket/8"}, // SF
+		{Section: "Bracket/8"}, // GF
+	}
+	got := NormalizeSingleElimSections(nodes)
+	assert.Equal(t, "Quarterfinals", got[0].Section)
+	assert.Equal(t, "Quarterfinals", got[3].Section)
+	assert.Equal(t, "Semifinals", got[4].Section)
+	assert.Equal(t, "Semifinals", got[5].Section)
+	assert.Equal(t, "Grand Final", got[6].Section)
+}
+
+func TestNormalizeSingleElimSections_AlreadyVary_NoOp(t *testing.T) {
+	// Sections already differ — function must not change them.
+	nodes := []external.MatchNode{
+		{Section: "Quarterfinals"},
+		{Section: "Quarterfinals"},
+		{Section: "Semifinals"},
+		{Section: "Grand Final"},
+	}
+	got := NormalizeSingleElimSections(nodes)
+	assert.Equal(t, "Quarterfinals", got[0].Section)
+	assert.Equal(t, "Semifinals", got[2].Section)
+	assert.Equal(t, "Grand Final", got[3].Section)
+}
+
+func TestNormalizeSingleElimSections_Empty(t *testing.T) {
+	got := NormalizeSingleElimSections(nil)
+	assert.Empty(t, got)
+}
+
+// endregion
+
+// region TrimSingleElimNodes
+
+func TestTrimSingleElimNodes_NoOp(t *testing.T) {
+	// 7 nodes (Bracket/8 with no consolation) — nothing to trim
+	nodes := make([]external.MatchNode, 7)
+	got := TrimSingleElimNodes(nodes)
+	assert.Len(t, got, 7)
+}
+
+func TestTrimSingleElimNodes_TrimsThirdPlace(t *testing.T) {
+	// 8 nodes (Bracket/8 + 3rd-place consolation match)
+	nodes := make([]external.MatchNode, 8)
+	got := TrimSingleElimNodes(nodes)
+	assert.Len(t, got, 7)
+}
+
+func TestTrimSingleElimNodes_Empty(t *testing.T) {
+	got := TrimSingleElimNodes(nil)
+	assert.Empty(t, got)
+}
+
+// endregion
+

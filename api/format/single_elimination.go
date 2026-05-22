@@ -174,6 +174,74 @@ func bracketDepth(n int) int {
 	return k
 }
 
+// renderRoundNames maps round depth index → the section label the
+// pickems-renderer recognises in its knownSingleElimOrder table.
+// Index 0 = Grand Final (latest round), increasing index = earlier rounds.
+var renderRoundNames = []string{
+	"Grand Final",   // 0 — depth 1 bracket
+	"Semifinals",    // 1 — depth 2
+	"Quarterfinals", // 2 — depth 3
+	"Round of 16",   // 3 — depth 4
+	"Round of 32",   // 4 — depth 5
+}
+
+// NormalizeSingleElimSections rewrites the Section field on each node so the
+// renderer places each match in the correct column. It is a no-op when sections
+// already vary (Liquipedia already provided round-specific names). When all
+// sections are identical (e.g. all "Bracket/8"), it assigns renderer-compatible
+// names by match position using the same logic as getEliminationResults.
+func NormalizeSingleElimSections(nodes []external.MatchNode) []external.MatchNode {
+	if len(nodes) == 0 {
+		return nodes
+	}
+
+	// No-op if sections already differ — Liquipedia gave us round names.
+	allSame := true
+	for i := 1; i < len(nodes); i++ {
+		if nodes[i].Section != nodes[0].Section {
+			allSame = false
+			break
+		}
+	}
+	if !allSame {
+		return nodes
+	}
+
+	n := len(nodes)
+	numRounds := int(math.Ceil(math.Log2(float64(n + 1))))
+
+	out := make([]external.MatchNode, len(nodes))
+	copy(out, nodes)
+
+	for i := range out {
+		roundNum := roundFromIndex(i, n) // 1 = earliest (QF), numRounds = GF
+		idx := numRounds - roundNum      // maps to renderRoundNames: 0 = GF
+		if idx >= 0 && idx < len(renderRoundNames) {
+			out[i].Section = renderRoundNames[idx]
+		} else {
+			out[i].Section = fmt.Sprintf("Round %d", roundNum)
+		}
+	}
+
+	return out
+}
+
+// TrimSingleElimNodes trims a match node slice to the main single-elimination
+// bracket by removing any extra consolation matches (e.g. a 3rd-place bout).
+// A complete bracket of depth k has exactly 2^k - 1 matches; nodes beyond
+// that count are dropped. Safe to call on any slice length, including empty.
+func TrimSingleElimNodes(nodes []external.MatchNode) []external.MatchNode {
+	if len(nodes) == 0 {
+		return nodes
+	}
+	depth := bracketDepth(len(nodes))
+	mainSize := (1 << depth) - 1
+	if len(nodes) > mainSize {
+		return nodes[:mainSize]
+	}
+	return nodes
+}
+
 // getEliminationResults processes a slice of match nodes and returns a map of team name → TeamProgress.
 // It supports two bracket ID formats used by Liquipedia:
 //   - Classic format: bracketId_R01-M001 (numeric round/match encoded in the suffix)
