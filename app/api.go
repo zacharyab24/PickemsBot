@@ -346,6 +346,7 @@ func (a *App) PopulateMatches(scheduleOnly bool) error {
 	return nil
 }
 
+
 // getTwitchURL is a helper function to get the twitch url from the liquipedia stream url.
 // It receives a string containing stream name and returns the correct steam name or unknown if it is not in the hard coded list of steam names.
 func getTwitchURL(streamURL string) string {

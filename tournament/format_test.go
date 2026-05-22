@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"pickems-bot/api/external"
+	"pickems-bot/sources"
 )
 
 func TestGet_ReturnsRegisteredFormats(t *testing.T) {
@@ -47,10 +47,10 @@ func TestRegister_PanicsOnDuplicate(t *testing.T) {
 
 // region DetectKindFromMatchNodes
 
-func nodes(sections ...string) []external.MatchNode {
-	out := make([]external.MatchNode, len(sections))
+func nodes(sections ...string) []sources.MatchNode {
+	out := make([]sources.MatchNode, len(sections))
 	for i, s := range sections {
-		out[i] = external.MatchNode{Section: s}
+		out[i] = sources.MatchNode{Section: s}
 	}
 	return out
 }
@@ -92,7 +92,7 @@ func TestDetectKindFromMatchNodes_NoMatchingSections(t *testing.T) {
 }
 
 func TestDetectKindFromMatchNodes_EmptyNodes(t *testing.T) {
-	_, err := DetectKindFromMatchNodes([]external.MatchNode{})
+	_, err := DetectKindFromMatchNodes([]sources.MatchNode{})
 	assert.Error(t, err)
 }
 

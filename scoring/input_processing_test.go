@@ -120,7 +120,7 @@ func TestCalculateUserScore_SwissSuccess(t *testing.T) {
 	assert.Equal(t, 7, report.GetScore().Successes)
 	assert.Equal(t, 0, report.GetScore().Pending)
 	assert.Equal(t, 0, report.GetScore().Failed)
-	swissReport := report.(format.SwissReport)
+	swissReport := report.(tournament.SwissReport)
 	assert.Len(t, swissReport.WinPicks, 3)
 	assert.Len(t, swissReport.AdvancePicks, 2)
 	assert.Len(t, swissReport.LosePicks, 2)
@@ -229,8 +229,8 @@ func TestCalculateUserScore_EliminationSuccess(t *testing.T) {
 	assert.Equal(t, 3, report.GetScore().Successes)
 	assert.Equal(t, 0, report.GetScore().Pending)
 	assert.Equal(t, 0, report.GetScore().Failed)
-	elimReport := report.(format.SingleElimReport)
-	var teamA *format.ElimPredictionEntry
+	elimReport := report.(tournament.SingleElimReport)
+	var teamA *tournament.ElimPredictionEntry
 	for i := range elimReport.Predictions {
 		if elimReport.Predictions[i].Team == "Team A" {
 			teamA = &elimReport.Predictions[i]
@@ -239,7 +239,7 @@ func TestCalculateUserScore_EliminationSuccess(t *testing.T) {
 	}
 	assert.NotNil(t, teamA)
 	assert.True(t, teamA.ToWin)
-	assert.Equal(t, format.StatusSucceeded, teamA.Status)
+	assert.Equal(t, tournament.StatusSucceeded, teamA.Status)
 }
 
 // TestCalculateUserScore_EliminationPending tests elimination with pending results

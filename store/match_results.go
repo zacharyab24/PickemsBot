@@ -72,7 +72,7 @@ func (s *Store) GetMatchResults() (tournament.MatchResult, error) {
 // detects the tournament format, builds the MatchResult, and persists both the
 // result and the raw nodes. This is the shared core used by both fetch paths.
 func (s *Store) updateMatchResultsFromJSON(jsonResponse string) error {
-	matchNodes, err := sources.GetMatchNodesFromJSON(jsonResponse)
+	matchNodes, err := sources.ParseLiquipediaMatches(jsonResponse)
 	if err != nil {
 		return fmt.Errorf("error parsing match data: %w", err)
 	}
