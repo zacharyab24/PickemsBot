@@ -17,7 +17,7 @@ import (
 type ElimPredictionEntry struct {
 	Team   string
 	Round  string
-	ToWin  bool         // true = predicted to win the Grand Final; false = predicted to be eliminated here
+	ToWin  bool // true = predicted to win the Grand Final; false = predicted to be eliminated here
 	Status BucketStatus
 }
 

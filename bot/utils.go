@@ -11,9 +11,9 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-const BURPLE = 0x7289DA
-const GREEN = 0x57F287
-const RED = 0xED4245
+const burple = 0x7289DA
+const green = 0x57F287
+const red = 0xED4245
 
 // CleanIndent removes structural code indentation from raw multiline strings
 func cleanIndent(s string) string {
@@ -99,7 +99,7 @@ func sendError(session DiscordSession, channelID string, msg string) {
 	embed := &discordgo.MessageEmbed{
 		Title:       "Error",
 		Description: msg,
-		Color:       RED,
+		Color:       red,
 	}
 	if _, err := session.ChannelMessageSendEmbed(channelID, embed); err != nil {
 		log.Printf("send error embed: %v", err)

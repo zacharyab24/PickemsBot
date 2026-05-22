@@ -27,7 +27,7 @@ func (b *Bot) helpMessageHandler(session DiscordSession, message *discordgo.Mess
 		Title: "PickEms Bot v3.3",
 		Description: "Manage your tournament predictions and check standings. All commands use the `$` prefix.\n\n" +
 			"*Data sourced from the [Liquipedia Counter-Strike API](https://liquipedia.net)*",
-		Color: BURPLE,
+		Color: burple,
 		Fields: []*discordgo.MessageEmbedField{
 			{
 				Name:   "`$details`",
@@ -90,7 +90,7 @@ func (b *Bot) detailsHandler(session DiscordSession, message *discordgo.MessageC
 
 	embed := &discordgo.MessageEmbed{
 		Title: "Match Details",
-		Color: GREEN,
+		Color: green,
 		Fields: []*discordgo.MessageEmbedField{
 			{
 				Name:   "Tournament Name",
@@ -139,7 +139,7 @@ func (b *Bot) setPredictionsHandler(session DiscordSession, message *discordgo.M
 	embed := &discordgo.MessageEmbed{
 		Title:       "Pick'Ems Updated",
 		Description: fmt.Sprintf("%s's Pick'Ems have been saved.", user.Username),
-		Color:       GREEN,
+		Color:       green,
 	}
 	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
 		log.Printf("send embed: %v", err)
@@ -182,7 +182,7 @@ func (b *Bot) checkPredictionsHandler(session DiscordSession, message *discordgo
 	embed := &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("%s's Pick'Ems", user.Username),
 		Description: fmt.Sprintf("**%d/%d Correct** (%d Pending)", score.Successes, info.NumTeams, score.Pending),
-		Color:       GREEN,
+		Color:       green,
 		Fields:      fields,
 	}
 
@@ -217,7 +217,7 @@ func (b *Bot) leaderboardHandler(session DiscordSession, message *discordgo.Mess
 	embed := &discordgo.MessageEmbed{
 		Title:       "Leaderboard",
 		Description: sb.String(),
-		Color:       GREEN,
+		Color:       green,
 		Footer: &discordgo.MessageEmbedFooter{
 			Text: "Sorted by total successful picks • No tiebreakers applied",
 		},
@@ -253,10 +253,10 @@ func (b *Bot) teamsHandler(session DiscordSession, message *discordgo.MessageCre
 
 	embed := &discordgo.MessageEmbed{
 		Title: "Teams in this Stage",
-		Color: GREEN,
+		Color: green,
 		Fields: []*discordgo.MessageEmbedField{
-			{Name: "​", Value: leftCol.String(), Inline: true},
-			{Name: "​", Value: rightCol.String(), Inline: true},
+			{Name: "\u200b", Value: leftCol.String(), Inline: true},
+			{Name: "\u200b", Value: rightCol.String(), Inline: true},
 		},
 		Footer: &discordgo.MessageEmbedFooter{
 			Text: fmt.Sprintf("%d teams • Fuzzy matching is active, but keep names as close as possible!", len(teams)),
@@ -281,7 +281,7 @@ func (b *Bot) upcomingMatchesHandler(session DiscordSession, message *discordgo.
 		embed := &discordgo.MessageEmbed{
 			Title:       "Upcoming Matches",
 			Description: "No upcoming matches at this time.",
-			Color:       GREEN,
+			Color:       green,
 		}
 		if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
 			log.Printf("send embed: %v", err)
@@ -306,7 +306,7 @@ func (b *Bot) upcomingMatchesHandler(session DiscordSession, message *discordgo.
 
 	embed := &discordgo.MessageEmbed{
 		Title:  "Upcoming Matches",
-		Color:  GREEN,
+		Color:  green,
 		Fields: fields,
 	}
 

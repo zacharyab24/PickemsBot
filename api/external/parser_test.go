@@ -451,10 +451,15 @@ func TestParseScheduledMatches_NoStreamKeys(t *testing.T) {
 		},
 	}
 
-	_, err := ParseScheduledMatches(matchData)
+	match, err := ParseScheduledMatches(matchData)
 
-	if err == nil {
-		t.Fatal("Expected error for missing twitch/kick keys")
+	// A missing twitch/kick key is not an error — the match is returned with an empty StreamURL.
+	// The handler omits the watch-live link when StreamURL is empty.
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if match.StreamURL != "" {
+		t.Fatalf("Expected empty StreamURL, got %q", match.StreamURL)
 	}
 }
 

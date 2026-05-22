@@ -38,7 +38,7 @@ func (s SwissReport) GetScore() shared.ScoreResult { return s.Score }
 // BucketEntry is the per-team result for one Swiss prediction bucket.
 type BucketEntry struct {
 	Team   string
-	Score  string       // current record e.g. "2-1"; empty string when missing from results
+	Score  string // current record e.g. "2-1"; empty string when missing from results
 	Status BucketStatus
 }
 
@@ -47,6 +47,7 @@ type BucketEntry struct {
 // display string lives in one place (the String method).
 type BucketStatus int
 
+// BucketStatus values indicate whether a prediction was correct, still in progress, or wrong.
 const (
 	StatusSucceeded BucketStatus = iota
 	StatusPending
