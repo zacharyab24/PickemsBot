@@ -285,4 +285,3 @@ func TestCalculateSwissScores_InvalidWinner(t *testing.T) {
 }
 
 // endregion
-

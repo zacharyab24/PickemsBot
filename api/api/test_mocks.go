@@ -27,18 +27,18 @@ type MockStore struct {
 	Format           format.Kind
 
 	// Error injection for testing error paths
-	EnsureScheduledMatchesError     error
-	GetValidTeamsError              error
-	StoreUserPredictionError        error
-	GetUserPredictionError          error
-	GetMatchResultsError            error
-	GetAllUserPredictionsError      error
-	FetchMatchScheduleError         error
-	StoreMatchScheduleError         error
+	EnsureScheduledMatchesError             error
+	GetValidTeamsError                      error
+	StoreUserPredictionError                error
+	GetUserPredictionError                  error
+	GetMatchResultsError                    error
+	GetAllUserPredictionsError              error
+	FetchMatchScheduleError                 error
+	StoreMatchScheduleError                 error
 	FetchAndUpdateMatchResultsError         error
 	FetchAndUpdateMatchResultsFromJSONError error
-	StoreLeaderboardError           error
-	FetchLeaderboardFromDBError     error
+	StoreLeaderboardError                   error
+	FetchLeaderboardFromDBError             error
 
 	// Leaderboard storage
 	Leaderboard []store.LeaderboardEntry
