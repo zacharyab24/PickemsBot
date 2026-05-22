@@ -12,10 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	"pickems-bot/api/api"
-	"pickems-bot/api/external"
-	"pickems-bot/api/format"
-	"pickems-bot/api/shared"
+	"pickems-bot/app"
+	"pickems-bot/sources"
+	"pickems-bot/tournament"
+	"pickems-bot/models"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/stretchr/testify/assert"
@@ -23,9 +23,9 @@ import (
 )
 
 // createTestBot creates a Bot instance with a mock API for testing
-func createTestBot(kind format.Kind) *Bot {
-	mockStore := api.NewMockStore(kind, "test_round")
-	mockStore.SetScheduledMatches([]external.ScheduledMatch{
+func createTestBot(kind tournament.Kind) *Bot {
+	mockStore := app.NewMockStore(kind, "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{
 		{Team1: "Team A", Team2: "Team B", BestOf: "3", EpochTime: 1700000000},
 		{Team1: "Team C", Team2: "Team D", BestOf: "3", EpochTime: 1700010000},
 	})
@@ -40,24 +40,24 @@ func createTestBot(kind format.Kind) *Bot {
 
 	return &Bot{
 		BotToken: "test_token",
-		APIPtr:   &api.API{Store: mockStore},
+		APIPtr:   &app.App{Store: mockStore},
 	}
 }
 
 // createTestBotWithElimination creates a Bot with elimination format
 func createTestBotWithElimination() *Bot {
-	mockStore := api.NewMockStore("single-elimination", "test_round")
-	mockStore.SetScheduledMatches([]external.ScheduledMatch{
+	mockStore := app.NewMockStore("single-elimination", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{
 		{Team1: "Team A", Team2: "Team B", BestOf: "3", EpochTime: 1700000000},
 	})
-	mockStore.SetEliminationResults(map[string]shared.TeamProgress{
+	mockStore.SetEliminationResults(map[string]models.TeamProgress{
 		"Team A": {Round: "semifinal", Status: "advanced"},
 		"Team B": {Round: "quarterfinal", Status: "eliminated"},
 	})
 
 	return &Bot{
 		BotToken: "test_token",
-		APIPtr:   &api.API{Store: mockStore},
+		APIPtr:   &app.App{Store: mockStore},
 	}
 }
 
@@ -162,16 +162,16 @@ func TestUpcomingMatches_Success(t *testing.T) {
 
 func TestUpcomingMatches_NoMatches(t *testing.T) {
 	// Create bot with scheduled matches that exist but are empty
-	mockStore := api.NewMockStore("swiss", "test_round")
+	mockStore := app.NewMockStore("swiss", "test_round")
 	// Set at least one scheduled match so EnsureScheduledMatches passes
-	mockStore.SetScheduledMatches([]external.ScheduledMatch{
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{
 		{Team1: "TBD", Team2: "TBD", BestOf: "3", EpochTime: 1700000000},
 	})
 	mockStore.SetSwissResults(map[string]string{"Team A": "3-0"})
 
 	bot := &Bot{
 		BotToken: "test_token",
-		APIPtr:   &api.API{Store: mockStore},
+		APIPtr:   &app.App{Store: mockStore},
 	}
 
 	mockSession := NewMockDiscordSession()
@@ -257,8 +257,8 @@ func TestCheckPredictions_NoPredictions(t *testing.T) {
 
 func TestCheckPredictions_WithPredictions(t *testing.T) {
 	// Create bot with a prediction already stored
-	mockStore := api.NewMockStore("swiss", "test_round")
-	mockStore.SetScheduledMatches([]external.ScheduledMatch{
+	mockStore := app.NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{
 		{Team1: "Team A", Team2: "Team B"},
 	})
 	mockStore.SetSwissResults(map[string]string{
@@ -271,7 +271,7 @@ func TestCheckPredictions_WithPredictions(t *testing.T) {
 	})
 
 	// Store a prediction for the user
-	mockStore.StoreUserPrediction("user123", shared.Prediction{
+	mockStore.StoreUserPrediction("user123", models.Prediction{
 		UserID:   "user123",
 		Username: "TestUser",
 		Format:   "swiss",
@@ -283,7 +283,7 @@ func TestCheckPredictions_WithPredictions(t *testing.T) {
 
 	bot := &Bot{
 		BotToken: "test_token",
-		APIPtr:   &api.API{Store: mockStore},
+		APIPtr:   &app.App{Store: mockStore},
 	}
 
 	mockSession := NewMockDiscordSession()
@@ -415,12 +415,12 @@ func TestNewMessage_RoutesUpcomingCommand(t *testing.T) {
 // region leaderboard error tests
 
 func TestLeaderboard_APIError(t *testing.T) {
-	mockStore := api.NewMockStore("swiss", "test_round")
+	mockStore := app.NewMockStore("swiss", "test_round")
 	mockStore.FetchLeaderboardFromDBError = errors.New("database error")
 
 	bot := &Bot{
 		BotToken: "test_token",
-		APIPtr:   &api.API{Store: mockStore},
+		APIPtr:   &app.App{Store: mockStore},
 	}
 
 	mockSession := NewMockDiscordSession()
@@ -439,12 +439,12 @@ func TestLeaderboard_APIError(t *testing.T) {
 
 func TestTeams_APIError(t *testing.T) {
 	// Create a mock store that will return an error
-	mockStore := api.NewMockStore("swiss", "test_round")
+	mockStore := app.NewMockStore("swiss", "test_round")
 	// Don't set any results, which should cause an error
 
 	bot := &Bot{
 		BotToken: "test_token",
-		APIPtr:   &api.API{Store: mockStore},
+		APIPtr:   &app.App{Store: mockStore},
 	}
 
 	mockSession := NewMockDiscordSession()
@@ -459,14 +459,14 @@ func TestTeams_APIError(t *testing.T) {
 
 func TestUpcomingMatches_APIError(t *testing.T) {
 	// Create a mock store that will return an error for schedule
-	mockStore := api.NewMockStore("swiss", "test_round")
+	mockStore := app.NewMockStore("swiss", "test_round")
 	mockStore.SetSwissResults(map[string]string{"Team A": "3-0"})
 	// Set error for schedule fetch
 	mockStore.SetScheduleError(errors.New("database error"))
 
 	bot := &Bot{
 		BotToken: "test_token",
-		APIPtr:   &api.API{Store: mockStore},
+		APIPtr:   &app.App{Store: mockStore},
 	}
 
 	mockSession := NewMockDiscordSession()
@@ -483,8 +483,8 @@ func TestUpcomingMatches_WithConfirmedMatches(t *testing.T) {
 	// Create bot with matches that have confirmed teams (no TBD)
 	// Use future epoch time so matches are considered "upcoming"
 	futureTime := int64(9999999999)
-	mockStore := api.NewMockStore("swiss", "test_round")
-	mockStore.SetScheduledMatches([]external.ScheduledMatch{
+	mockStore := app.NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{
 		{Team1: "Navi", Team2: "G2", BestOf: "3", EpochTime: futureTime},
 		{Team1: "Faze", Team2: "Vitality", BestOf: "3", EpochTime: futureTime + 1000},
 	})
@@ -492,7 +492,7 @@ func TestUpcomingMatches_WithConfirmedMatches(t *testing.T) {
 
 	bot := &Bot{
 		BotToken: "test_token",
-		APIPtr:   &api.API{Store: mockStore},
+		APIPtr:   &app.App{Store: mockStore},
 	}
 
 	mockSession := NewMockDiscordSession()
@@ -507,12 +507,12 @@ func TestUpcomingMatches_WithConfirmedMatches(t *testing.T) {
 }
 
 func TestDetails_APIError(t *testing.T) {
-	mockStore := api.NewMockStore("swiss", "test_round")
+	mockStore := app.NewMockStore("swiss", "test_round")
 	mockStore.GetValidTeamsError = errors.New("database error")
 
 	bot := &Bot{
 		BotToken: "test_token",
-		APIPtr:   &api.API{Store: mockStore},
+		APIPtr:   &app.App{Store: mockStore},
 	}
 
 	mockSession := NewMockDiscordSession()
@@ -526,8 +526,8 @@ func TestDetails_APIError(t *testing.T) {
 }
 
 func TestCheckPredictions_GenericError(t *testing.T) {
-	mockStore := api.NewMockStore("swiss", "test_round")
-	mockStore.SetScheduledMatches([]external.ScheduledMatch{
+	mockStore := app.NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{
 		{Team1: "Team A", Team2: "Team B"},
 	})
 	mockStore.SetSwissResults(map[string]string{"Team A": "3-0"})
@@ -536,7 +536,7 @@ func TestCheckPredictions_GenericError(t *testing.T) {
 
 	bot := &Bot{
 		BotToken: "test_token",
-		APIPtr:   &api.API{Store: mockStore},
+		APIPtr:   &app.App{Store: mockStore},
 	}
 
 	mockSession := NewMockDiscordSession()

@@ -1,16 +1,16 @@
 package web
 
 import (
-	"pickems-bot/api/api"
+	"pickems-bot/app"
 )
 
 // Config holds the configuration for the web server
 type Config struct {
 	Addr string
-	API  *api.API
+	API  *app.App
 }
 
 // Server is the HTTP server that handles webhook requests
 type Server struct {
-	api *api.API
+	api *app.App
 }

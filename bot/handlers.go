@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"pickems-bot/api/format"
-	"pickems-bot/api/shared"
+	"pickems-bot/models"
+	"pickems-bot/tournament"
 	"strconv"
 	"strings"
 
@@ -122,7 +122,7 @@ func (b *Bot) detailsHandler(session DiscordSession, message *discordgo.MessageC
 
 // setPredictionsHandler handles the $set command with a DiscordSession interface
 func (b *Bot) setPredictionsHandler(session DiscordSession, message *discordgo.MessageCreate) {
-	user := shared.User{UserID: message.Author.ID, Username: message.Author.Username}
+	user := models.User{UserID: message.Author.ID, Username: message.Author.Username}
 
 	// Get User Predictions from message
 	spaceSplitter, _ := splitter.NewSplitter(' ', splitter.DoubleQuotes, splitter.LeftRightDoubleDoubleQuotes)
@@ -148,7 +148,7 @@ func (b *Bot) setPredictionsHandler(session DiscordSession, message *discordgo.M
 
 // checkPredictionsHandler handles the $check command with a DiscordSession interface
 func (b *Bot) checkPredictionsHandler(session DiscordSession, message *discordgo.MessageCreate) {
-	user := shared.User{UserID: message.Author.ID, Username: message.Author.Username}
+	user := models.User{UserID: message.Author.ID, Username: message.Author.Username}
 	report, err := b.APIPtr.CheckPrediction(user)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
@@ -164,11 +164,11 @@ func (b *Bot) checkPredictionsHandler(session DiscordSession, message *discordgo
 	var fields []*discordgo.MessageEmbedField
 
 	switch r := report.(type) {
-	case format.SwissReport:
+	case tournament.SwissReport:
 		fields = append(fields, swissBucketField("**3-0**", r.WinPicks))
 		fields = append(fields, swissBucketField("**Advance**", r.AdvancePicks))
 		fields = append(fields, swissBucketField("**0-3**", r.LosePicks))
-	case format.SingleElimReport:
+	case tournament.SingleElimReport:
 		fields = append(fields, singleElimField(r.Predictions))
 	}
 
