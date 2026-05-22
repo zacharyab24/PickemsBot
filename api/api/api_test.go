@@ -225,8 +225,8 @@ func TestCheckPrediction_Success(t *testing.T) {
 		t.Errorf("Expected no error, got: %s", err.Error())
 	}
 
-	if result == "" {
-		t.Error("Expected non-empty result string")
+	if result == nil {
+		t.Error("Expected non-nil score report")
 	}
 }
 
@@ -349,7 +349,11 @@ func TestGetLeaderboard_Success(t *testing.T) {
 		t.Errorf("Expected no error, got: %s", err.Error())
 	}
 
-	if !strings.Contains(result, "player1") || !strings.Contains(result, "player2") {
+	found := make(map[string]bool)
+	for _, u := range result {
+		found[u.Username] = true
+	}
+	if !found["player1"] || !found["player2"] {
 		t.Error("Expected leaderboard to contain both players")
 	}
 }
@@ -431,7 +435,7 @@ func TestGetUpcomingMatches_Success(t *testing.T) {
 		t.Error("Expected at least one upcoming match")
 	}
 
-	if !strings.Contains(matches[0], "Team A") || !strings.Contains(matches[0], "Team B") {
+	if matches[0].Team1 != "Team A" || matches[0].Team2 != "Team B" {
 		t.Error("Expected match to contain team names")
 	}
 }
@@ -472,7 +476,7 @@ func TestGetUpcomingMatches_FiltersPastMatches(t *testing.T) {
 		t.Errorf("Expected 1 upcoming match, got %d", len(matches))
 	}
 
-	if !strings.Contains(matches[0], "Team C") {
+	if matches[0].Team1 != "Team C" && matches[0].Team2 != "Team C" {
 		t.Error("Expected only future match to be returned")
 	}
 }
@@ -521,27 +525,11 @@ func TestGetTournamentInfo_Swiss(t *testing.T) {
 		t.Errorf("Expected no error, got: %s", err.Error())
 	}
 
-	if len(info) != 4 {
-		t.Errorf("Expected 4 info items, got %d", len(info))
+	if info.Format != "swiss" {
+		t.Errorf("Expected format 'swiss', got %q", info.Format)
 	}
-
-	// Check that info contains expected fields
-	hasFormat := false
-	hasRequiredTeams := false
-	for _, item := range info {
-		if strings.Contains(item, "Format: swiss") {
-			hasFormat = true
-		}
-		if strings.Contains(item, "Number of required teams: 10") {
-			hasRequiredTeams = true
-		}
-	}
-
-	if !hasFormat {
-		t.Error("Expected tournament info to contain format")
-	}
-	if !hasRequiredTeams {
-		t.Error("Expected tournament info to contain required teams count")
+	if info.NumTeams != 10 {
+		t.Errorf("Expected 10 required teams, got %d", info.NumTeams)
 	}
 }
 
@@ -558,15 +546,8 @@ func TestGetTournamentInfo_SingleElimination(t *testing.T) {
 	}
 
 	// For 8 teams, should require 4 predictions
-	hasRequiredTeams := false
-	for _, item := range info {
-		if strings.Contains(item, "Number of required teams: 4") {
-			hasRequiredTeams = true
-		}
-	}
-
-	if !hasRequiredTeams {
-		t.Error("Expected tournament info to contain correct required teams count for elimination")
+	if info.NumTeams != 4 {
+		t.Errorf("Expected 4 required teams for 8-team elimination, got %d", info.NumTeams)
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
-	"strings"
 
 	"pickems-bot/api/external"
 	"pickems-bot/api/shared"
@@ -18,6 +17,54 @@ import (
 type SwissResult struct {
 	Round string            `bson:"round,omitempty"`
 	Teams map[string]string `bson:"teams,omitempty"`
+}
+
+// SwissReport is the structured result returned by swissFormat.CalculateScore.
+// Each bucket slice holds one entry per predicted team; the handler uses these
+// to build a Discord embed instead of parsing a raw string.
+type SwissReport struct {
+	WinPicks     []BucketEntry // 3-0 predictions
+	AdvancePicks []BucketEntry // 3-1 / 3-2 predictions
+	LosePicks    []BucketEntry // 0-3 predictions
+	Score        shared.ScoreResult
+}
+
+// FormatKind implements ScoreReport.
+func (SwissReport) FormatKind() Kind { return Swiss }
+
+// GetScore implements ScoreReport.
+func (s SwissReport) GetScore() shared.ScoreResult { return s.Score }
+
+// BucketEntry is the per-team result for one Swiss prediction bucket.
+type BucketEntry struct {
+	Team   string
+	Score  string // current record e.g. "2-1"; empty string when missing from results
+	Status BucketStatus
+}
+
+// BucketStatus is the per-team verdict produced by evaluateBucket.
+// Typed instead of a string so typos are caught at compile time and the
+// display string lives in one place (the String method).
+type BucketStatus int
+
+// BucketStatus values indicate whether a prediction was correct, still in progress, or wrong.
+const (
+	StatusSucceeded BucketStatus = iota
+	StatusPending
+	StatusFailed
+)
+
+func (s BucketStatus) String() string {
+	switch s {
+	case StatusSucceeded:
+		return "✅"
+	case StatusPending:
+		return "⏳"
+	case StatusFailed:
+		return "❌"
+	default:
+		return "❓"
+	}
 }
 
 // GetType returns the Swiss format identifier.
@@ -76,72 +123,74 @@ func (swissFormat) GeneratePrediction(user shared.User, round string, teams []st
 	return prediction, nil
 }
 
-func (swissFormat) CalculateScore(p shared.Prediction, r MatchResult) (shared.ScoreResult, string, error) {
+func (swissFormat) CalculateScore(p shared.Prediction, r MatchResult) (ScoreReport, error) {
 	result, ok := r.(SwissResult)
 	if !ok {
-		return shared.ScoreResult{}, "", fmt.Errorf("swiss: expected SwissResult, got %T", r)
+		return nil, fmt.Errorf("swiss: expected SwissResult, got %T", r)
 	}
 	scores := result.Teams
 
-	var succeeded, pending, failed int
-	var response strings.Builder
-
 	// [3-0]
-	response.WriteString("[3-0]\n")
-	bucket, err := evaluateBucket(p.Win, scores, func(wins, loses int) bucketStatus {
+	winEntries, err := evaluateBucket(p.Win, scores, func(wins, loses int) BucketStatus {
 		if loses >= 1 {
-			return statusFailed
+			return StatusFailed
 		} else if wins != 3 {
-			return statusPending
+			return StatusPending
 		}
-		return statusSucceeded
-	}, &response)
+		return StatusSucceeded
+	})
 	if err != nil {
-		return shared.ScoreResult{}, "", err
+		return nil, err
 	}
-	succeeded += bucket.Successes
-	pending += bucket.Pending
-	failed += bucket.Failed
 
 	// [3-1, 3-2]
-	response.WriteString("[3-1, 3-2]\n")
-	bucket, err = evaluateBucket(p.Advance, scores, func(wins, loses int) bucketStatus {
+	advanceEntries, err := evaluateBucket(p.Advance, scores, func(wins, loses int) BucketStatus {
 		if loses == 3 || (wins == 3 && loses == 0) {
-			return statusFailed
+			return StatusFailed
 		} else if wins < 3 {
-			return statusPending
+			return StatusPending
 		}
-		return statusSucceeded
-	}, &response)
+		return StatusSucceeded
+	})
 	if err != nil {
-		return shared.ScoreResult{}, "", err
+		return nil, err
 	}
-	succeeded += bucket.Successes
-	pending += bucket.Pending
-	failed += bucket.Failed
 
 	// [0-3]
-	response.WriteString("[0-3]\n")
-	bucket, err = evaluateBucket(p.Lose, scores, func(wins, loses int) bucketStatus {
+	loseEntries, err := evaluateBucket(p.Lose, scores, func(wins, loses int) BucketStatus {
 		if wins >= 1 {
-			return statusFailed
+			return StatusFailed
 		} else if loses != 3 {
-			return statusPending
+			return StatusPending
 		}
-		return statusSucceeded
-	}, &response)
+		return StatusSucceeded
+	})
 	if err != nil {
-		return shared.ScoreResult{}, "", err
+		return nil, err
 	}
-	succeeded += bucket.Successes
-	pending += bucket.Pending
-	failed += bucket.Failed
 
-	return shared.ScoreResult{
-		Successes: succeeded,
-		Pending:   pending,
-		Failed:    failed,
-	}, response.String(), nil
+	var succeeded, pending, failed int
+	for _, e := range append(append(winEntries, advanceEntries...), loseEntries...) {
+		switch e.Status {
+		case StatusSucceeded:
+			succeeded++
+		case StatusPending:
+			pending++
+		case StatusFailed:
+			failed++
+		}
+	}
+
+	return SwissReport{
+		WinPicks:     winEntries,
+		AdvancePicks: advanceEntries,
+		LosePicks:    loseEntries,
+		Score: shared.ScoreResult{
+			Successes: succeeded,
+			Pending:   pending,
+			Failed:    failed,
+		},
+	}, nil
 }
 
 // ExtractMatchListID parses wikitext and extracts the `Matchlist` id
@@ -170,73 +219,43 @@ func (swissFormat) BuildFromMatchNodes(nodes []external.MatchNode, round string)
 	return SwissResult{Round: round, Teams: scores}, nil
 }
 
-// bucketStatus is the per-team verdict produced by an evaluateBucket
-// classifier — typed instead of a string so typos are caught at compile time
-// and the display string is one place (the String method).
-type bucketStatus int
-
-const (
-	statusSucceeded bucketStatus = iota
-	statusPending
-	statusFailed
-)
-
-func (s bucketStatus) String() string {
-	switch s {
-	case statusSucceeded:
-		return "[Succeeded]"
-	case statusPending:
-		return "[Pending]"
-	case statusFailed:
-		return "[Failed]"
-	default:
-		return "[Unknown]"
-	}
-}
-
 // evaluateBucket scores a single Swiss prediction bucket (e.g. "3-0 picks")
 // against the live score map. classify maps a team's current wins/losses to a
-// bucketStatus; we tally and write a per-team line into builder as we go.
-func evaluateBucket(teams []string, scores map[string]string, classify func(wins, loses int) bucketStatus, builder *strings.Builder) (shared.ScoreResult, error) {
-	var succeeded, pending, failed int
+// BucketStatus. Returns one BucketEntry per team; missing teams get an empty
+// Score and StatusFailed.
+func evaluateBucket(teams []string, scores map[string]string, classify func(wins, loses int) BucketStatus) ([]BucketEntry, error) {
+	entries := make([]BucketEntry, 0, len(teams))
 
 	for _, team := range teams {
 		score, ok := scores[team]
 		if !ok {
-			builder.WriteString(fmt.Sprintf("%s: [Missing score] %s\n", team, statusFailed))
-			failed++
+			entries = append(entries, BucketEntry{Team: team, Score: "", Status: StatusFailed})
 			continue
 		}
 
 		if len(score) != 3 || score[1] != '-' {
-			return shared.ScoreResult{}, fmt.Errorf("invalid score format: %s", score)
+			return nil, fmt.Errorf("invalid score format: %s", score)
 		}
 
 		wins, err := strconv.Atoi(string(score[0]))
 		if err != nil {
-			return shared.ScoreResult{}, err
+			return nil, err
 		}
 		loses, err := strconv.Atoi(string(score[2]))
 		if err != nil {
-			return shared.ScoreResult{}, err
+			return nil, err
 		}
 
-		status := classify(wins, loses)
-		builder.WriteString(fmt.Sprintf("%s: %s %s\n", team, score, status))
-
-		switch status {
-		case statusSucceeded:
-			succeeded++
-		case statusPending:
-			pending++
-		case statusFailed:
-			failed++
-		}
+		entries = append(entries, BucketEntry{
+			Team:   team,
+			Score:  score,
+			Status: classify(wins, loses),
+		})
 	}
-	return shared.ScoreResult{Successes: succeeded, Pending: pending, Failed: failed}, nil
+	return entries, nil
 }
 
-// CalculateSwissScores process match nodes and calculate swiss score. Called by BuildMatchNodes
+// calculateSwissScores processes match nodes and calculates Swiss scores. Called by BuildFromMatchNodes.
 func calculateSwissScores(matchNodes []external.MatchNode) (map[string]string, error) {
 	var teams []string
 	wins := make(map[string]int)
@@ -264,7 +283,7 @@ func calculateSwissScores(matchNodes []external.MatchNode) (map[string]string, e
 			wins[node.Team2]++
 			loses[node.Team1]++
 		} else {
-			// Unexpected winner value skip
+			// Unexpected winner value — skip
 			continue
 		}
 
@@ -272,7 +291,7 @@ func calculateSwissScores(matchNodes []external.MatchNode) (map[string]string, e
 
 	scores := make(map[string]string)
 	for _, team := range teams {
-		//Skip any placeholder teams names
+		// Skip any placeholder team names
 		if team == "TBD" {
 			continue
 		}

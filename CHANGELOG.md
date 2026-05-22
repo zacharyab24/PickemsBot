@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.3
+Discord embed uplift — all bot responses now use rich embeds instead of plain text strings:
+- `$check` — format-aware embed; Swiss shows three prediction buckets (3-0 / Advance / 0-3), single-elimination shows a sorted predictions list with trophy/medal position emojis (🏆 Champion, 🥈 Runner-up, 🥉 3rd/4th, 🎖️ Top 8) and status emojis (✅ / ⏳ / ❌).
+- `$set` — green success embed on save; red error embed (with the error message) on failure.
+- `$teams` — green embed with a two-column team layout and a footer showing the total team count.
+- `$upcoming` — green embed with one field per match; each field shows a Discord timestamp (absolute + relative) and an optional 📺 watch-live link.
+- All error responses across every handler converted from plain strings to red embeds via a shared `sendError` helper.
+- `$results` intentionally left as a plain image attachment — no embed wrapper needed.
+- `GetUpcomingMatches` refactored to return `[]external.ScheduledMatch` instead of pre-formatted strings, moving all presentation logic into the handler. Stream URLs are resolved to full Twitch links before being returned.
+- `CalculateScore` / `CalculateUserScore` / `CheckPrediction` pipeline refactored to return structured `ScoreReport` types (`SwissReport`, `SingleElimReport`) instead of raw strings, enabling format-specific embed layouts.
+- Updated all tests broken by the above return-type changes.
+
 ## 3.2
 Match format rework and `$results` command:
 - Reworked the match result layer to support multiple tournament formats (Swiss, single-elimination) through a shared `MatchResult` interface and format-specific implementations. Swiss and single-elimination formats now each have their own result type, scoring logic, and BSON encoding, making it straightforward to add new formats (e.g. double-elimination) in the future.
