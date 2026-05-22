@@ -7,15 +7,15 @@ package main
 
 import (
 	"bufio"
+	"compress/gzip"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"regexp"
 	"sort"
 	"strings"
-
-	"pickems-bot/api/external"
 )
 
 const liquipediaBase = "https://liquipedia.net/counterstrike/"
@@ -24,20 +24,51 @@ type tournamentConfig struct {
 	Name         string
 	Page         string
 	Round        string
-	Params       string
+	Format       string // empty = auto-detect; set to "swiss" or "single-elimination" for multi-stage pages
 	UpcomingOnly bool
 	Test         bool
 }
 
 func fetchWikitext(path string) (string, error) {
-	wikitext, err := external.GetWikitext(liquipediaBase + path + "?action=raw")
+	req, err := http.NewRequest("GET", liquipediaBase+path+"?action=raw", nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("create request: %w", err)
 	}
-	if strings.TrimSpace(wikitext) == "" {
+	req.Header.Set("User-Agent", "LiquipediaDataFetcher/1.0")
+	req.Header.Set("Accept-Encoding", "gzip")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetch %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("fetch %s: status %d", path, resp.StatusCode)
+	}
+
+	var body []byte
+	if resp.Header.Get("Content-Encoding") == "gzip" {
+		r, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("gzip reader: %w", err)
+		}
+		defer r.Close()
+		body, err = io.ReadAll(r)
+		if err != nil {
+			return "", fmt.Errorf("read gzip body: %w", err)
+		}
+	} else {
+		body, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("read body: %w", err)
+		}
+	}
+
+	if strings.TrimSpace(string(body)) == "" {
 		return "", fmt.Errorf("empty response (page may not exist)")
 	}
-	return wikitext, nil
+	return string(body), nil
 }
 
 func pagePathFromURL(raw string) (string, error) {
@@ -168,7 +199,7 @@ func writeConfig(path string, c tournamentConfig) error {
 	fmt.Fprintf(f, "tournament_name = %q\n", c.Name)
 	fmt.Fprintf(f, "page           = %q\n", c.Page)
 	fmt.Fprintf(f, "round          = %q\n", c.Round)
-	fmt.Fprintf(f, "params         = %q\n", c.Params)
+	fmt.Fprintf(f, "format         = %q\n", c.Format)
 	fmt.Fprintf(f, "upcoming_only  = %t\n", c.UpcomingOnly)
 	fmt.Fprintf(f, "test           = %t\n", c.Test)
 	return nil

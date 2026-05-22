@@ -159,17 +159,109 @@ func (singleElimFormat) BuildFromMatchNodes(nodes []external.MatchNode, round st
 	return EliminationResult{Round: round, Teams: progression}, nil
 }
 
-// ExtractMatchListID parses wikitext and extracts the `Matchlist` id
-func (singleElimFormat) ExtractMatchListIDs(wikitext string) ([]string, Kind, error) {
-	re := regexp.MustCompile(`(?s)\{\{\s*(?:Show)?Bracket\s*\|([^}]*)\}\}`) // {{Bracket ...}} and {{ShowBracket ...}} templates used in single elim
-	return extractMatchListIds(wikitext, re)
-
+// bracketDepth returns the number of rounds in the largest complete single-elimination
+// bracket that fits within n total matches. A complete bracket of depth k has exactly
+// 2^k - 1 matches (e.g. k=3 → 7 matches for QF+SF+Final).
+// Extra matches (e.g. a 3rd-place consolation bout) are counted within the same depth.
+//   - bracketDepth(7) = 3  (Bracket/8, no extras)
+//   - bracketDepth(8) = 3  (Bracket/8 + 3rd-place match — same depth)
+//   - bracketDepth(15) = 4 (Bracket/16)
+func bracketDepth(n int) int {
+	k := 0
+	for (1<<(k+1))-1 <= n {
+		k++
+	}
+	return k
 }
 
-// getEliminationResults processs a slice of match nodes and return a map of team name : TeamProgress. Called by BuildMatchNodes
+// renderRoundNames maps round depth index → the section label the
+// pickems-renderer recognises in its knownSingleElimOrder table.
+// Index 0 = Grand Final (latest round), increasing index = earlier rounds.
+var renderRoundNames = []string{
+	"Grand Final",   // 0 — depth 1 bracket
+	"Semifinals",    // 1 — depth 2
+	"Quarterfinals", // 2 — depth 3
+	"Round of 16",   // 3 — depth 4
+	"Round of 32",   // 4 — depth 5
+}
+
+// NormalizeSingleElimSections rewrites the Section field on each node so the
+// renderer places each match in the correct column. It is a no-op when sections
+// already vary (Liquipedia already provided round-specific names). When all
+// sections are identical (e.g. all "Bracket/8"), it assigns renderer-compatible
+// names by match position using the same logic as getEliminationResults.
+func NormalizeSingleElimSections(nodes []external.MatchNode) []external.MatchNode {
+	if len(nodes) == 0 {
+		return nodes
+	}
+
+	// No-op if sections already differ — Liquipedia gave us round names.
+	allSame := true
+	for i := 1; i < len(nodes); i++ {
+		if nodes[i].Section != nodes[0].Section {
+			allSame = false
+			break
+		}
+	}
+	if !allSame {
+		return nodes
+	}
+
+	n := len(nodes)
+	numRounds := int(math.Ceil(math.Log2(float64(n + 1))))
+
+	out := make([]external.MatchNode, len(nodes))
+	copy(out, nodes)
+
+	for i := range out {
+		roundNum := roundFromIndex(i, n) // 1 = earliest (QF), numRounds = GF
+		idx := numRounds - roundNum      // maps to renderRoundNames: 0 = GF
+		if idx >= 0 && idx < len(renderRoundNames) {
+			out[i].Section = renderRoundNames[idx]
+		} else {
+			out[i].Section = fmt.Sprintf("Round %d", roundNum)
+		}
+	}
+
+	return out
+}
+
+// TrimSingleElimNodes trims a match node slice to the main single-elimination
+// bracket by removing any extra consolation matches (e.g. a 3rd-place bout).
+// A complete bracket of depth k has exactly 2^k - 1 matches; nodes beyond
+// that count are dropped. Safe to call on any slice length, including empty.
+func TrimSingleElimNodes(nodes []external.MatchNode) []external.MatchNode {
+	if len(nodes) == 0 {
+		return nodes
+	}
+	depth := bracketDepth(len(nodes))
+	mainSize := (1 << depth) - 1
+	if len(nodes) > mainSize {
+		return nodes[:mainSize]
+	}
+	return nodes
+}
+
+// getEliminationResults processes a slice of match nodes and returns a map of team name → TeamProgress.
+// It supports two bracket ID formats used by Liquipedia:
+//   - Classic format: bracketId_R01-M001 (numeric round/match encoded in the suffix)
+//   - Modern format: bracketId_RxMTP    (opaque position code — round not parseable from ID)
+//
+// When the classic format is detected for all matches, round numbers come from the ID.
+// Otherwise, round is determined by position in the slice. LiquipediaDB returns bracket
+// matches in bracket order (QF → SF → Final), so position maps cleanly to round number.
 func getEliminationResults(matchNodes []external.MatchNode) (map[string]shared.TeamProgress, error) {
 	if len(matchNodes) == 0 {
 		return nil, fmt.Errorf("at least one match required, recieved 0")
+	}
+
+	// Trim any extra matches beyond the main bracket (e.g. a 3rd-place consolation
+	// match in a Bracket/8 gives 8 total instead of 7). Extra matches fall outside
+	// user predictions and would corrupt round assignments if left in.
+	depth := bracketDepth(len(matchNodes))
+	mainSize := (1 << depth) - 1
+	if len(matchNodes) > mainSize {
+		matchNodes = matchNodes[:mainSize]
 	}
 
 	// Ordered slice of rounds where [0] is the last match (grand final), and [n] is the first. This is where the limitation of 32 comes from
@@ -178,12 +270,24 @@ func getEliminationResults(matchNodes []external.MatchNode) (map[string]shared.T
 		return nil, err
 	}
 
+	// Detect whether all IDs use the classic _R01-M001 format.
+	// If any ID fails to parse, fall back to position-based round assignment.
+	usePositionBased := false
+	for _, m := range matchNodes {
+		if _, _, err := extractRoundAndMatchIDs(m.ID); err != nil {
+			usePositionBased = true
+			break
+		}
+	}
+
 	results := make(map[string]shared.TeamProgress)
 
-	for _, match := range matchNodes {
-		roundNum, _, err := extractRoundAndMatchIDs(match.ID)
-		if err != nil {
-			return nil, err
+	for i, match := range matchNodes {
+		var roundNum int
+		if usePositionBased {
+			roundNum = roundFromIndex(i, len(matchNodes))
+		} else {
+			roundNum, _, _ = extractRoundAndMatchIDs(match.ID)
 		}
 
 		// Safely resolve stage and rank
@@ -262,6 +366,23 @@ func getRoundNames(numMatches int) ([]string, error) {
 	}
 
 	return roundNames[:numRounds], nil
+}
+
+// roundFromIndex returns the 1-based round number for a match at position idx
+// within a bracket match slice of length total. Assumes matches are ordered
+// earliest-round-first (QF → SF → Final), as LiquipediaDB returns them.
+// For total=7 (Bracket/8): positions 0-3 → round 1, 4-5 → round 2, 6 → round 3.
+func roundFromIndex(idx, total int) int {
+	numRounds := int(math.Ceil(math.Log2(float64(total + 1))))
+	cumulative := 0
+	for r := 1; r <= numRounds; r++ {
+		matchesInRound := 1 << (numRounds - r)
+		cumulative += matchesInRound
+		if idx < cumulative {
+			return r
+		}
+	}
+	return numRounds
 }
 
 // extractRoundAndMatchIDs is a helper function to get the round and match numbers from a MatchNode Id

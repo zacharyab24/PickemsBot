@@ -2,7 +2,6 @@ package format
 
 import (
 	"fmt"
-	"regexp"
 	"slices"
 	"strconv"
 
@@ -193,13 +192,6 @@ func (swissFormat) CalculateScore(p shared.Prediction, r MatchResult) (ScoreRepo
 	}, nil
 }
 
-// ExtractMatchListID parses wikitext and extracts the `Matchlist` id
-func (swissFormat) ExtractMatchListIDs(wikitext string) ([]string, Kind, error) {
-	re := regexp.MustCompile(`(?s)\{\{\s*Matchlist\s*\|([^}]*)\}\}`) // {{Matchlist ...}} templates used in swiss tournaments
-	return extractMatchListIds(wikitext, re)
-
-}
-
 // DecodeBSON unmarshals a Swiss BSON record back into a SwissResult.
 func (swissFormat) DecodeBSON(b []byte) (MatchResult, error) {
 	var s SwissResult
@@ -301,16 +293,26 @@ func calculateSwissScores(matchNodes []external.MatchNode) (map[string]string, e
 	return scores, nil
 }
 
-// setSwissPredictions is a helper to bind the input string slice to the 3 output slices: win, advance and lose
+// setSwissPredictions splits a flat prediction list into the three Swiss
+// buckets: 3-0 (win), 3-1/3-2 (advance), 0-3 (lose).
+//
+// The input slice has exactly 5N/8 entries (where N is the total team count),
+// so each bucket's share out of the input is:
+//
+//	3-0:     1/5 of input  (= N/8)
+//	advance: 3/5 of input  (= 3N/8)
+//	0-3:     1/5 of input  (= N/8)
+//
+// Dividing by the input length directly — as the old code did — produced wrong
+// bucket sizes because it treated the 5N/8-length list as if it were N.
 func setSwissPredictions(teams []string) ([]string, []string, []string) {
-	numTeams := len(teams)
-	numWin := numTeams / 8
-	numAdvance := numTeams / 2
-	numLose := 5 * numTeams / 8
+	T := len(teams)
+	numWin := T / 5
+	numLoseStart := 4 * T / 5
 
 	win := teams[0:numWin]
-	advance := teams[numWin:numAdvance]
-	lose := teams[numAdvance:numLose]
+	advance := teams[numWin:numLoseStart]
+	lose := teams[numLoseStart:]
 
 	return win, advance, lose
 }

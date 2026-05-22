@@ -24,13 +24,6 @@ func TestStore_GetPage(t *testing.T) {
 	}
 }
 
-func TestStore_GetOptionalParams(t *testing.T) {
-	s := &Store{OptionalParams: "?param=value"}
-	if s.GetOptionalParams() != "?param=value" {
-		t.Errorf("Expected '?param=value', got '%s'", s.GetOptionalParams())
-	}
-}
-
 func TestStore_GetDatabase(t *testing.T) {
 	// Test that the getter works - actual database would be set by NewStore
 	s := &Store{}

@@ -45,6 +45,12 @@ If the tournament has multiple stages, you'll get an interactive picker. Skip th
 go run ./scripts/configure -url https://liquipedia.net/counterstrike/PGL/2026/Bucharest -stage Europe
 ```
 
+For multi-stage pages where auto-detection would pick the wrong format, pass `-format`:
+
+```bash
+go run ./scripts/configure -url https://liquipedia.net/counterstrike/Intel_Extreme_Masters/2026/Cologne -stage Stage_1 -format swiss
+```
+
 ### Running
 
 ```bash

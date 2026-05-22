@@ -27,17 +27,18 @@ type MockStore struct {
 	Format           format.Kind
 
 	// Error injection for testing error paths
-	EnsureScheduledMatchesError     error
-	GetValidTeamsError              error
-	StoreUserPredictionError        error
-	GetUserPredictionError          error
-	GetMatchResultsError            error
-	GetAllUserPredictionsError      error
-	FetchMatchScheduleError         error
-	StoreMatchScheduleError         error
-	FetchAndUpdateMatchResultsError error
-	StoreLeaderboardError           error
-	FetchLeaderboardFromDBError     error
+	EnsureScheduledMatchesError             error
+	GetValidTeamsError                      error
+	StoreUserPredictionError                error
+	GetUserPredictionError                  error
+	GetMatchResultsError                    error
+	GetAllUserPredictionsError              error
+	FetchMatchScheduleError                 error
+	StoreMatchScheduleError                 error
+	FetchAndUpdateMatchResultsError         error
+	FetchAndUpdateMatchResultsFromJSONError error
+	StoreLeaderboardError                   error
+	FetchLeaderboardFromDBError             error
 
 	// Leaderboard storage
 	Leaderboard []store.LeaderboardEntry
@@ -209,8 +210,8 @@ func (m *MockStore) GetPage() string {
 	return "Test/Tournament/2025"
 }
 
-// GetOptionalParams returns optional parameters
-func (m *MockStore) GetOptionalParams() string {
+// GetFormat returns the format override (empty = auto-detect)
+func (m *MockStore) GetFormat() string {
 	return ""
 }
 
@@ -230,6 +231,14 @@ func (m *MockStore) GetClient() interface{ Disconnect(context.Context) error } {
 func (m *MockStore) FetchAndUpdateMatchResults() error {
 	if m.FetchAndUpdateMatchResultsError != nil {
 		return m.FetchAndUpdateMatchResultsError
+	}
+	return nil
+}
+
+// FetchAndUpdateMatchResultsFromJSON mock implementation
+func (m *MockStore) FetchAndUpdateMatchResultsFromJSON(_ string) error {
+	if m.FetchAndUpdateMatchResultsFromJSONError != nil {
+		return m.FetchAndUpdateMatchResultsFromJSONError
 	}
 	return nil
 }

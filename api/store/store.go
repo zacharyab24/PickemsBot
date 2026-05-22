@@ -17,12 +17,15 @@ import (
 
 // Store represents the database connection and configuration
 type Store struct {
-	Client         *mongo.Client
-	Database       *mongo.Database
-	Page           string
-	OptionalParams string
-	Round          string
-	Collections    struct {
+	Client   *mongo.Client
+	Database *mongo.Database
+	Page     string
+	Round    string
+	// Format is an optional override for tournament format detection.
+	// When non-empty it bypasses DetectKindFromMatchNodes so that the
+	// correct format is used on pages that mix multiple stages.
+	Format      string
+	Collections struct {
 		Predictions   *mongo.Collection
 		MatchResults  *mongo.Collection
 		MatchNodes    *mongo.Collection
@@ -32,9 +35,9 @@ type Store struct {
 }
 
 // NewStore initializes Store. Sets global values and initialises db connection
-// Preconditions: Receives strings containing the following: dbName, mongoURI, page, params and round
+// Preconditions: Receives strings containing the following: dbName, mongoURI, page, format and round
 // Postconditions: Updates global values, sets collection values, and returns pointer to the Store object, or error if it occurs
-func NewStore(dbName string, mongoURI string, page string, params string, round string) (*Store, error) {
+func NewStore(dbName string, mongoURI string, page string, format string, round string) (*Store, error) {
 	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(mongoURI))
 	if err != nil {
 		return nil, err
@@ -46,11 +49,11 @@ func NewStore(dbName string, mongoURI string, page string, params string, round 
 	}
 
 	return &Store{
-		Client:         client,
-		Database:       db,
-		Page:           page,
-		OptionalParams: params,
-		Round:          round,
+		Client:   client,
+		Database: db,
+		Page:     page,
+		Format:   format,
+		Round:    round,
 		Collections: struct {
 			Predictions   *mongo.Collection
 			MatchResults  *mongo.Collection

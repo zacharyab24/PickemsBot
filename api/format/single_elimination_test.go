@@ -208,6 +208,157 @@ func TestGetEliminationResults_PendingMatches(t *testing.T) {
 	assert.Equal(t, "pending", results["TeamB"].Status)
 }
 
+// region modern ID format (position-based fallback)
+
+// TestGetEliminationResults_ModernID_GrandFinal verifies position-based fallback
+// for a single-match bracket (Grand Final only) with a modern opaque bracket ID.
+func TestGetEliminationResults_ModernID_GrandFinal(t *testing.T) {
+	matchNodes := []external.MatchNode{
+		{ID: "Ffcq6omMBC_RxMTP", Team1: "Winner", Team2: "RunnerUp", Winner: "Winner"},
+	}
+	results, err := getEliminationResults(matchNodes)
+	assert.NoError(t, err)
+	assert.Equal(t, "Grand Final", results["Winner"].Round)
+	assert.Equal(t, "advanced", results["Winner"].Status)
+	assert.Equal(t, "Grand Final", results["RunnerUp"].Round)
+	assert.Equal(t, "eliminated", results["RunnerUp"].Status)
+}
+
+// TestGetEliminationResults_ModernID_Bracket8 simulates a full Bracket/8 (QF→SF→Final)
+// with modern opaque IDs. Matches are in bracket order as LiquipediaDB returns them.
+func TestGetEliminationResults_ModernID_Bracket8(t *testing.T) {
+	// 4 QF → 2 SF → 1 Final; winner chain: A>B, C>D, E>F, G>H → A>C, E>G → A>E
+	matchNodes := []external.MatchNode{
+		{ID: "BracketId_QF1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"}, // QF pos 0
+		{ID: "BracketId_QF2", Team1: "TeamC", Team2: "TeamD", Winner: "TeamC"}, // QF pos 1
+		{ID: "BracketId_QF3", Team1: "TeamE", Team2: "TeamF", Winner: "TeamE"}, // QF pos 2
+		{ID: "BracketId_QF4", Team1: "TeamG", Team2: "TeamH", Winner: "TeamG"}, // QF pos 3
+		{ID: "BracketId_SF1", Team1: "TeamA", Team2: "TeamC", Winner: "TeamA"}, // SF pos 4
+		{ID: "BracketId_SF2", Team1: "TeamE", Team2: "TeamG", Winner: "TeamE"}, // SF pos 5
+		{ID: "BracketId_GF1", Team1: "TeamA", Team2: "TeamE", Winner: "TeamA"}, // Final pos 6
+	}
+	results, err := getEliminationResults(matchNodes)
+	assert.NoError(t, err)
+	assert.Len(t, results, 8)
+
+	assert.Equal(t, "Grand Final", results["TeamA"].Round)
+	assert.Equal(t, "advanced", results["TeamA"].Status)
+
+	assert.Equal(t, "Grand Final", results["TeamE"].Round)
+	assert.Equal(t, "eliminated", results["TeamE"].Status)
+
+	assert.Equal(t, "Semi Final", results["TeamC"].Round)
+	assert.Equal(t, "eliminated", results["TeamC"].Status)
+	assert.Equal(t, "Semi Final", results["TeamG"].Round)
+	assert.Equal(t, "eliminated", results["TeamG"].Status)
+
+	assert.Equal(t, "Quarter Final", results["TeamB"].Round)
+	assert.Equal(t, "eliminated", results["TeamB"].Status)
+	assert.Equal(t, "Quarter Final", results["TeamD"].Round)
+	assert.Equal(t, "eliminated", results["TeamD"].Status)
+}
+
+// TestGetEliminationResults_ModernID_Pending verifies pending status
+// with modern opaque IDs when the Grand Final winner is not yet determined.
+func TestGetEliminationResults_ModernID_Pending(t *testing.T) {
+	matchNodes := []external.MatchNode{
+		{ID: "BracketId_GF1", Team1: "TeamA", Team2: "TeamB", Winner: "TBD"},
+	}
+	results, err := getEliminationResults(matchNodes)
+	assert.NoError(t, err)
+	assert.Equal(t, "Grand Final", results["TeamA"].Round)
+	assert.Equal(t, "pending", results["TeamA"].Status)
+}
+
+// region roundFromIndex
+
+func TestRoundFromIndex_Bracket8(t *testing.T) {
+	// 7 matches, 3 rounds: QF(4) → SF(2) → Final(1)
+	assert.Equal(t, 1, roundFromIndex(0, 7))
+	assert.Equal(t, 1, roundFromIndex(3, 7))
+	assert.Equal(t, 2, roundFromIndex(4, 7))
+	assert.Equal(t, 2, roundFromIndex(5, 7))
+	assert.Equal(t, 3, roundFromIndex(6, 7))
+}
+
+func TestRoundFromIndex_GrandFinalOnly(t *testing.T) {
+	assert.Equal(t, 1, roundFromIndex(0, 1))
+}
+
+func TestRoundFromIndex_Bracket4(t *testing.T) {
+	// 3 matches: SF(2) → Final(1)
+	assert.Equal(t, 1, roundFromIndex(0, 3))
+	assert.Equal(t, 1, roundFromIndex(1, 3))
+	assert.Equal(t, 2, roundFromIndex(2, 3))
+}
+
+// endregion
+
+// region bracketDepth
+
+func TestBracketDepth(t *testing.T) {
+	cases := []struct{ n, want int }{
+		{1, 1},  // GF only
+		{2, 1},  // GF + 1 extra (e.g. 3rd place with only SF+F)
+		{3, 2},  // SF + GF
+		{4, 2},  // SF + GF + 3rd place
+		{7, 3},  // QF + SF + GF (Bracket/8, clean)
+		{8, 3},  // Bracket/8 + 3rd-place match
+		{15, 4}, // Bracket/16, clean
+		{16, 4}, // Bracket/16 + 3rd-place
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.want, bracketDepth(c.n), "n=%d", c.n)
+	}
+}
+
+// endregion
+
+// region 3rd-place trimming
+
+// TestGetEliminationResults_ThirdPlaceTrimmed verifies that a Bracket/8 with an
+// extra 3rd-place consolation match (8 total) correctly assigns QF/SF/GF rounds.
+func TestGetEliminationResults_ThirdPlaceTrimmed(t *testing.T) {
+	matchNodes := []external.MatchNode{
+		// 4 QF (positions 0-3)
+		{ID: "B_QF1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},
+		{ID: "B_QF2", Team1: "TeamC", Team2: "TeamD", Winner: "TeamC"},
+		{ID: "B_QF3", Team1: "TeamE", Team2: "TeamF", Winner: "TeamE"},
+		{ID: "B_QF4", Team1: "TeamG", Team2: "TeamH", Winner: "TeamG"},
+		// 2 SF (positions 4-5)
+		{ID: "B_SF1", Team1: "TeamA", Team2: "TeamC", Winner: "TeamA"},
+		{ID: "B_SF2", Team1: "TeamE", Team2: "TeamG", Winner: "TeamE"},
+		// Grand Final (position 6)
+		{ID: "B_GF1", Team1: "TeamA", Team2: "TeamE", Winner: "TeamA"},
+		// 3rd-place match — must be ignored for scoring
+		{ID: "B_3P1", Team1: "TeamC", Team2: "TeamG", Winner: "TeamC"},
+	}
+	results, err := getEliminationResults(matchNodes)
+	assert.NoError(t, err)
+	// 8 teams expected (3rd place match teams still appear from earlier rounds)
+	assert.Len(t, results, 8)
+
+	// Champion should be at Grand Final, advanced
+	assert.Equal(t, "Grand Final", results["TeamA"].Round)
+	assert.Equal(t, "advanced", results["TeamA"].Status)
+
+	// Runner-up at Grand Final, eliminated
+	assert.Equal(t, "Grand Final", results["TeamE"].Round)
+	assert.Equal(t, "eliminated", results["TeamE"].Status)
+
+	// SF losers at Semi Final
+	assert.Equal(t, "Semi Final", results["TeamC"].Round)
+	assert.Equal(t, "Semi Final", results["TeamG"].Round)
+
+	// QF losers at Quarter Final
+	assert.Equal(t, "Quarter Final", results["TeamB"].Round)
+	assert.Equal(t, "Quarter Final", results["TeamD"].Round)
+	assert.Equal(t, "Quarter Final", results["TeamF"].Round)
+	assert.Equal(t, "Quarter Final", results["TeamH"].Round)
+}
+
+// endregion
+
 // TestGetEliminationResults_EmptyWinner tests with empty winner string
 func TestGetEliminationResults_EmptyWinner(t *testing.T) {
 	matchNodes := []external.MatchNode{
@@ -347,36 +498,67 @@ func TestExtractRoundAndMatchIDs_MissingRound(t *testing.T) {
 
 // endregion
 
-// region ExtractMatchListIDs
+// region NormalizeSingleElimSections
 
-// TestSingleElimExtractMatchListIDs_Basic tests Bracket ID extraction
-func TestSingleElimExtractMatchListIDs_Basic(t *testing.T) {
-	wikitext := `
-== Format ==
-Single-elimination bracket
-
-{{Bracket|id=BRACKET1}}
-`
-	ids, kind, err := singleElimFormat{}.ExtractMatchListIDs(wikitext)
-	assert.NoError(t, err)
-	assert.Equal(t, SingleElim, kind)
-	assert.Len(t, ids, 1)
-	assert.Contains(t, ids, "BRACKET1")
+func TestNormalizeSingleElimSections_AllSame_Bracket8(t *testing.T) {
+	// 7-node Bracket/8: all sections "Bracket/8" → should become QF/SF/GF
+	nodes := []external.MatchNode{
+		{Section: "Bracket/8"}, // QF
+		{Section: "Bracket/8"}, // QF
+		{Section: "Bracket/8"}, // QF
+		{Section: "Bracket/8"}, // QF
+		{Section: "Bracket/8"}, // SF
+		{Section: "Bracket/8"}, // SF
+		{Section: "Bracket/8"}, // GF
+	}
+	got := NormalizeSingleElimSections(nodes)
+	assert.Equal(t, "Quarterfinals", got[0].Section)
+	assert.Equal(t, "Quarterfinals", got[3].Section)
+	assert.Equal(t, "Semifinals", got[4].Section)
+	assert.Equal(t, "Semifinals", got[5].Section)
+	assert.Equal(t, "Grand Final", got[6].Section)
 }
 
-// TestSingleElimExtractMatchListIDs_StripsHTMLComments verifies trailing
-// HTML comments are removed from extracted IDs.
-func TestSingleElimExtractMatchListIDs_StripsHTMLComments(t *testing.T) {
-	wikitext := `
-== Format ==
-Single-elimination bracket
+func TestNormalizeSingleElimSections_AlreadyVary_NoOp(t *testing.T) {
+	// Sections already differ — function must not change them.
+	nodes := []external.MatchNode{
+		{Section: "Quarterfinals"},
+		{Section: "Quarterfinals"},
+		{Section: "Semifinals"},
+		{Section: "Grand Final"},
+	}
+	got := NormalizeSingleElimSections(nodes)
+	assert.Equal(t, "Quarterfinals", got[0].Section)
+	assert.Equal(t, "Semifinals", got[2].Section)
+	assert.Equal(t, "Grand Final", got[3].Section)
+}
 
-{{Bracket|id=CLEAN123<!-- some comment -->}}
-`
-	ids, _, err := singleElimFormat{}.ExtractMatchListIDs(wikitext)
-	assert.NoError(t, err)
-	assert.Len(t, ids, 1)
-	assert.Equal(t, "CLEAN123", ids[0])
+func TestNormalizeSingleElimSections_Empty(t *testing.T) {
+	got := NormalizeSingleElimSections(nil)
+	assert.Empty(t, got)
+}
+
+// endregion
+
+// region TrimSingleElimNodes
+
+func TestTrimSingleElimNodes_NoOp(t *testing.T) {
+	// 7 nodes (Bracket/8 with no consolation) — nothing to trim
+	nodes := make([]external.MatchNode, 7)
+	got := TrimSingleElimNodes(nodes)
+	assert.Len(t, got, 7)
+}
+
+func TestTrimSingleElimNodes_TrimsThirdPlace(t *testing.T) {
+	// 8 nodes (Bracket/8 + 3rd-place consolation match)
+	nodes := make([]external.MatchNode, 8)
+	got := TrimSingleElimNodes(nodes)
+	assert.Len(t, got, 7)
+}
+
+func TestTrimSingleElimNodes_Empty(t *testing.T) {
+	got := TrimSingleElimNodes(nil)
+	assert.Empty(t, got)
 }
 
 // endregion

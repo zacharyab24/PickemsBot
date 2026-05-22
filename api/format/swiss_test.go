@@ -7,6 +7,7 @@
 package format
 
 import (
+	"fmt"
 	"testing"
 
 	"pickems-bot/api/external"
@@ -14,6 +15,39 @@ import (
 
 	"github.com/stretchr/testify/assert"
 )
+
+// region setSwissPredictions
+
+// TestSetSwissPredictions checks that the input list is split into the correct
+// bucket sizes for each supported Swiss bracket size.
+// The input always has 5N/8 entries; buckets must be N/8, 3N/8, N/8.
+func TestSetSwissPredictions(t *testing.T) {
+	cases := []struct {
+		totalTeams int
+		wantWin    int
+		wantAdv    int
+		wantLose   int
+	}{
+		{8, 1, 3, 1},
+		{16, 2, 6, 2},
+		{24, 3, 9, 3},
+		{32, 4, 12, 4},
+	}
+	for _, c := range cases {
+		input := make([]string, 5*c.totalTeams/8)
+		for i := range input {
+			input[i] = fmt.Sprintf("team%d", i)
+		}
+		win, adv, lose := setSwissPredictions(input)
+		assert.Len(t, win, c.wantWin, "totalTeams=%d win bucket", c.totalTeams)
+		assert.Len(t, adv, c.wantAdv, "totalTeams=%d advance bucket", c.totalTeams)
+		assert.Len(t, lose, c.wantLose, "totalTeams=%d lose bucket", c.totalTeams)
+		// No teams should be silently dropped
+		assert.Equal(t, len(input), len(win)+len(adv)+len(lose), "totalTeams=%d total coverage", c.totalTeams)
+	}
+}
+
+// endregion
 
 // region RequiredPredictions
 
@@ -248,27 +282,6 @@ func TestCalculateSwissScores_InvalidWinner(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "1-0", scores["TeamA"])
 	assert.Equal(t, "0-1", scores["TeamB"])
-}
-
-// endregion
-
-// region ExtractMatchListIDs
-
-// TestSwissExtractMatchListIDs_Basic tests Matchlist ID extraction
-func TestSwissExtractMatchListIDs_Basic(t *testing.T) {
-	wikitext := `
-== Format ==
-Swiss format tournament
-
-{{Matchlist|id=ABC123}}
-{{Matchlist|id=DEF456}}
-`
-	ids, kind, err := swissFormat{}.ExtractMatchListIDs(wikitext)
-	assert.NoError(t, err)
-	assert.Equal(t, Swiss, kind)
-	assert.Len(t, ids, 2)
-	assert.Contains(t, ids, "ABC123")
-	assert.Contains(t, ids, "DEF456")
 }
 
 // endregion

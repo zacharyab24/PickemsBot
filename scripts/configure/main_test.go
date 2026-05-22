@@ -219,7 +219,6 @@ func TestWriteConfig_RoundTrip(t *testing.T) {
 		Name:         "Foo_2026",
 		Page:         "Foo/2026/Bar/Stage_1",
 		Round:        "Stage_1",
-		Params:       "",
 		UpcomingOnly: false,
 		Test:         false,
 	}

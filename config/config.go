@@ -15,9 +15,13 @@ type Config struct {
 	TournamentName string `toml:"tournament_name"`
 	Page           string `toml:"page"`
 	Round          string `toml:"round"`
-	Params         string `toml:"params"`
-	UpcomingOnly   bool   `toml:"upcoming_only"`
-	Test           bool   `toml:"test"`
+	// Format overrides automatic format detection from match node sections.
+	// Leave empty to auto-detect (recommended for single-stage tournaments).
+	// Set explicitly (e.g. "single-elimination") when the Liquipedia page
+	// contains multiple stages and auto-detection would pick the wrong one.
+	Format       string `toml:"format"`
+	UpcomingOnly bool   `toml:"upcoming_only"`
+	Test         bool   `toml:"test"`
 }
 
 // Load reads and validates a config.toml file at path.

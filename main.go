@@ -33,7 +33,7 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	apiInstance, err := api.NewAPI(cfg.TournamentName, os.Getenv("MONGO_PROD_URI"), cfg.Page, cfg.Params, cfg.Round)
+	apiInstance, err := api.NewAPI(cfg.TournamentName, os.Getenv("MONGO_PROD_URI"), cfg.Page, cfg.Format, cfg.Round)
 	if err != nil {
 		log.Fatalf("failed to initialize API: %v", err)
 	}
@@ -53,8 +53,12 @@ func main() {
 	// Regenerate the result image on startup so it always reflects the current
 	// tournament/bracket. The image on disk can be stale if the bot was previously
 	// run against a different tournament and the file was not cleared between restarts.
-	if err := web.RenderResultsImage(apiInstance); err != nil {
-		log.Printf("warning: could not render results image on startup: %v", err)
+	// Fatal in full mode — $results will be broken if this fails. In upcoming_only
+	// mode there are no match results yet so this is expected to fail; skip it.
+	if !cfg.UpcomingOnly {
+		if err := web.RenderResultsImage(apiInstance); err != nil {
+			log.Fatalf("could not render results image on startup: %v", err)
+		}
 	}
 
 	var discordToken string

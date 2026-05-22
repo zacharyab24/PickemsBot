@@ -1,6 +1,14 @@
 # Changelog
 
 ## 3.3
+Bug fixes and data layer improvements:
+- Fixed Swiss `$check` off-by-one: 3-0 and 0-3 buckets each showed 1 team instead of 2, advance showed 4 instead of 6. Root cause: `setSwissPredictions` divided the input list length by the wrong denominator.
+- Fixed `$results` for single-elimination: trimmed the 3rd-place consolation match that Liquipedia's `Bracket/8` template appends as an 8th node (the renderer only supports the 7-match main bracket). Also fixed column layout — Liquipedia returns all bracket nodes with `Section = "Bracket/8"`, causing the renderer to stack all matches in one column; sections are now normalised to `Quarterfinals` / `Semifinals` / `Grand Final` by match position before rendering.
+- Bot no longer crashes on startup if a stored prediction can't be scored against the current results (e.g. stale entry from a previous format or round); it logs a warning and skips it.
+- Switched LiquipediaDB data fetching to a `[[pagename::X]]` query — bracket IDs no longer need to be scraped from wikitext at runtime.
+- `scripts/configure`: added `-format` flag to write the `format` field in `config.toml`; required for multi-stage tournament pages (e.g. `-format swiss` for a group stage).
+- Moved wikitext HTTP fetch logic from `api/external` into the configure script package — `api/external` now only contains bot runtime calls.
+
 Discord embed uplift — all bot responses now use rich embeds instead of plain text strings:
 - `$check` — format-aware embed; Swiss shows three prediction buckets (3-0 / Advance / 0-3), single-elimination shows a sorted predictions list with trophy/medal position emojis (🏆 Champion, 🥈 Runner-up, 🥉 3rd/4th, 🎖️ Top 8) and status emojis (✅ / ⏳ / ❌).
 - `$set` — green success embed on save; red error embed (with the error message) on failure.
