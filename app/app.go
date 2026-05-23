@@ -290,13 +290,6 @@ func (a *App) GetUpcomingMatches() ([]sources.ScheduledMatch, error) {
 		if match.EpochTime < time.Now().Unix() || match.Finished {
 			continue
 		}
-		// Pre-process stream URL into a full link the handler can use directly
-		url := getTwitchURL(match.StreamURL)
-		if url == "unknown" {
-			match.StreamURL = ""
-		} else {
-			match.StreamURL = url
-		}
 		matches = append(matches, match)
 	}
 	return matches, nil
@@ -350,25 +343,8 @@ func (a *App) PopulateMatches(scheduleOnly bool) error {
 	return nil
 }
 
-// getTwitchURL is a helper function to get the twitch url from the liquipedia stream url.
-// It receives a string containing stream name and returns the correct steam name or unknown if it is not in the hard coded list of steam names.
-func getTwitchURL(streamURL string) string {
-	urls := make(map[string]string)
-	urls["BLAST_Premier"] = "https://www.twitch.tv/blastpremier"
-	urls["BLAST"] = "https://www.twitch.tv/blast"
-	// Put more here as needed
-
-	url, ok := urls[streamURL]
-	if !ok {
-		return "unknown"
-	}
-	return url
-}
-
 // UpdateMatchResults is a wrapper function for App.Store.FetchAndUpdateMatchResults() that enforces rate limiting
-// across the app and ensuring we comply with LiquipediaDB api specifications
-// Preconditions: Receives receiver pointer for api
-// Postconditions: Updates the match results database, or throws an error if rate limit has been reached or other error occurs
+// across the app and ensuring we comply with api specifications
 func (a *App) UpdateMatchResults() error {
 	if !a.Allow() {
 		log.Println("Rate limiter is reached")

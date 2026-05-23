@@ -18,39 +18,39 @@ import (
 
 func TestParseLiquipediaMatches(t *testing.T) {
 	expectedResult := []MatchNode{
-		{"AmF15pUfHd_0001", "Aurora Gaming", "SAW", "TBD", "", "Round 4"},
-		{"AmF15pUfHd_0002", "Team Liquid", "FlyQuest", "TBD", "", "Round 4"},
-		{"AmF15pUfHd_0003", "B8", "Legacy", "TBD", "", "Round 4"},
-		{"IykJinz1G8_0001", "GamerLegion", "SAW", "SAW", "1-2", "Round 3"},
-		{"IykJinz1G8_0002", "Team Liquid", "BetBoom Team", "Team Liquid", "2-1", "Round 3"},
-		{"IykJinz1G8_0003", "3DMAX", "FlyQuest", "FlyQuest", "1-2", "Round 3"},
-		{"IykJinz1G8_0004", "Astralis", "Legacy", "Legacy", "0-2", "Round 3"},
-		{"U7JeCe3nrs_0001", "GamerLegion", "PaiN Gaming", "PaiN Gaming", "1-2", "Round 2"},
-		{"U7JeCe3nrs_0002", "HEROIC", "BetBoom Team", "HEROIC", "2-0", "Round 2"},
-		{"U7JeCe3nrs_0003", "Aurora Gaming", "Team Liquid", "Aurora Gaming", "2-1", "Round 2"},
-		{"U7JeCe3nrs_0004", "3DMAX", "B8", "B8", "0-2", "Round 2"},
-		{"VKTHpS7s0x_0001", "Aurora Gaming", "HEROIC", "HEROIC", "0-2", "Round 3"},
-		{"VKTHpS7s0x_0002", "B8", "PaiN Gaming", "PaiN Gaming", "0-2", "Round 3"},
-		{"ayB546T4zZ_0001", "PaiN Gaming", "Gentle Mates", "PaiN Gaming", "2-0", "Round 1"},
-		{"ayB546T4zZ_0002", "Legacy", "Team Liquid", "Team Liquid", "1-2", "Round 1"},
-		{"ayB546T4zZ_0003", "HEROIC", "Ninjas in Pyjamas", "HEROIC", "2-0", "Round 1"},
-		{"ayB546T4zZ_0004", "GamerLegion", "FlyQuest", "GamerLegion", "2-0", "Round 1"},
-		{"ayB546T4zZ_0005", "3DMAX", "SAW", "3DMAX", "2-0", "Round 1"},
-		{"ayB546T4zZ_0006", "BetBoom Team", "MIBR", "BetBoom Team", "2-1", "Round 1"},
-		{"ayB546T4zZ_0007", "Aurora Gaming", "Fnatic", "Aurora Gaming", "2-0", "Round 1"},
-		{"ayB546T4zZ_0008", "Astralis", "B8", "B8", "0-2", "Round 1"},
-		{"f3Ubb66fCx_0001", "3DMAX", "Astralis", "TBD", "", "Round 4"},
-		{"f3Ubb66fCx_0002", "BetBoom Team", "Gentle Mates", "TBD", "", "Round 4"},
-		{"f3Ubb66fCx_0003", "GamerLegion", "Fnatic", "TBD", "", "Round 4"},
-		{"ilPVE8BYF6_0001", "Ninjas in Pyjamas", "Gentle Mates", "Gentle Mates", "1-2", "Round 3"},
-		{"ilPVE8BYF6_0002", "Fnatic", "MIBR", "Fnatic", "2-0", "Round 3"},
-		{"vINHUV3all_0001", "Legacy", "Gentle Mates", "Legacy", "2-0", "Round 2"},
-		{"vINHUV3all_0002", "SAW", "Ninjas in Pyjamas", "SAW", "2-1", "Round 2"},
-		{"vINHUV3all_0003", "Fnatic", "FlyQuest", "FlyQuest", "0-2", "Round 2"},
-		{"vINHUV3all_0004", "Astralis", "MIBR", "Astralis", "2-0", "Round 2"},
-		{"zIiQwLgw83_0001", "TBD", "TBD", "TBD", "", "Round 5"},
-		{"zIiQwLgw83_0002", "TBD", "TBD", "TBD", "", "Round 5"},
-		{"zIiQwLgw83_0003", "TBD", "TBD", "TBD", "", "Round 5"},
+		{ID: "AmF15pUfHd_0001", Team1: "Aurora Gaming", Team2: "SAW", Winner: "TBD", Score: "", Section: "Round 4"},
+		{ID: "AmF15pUfHd_0002", Team1: "Team Liquid", Team2: "FlyQuest", Winner: "TBD", Score: "", Section: "Round 4"},
+		{ID: "AmF15pUfHd_0003", Team1: "B8", Team2: "Legacy", Winner: "TBD", Score: "", Section: "Round 4"},
+		{ID: "IykJinz1G8_0001", Team1: "GamerLegion", Team2: "SAW", Winner: "SAW", Score: "1-2", Section: "Round 3"},
+		{ID: "IykJinz1G8_0002", Team1: "Team Liquid", Team2: "BetBoom Team", Winner: "Team Liquid", Score: "2-1", Section: "Round 3"},
+		{ID: "IykJinz1G8_0003", Team1: "3DMAX", Team2: "FlyQuest", Winner: "FlyQuest", Score: "1-2", Section: "Round 3"},
+		{ID: "IykJinz1G8_0004", Team1: "Astralis", Team2: "Legacy", Winner: "Legacy", Score: "0-2", Section: "Round 3"},
+		{ID: "U7JeCe3nrs_0001", Team1: "GamerLegion", Team2: "PaiN Gaming", Winner: "PaiN Gaming", Score: "1-2", Section: "Round 2"},
+		{ID: "U7JeCe3nrs_0002", Team1: "HEROIC", Team2: "BetBoom Team", Winner: "HEROIC", Score: "2-0", Section: "Round 2"},
+		{ID: "U7JeCe3nrs_0003", Team1: "Aurora Gaming", Team2: "Team Liquid", Winner: "Aurora Gaming", Score: "2-1", Section: "Round 2"},
+		{ID: "U7JeCe3nrs_0004", Team1: "3DMAX", Team2: "B8", Winner: "B8", Score: "0-2", Section: "Round 2"},
+		{ID: "VKTHpS7s0x_0001", Team1: "Aurora Gaming", Team2: "HEROIC", Winner: "HEROIC", Score: "0-2", Section: "Round 3"},
+		{ID: "VKTHpS7s0x_0002", Team1: "B8", Team2: "PaiN Gaming", Winner: "PaiN Gaming", Score: "0-2", Section: "Round 3"},
+		{ID: "ayB546T4zZ_0001", Team1: "PaiN Gaming", Team2: "Gentle Mates", Winner: "PaiN Gaming", Score: "2-0", Section: "Round 1"},
+		{ID: "ayB546T4zZ_0002", Team1: "Legacy", Team2: "Team Liquid", Winner: "Team Liquid", Score: "1-2", Section: "Round 1"},
+		{ID: "ayB546T4zZ_0003", Team1: "HEROIC", Team2: "Ninjas in Pyjamas", Winner: "HEROIC", Score: "2-0", Section: "Round 1"},
+		{ID: "ayB546T4zZ_0004", Team1: "GamerLegion", Team2: "FlyQuest", Winner: "GamerLegion", Score: "2-0", Section: "Round 1"},
+		{ID: "ayB546T4zZ_0005", Team1: "3DMAX", Team2: "SAW", Winner: "3DMAX", Score: "2-0", Section: "Round 1"},
+		{ID: "ayB546T4zZ_0006", Team1: "BetBoom Team", Team2: "MIBR", Winner: "BetBoom Team", Score: "2-1", Section: "Round 1"},
+		{ID: "ayB546T4zZ_0007", Team1: "Aurora Gaming", Team2: "Fnatic", Winner: "Aurora Gaming", Score: "2-0", Section: "Round 1"},
+		{ID: "ayB546T4zZ_0008", Team1: "Astralis", Team2: "B8", Winner: "B8", Score: "0-2", Section: "Round 1"},
+		{ID: "f3Ubb66fCx_0001", Team1: "3DMAX", Team2: "Astralis", Winner: "TBD", Score: "", Section: "Round 4"},
+		{ID: "f3Ubb66fCx_0002", Team1: "BetBoom Team", Team2: "Gentle Mates", Winner: "TBD", Score: "", Section: "Round 4"},
+		{ID: "f3Ubb66fCx_0003", Team1: "GamerLegion", Team2: "Fnatic", Winner: "TBD", Score: "", Section: "Round 4"},
+		{ID: "ilPVE8BYF6_0001", Team1: "Ninjas in Pyjamas", Team2: "Gentle Mates", Winner: "Gentle Mates", Score: "1-2", Section: "Round 3"},
+		{ID: "ilPVE8BYF6_0002", Team1: "Fnatic", Team2: "MIBR", Winner: "Fnatic", Score: "2-0", Section: "Round 3"},
+		{ID: "vINHUV3all_0001", Team1: "Legacy", Team2: "Gentle Mates", Winner: "Legacy", Score: "2-0", Section: "Round 2"},
+		{ID: "vINHUV3all_0002", Team1: "SAW", Team2: "Ninjas in Pyjamas", Winner: "SAW", Score: "2-1", Section: "Round 2"},
+		{ID: "vINHUV3all_0003", Team1: "Fnatic", Team2: "FlyQuest", Winner: "FlyQuest", Score: "0-2", Section: "Round 2"},
+		{ID: "vINHUV3all_0004", Team1: "Astralis", Team2: "MIBR", Winner: "Astralis", Score: "2-0", Section: "Round 2"},
+		{ID: "zIiQwLgw83_0001", Team1: "TBD", Team2: "TBD", Winner: "TBD", Score: "", Section: "Round 5"},
+		{ID: "zIiQwLgw83_0002", Team1: "TBD", Team2: "TBD", Winner: "TBD", Score: "", Section: "Round 5"},
+		{ID: "zIiQwLgw83_0003", Team1: "TBD", Team2: "TBD", Winner: "TBD", Score: "", Section: "Round 5"},
 	}
 
 	f, err := os.Open("testdata/parser/scheduledMatchRawData.json")
@@ -401,6 +401,8 @@ func TestParseScheduledMatches_InvalidFinishedValue(t *testing.T) {
 }
 
 func TestParseScheduledMatches_NoStreamKeys(t *testing.T) {
+	// Matches with no twitch/kick stream (e.g. YouTube-only or unassigned) should
+	// parse successfully with an empty StreamURL rather than returning an error.
 	matchData := map[string]interface{}{
 		"finished": float64(0),
 		"date":     "2025-01-15 14:00:00",
@@ -414,10 +416,13 @@ func TestParseScheduledMatches_NoStreamKeys(t *testing.T) {
 		},
 	}
 
-	_, err := parseLiquipediaScheduledMatch(matchData)
+	match, err := parseLiquipediaScheduledMatch(matchData)
 
-	if err == nil {
-		t.Fatal("Expected error for missing twitch/kick keys")
+	if err != nil {
+		t.Fatalf("Expected no error for missing twitch/kick keys, got: %v", err)
+	}
+	if match.StreamURL != "" {
+		t.Errorf("Expected empty StreamURL for unrecognised stream platform, got: %q", match.StreamURL)
 	}
 }
 

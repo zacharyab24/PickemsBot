@@ -38,7 +38,7 @@ func GetLiquipediaMatchDataByPage(apiKey string, pagename string) (string, error
 	params.Set("wiki", "counterstrike")
 	params.Set("conditions", fmt.Sprintf("[[pagename::%s]]", pagename))
 	params.Set("rawstreams", "false")
-	params.Set("streamurls", "false")
+	params.Set("streamurls", "true")
 	parsedURL.RawQuery = params.Encode()
 
 	client := &http.Client{}
@@ -87,7 +87,7 @@ func GetLiquipediaMatchData(apiKey string, bracketIds []string) (string, error) 
 	params.Set("wiki", "counterstrike")
 	params.Set("conditions", strings.Join(conditions, " OR "))
 	params.Set("rawstreams", "false")
-	params.Set("streamurls", "false")
+	params.Set("streamurls", "true")
 	parsedURL.RawQuery = params.Encode()
 
 	client := &http.Client{}
@@ -295,23 +295,16 @@ func parseLiquipediaScheduledMatch(result interface{}) (*ScheduledMatch, error) 
 		return nil, err
 	}
 
-	streamMap, ok := match["stream"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("error mapping stream to map")
-	}
-
-	// Prefer Twitch, fall back to Kick
-	streamURLRaw, ok := streamMap["twitch"]
-	if !ok {
-		streamURLRaw, ok = streamMap["kick"]
-		if !ok {
-			return nil, fmt.Errorf("twitch or kick keys not found in stream map")
+	// Stream URL is optional — not all matches have one assigned yet.
+	// With streamurls=true the API returns full URLs directly in stream.twitch / stream.kick.
+	var streamURL string
+	if streamMap, ok := match["stream"].(map[string]interface{}); ok {
+		// Prefer Twitch, fall back to Kick
+		if raw, ok := streamMap["twitch"].(string); ok && raw != "" {
+			streamURL = raw
+		} else if raw, ok := streamMap["kick"].(string); ok && raw != "" {
+			streamURL = raw
 		}
-	}
-
-	streamURL, ok := streamURLRaw.(string)
-	if !ok {
-		return nil, fmt.Errorf("stream url is not a string")
 	}
 
 	bestOfFloat, ok := match["bestof"].(float64)

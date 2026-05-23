@@ -13,6 +13,7 @@ type MatchNode struct {
 	Winner  string `bson:"winner"`
 	Score   string `bson:"score"`   // series score ("2-1") for BoX, map score ("13-10") for BO1; "" if unfinished
 	Section string `bson:"section"` // round label from Liquipedia (e.g. "Round 1", "Upper Bracket Round 2")
+	Status  string // source-specific status string (e.g. "finished", "running", "not_started" for PandaScore)
 }
 
 // ScheduledMatch represents a scheduled match with timing and streaming information

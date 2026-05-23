@@ -11,8 +11,20 @@ package web
 import (
 	"log"
 	"net/http"
+	"pickems-bot/app"
 	"time"
 )
+
+// Config holds the configuration for the web server
+type Config struct {
+	Addr string
+	API  *app.App
+}
+
+// Server is the HTTP server that handles webhook requests
+type Server struct {
+	api *app.App
+}
 
 // Start initializes and starts the HTTP server with the given configuration
 func Start(cfg Config) error {
@@ -21,7 +33,6 @@ func Start(cfg Config) error {
 	}
 
 	mux := http.NewServeMux()
-	// bind handler methods that have access to s.api
 	mux.HandleFunc("/webhooks/liquipedia", s.LiquipediaWebhookHandler)
 
 	srv := &http.Server{

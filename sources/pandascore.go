@@ -2,6 +2,7 @@ package sources
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,10 @@ import (
 	"strconv"
 	"time"
 )
+
+// ErrUnrecoverable signals that the API returned an error that will not resolve on retry
+// (e.g. bad API key, unknown series ID). The poller should stop when it sees this.
+var ErrUnrecoverable = errors.New("unrecoverable api error")
 
 // GetPandaScoreMatches fetches all matches for a given series from the PandaScore API.
 // Returns the raw JSON response body as a string.
@@ -39,6 +44,11 @@ func GetPandaScoreMatches(apiKey string, seriesId int) (string, error) {
 	}
 	defer response.Body.Close()
 
+	if response.StatusCode == http.StatusUnauthorized ||
+		response.StatusCode == http.StatusForbidden ||
+		response.StatusCode == http.StatusNotFound {
+		return "", fmt.Errorf("%w: status %d", ErrUnrecoverable, response.StatusCode)
+	}
 	if response.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("unexpected status code: %d", response.StatusCode)
 	}
@@ -141,6 +151,7 @@ func parsePandaScoreMatch(result interface{}) (*MatchNode, error) {
 		Winner:  winner,
 		Score:   score,
 		Section: section,
+		Status:  status,
 	}, nil
 }
 

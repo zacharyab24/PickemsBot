@@ -72,11 +72,21 @@ func main() {
 		log.Fatal(err)
 	}
 
-	go func() {
-		if err := web.Start(web.Config{Addr: ":8080", API: apiInstance}); err != nil {
-			log.Fatalf("failed to start web server: %v", err)
-		}
-	}()
+	switch cfg.DataSource {
+	case "pandascore":
+		poller := web.NewPoller(apiInstance, cfg.SeriesId, os.Getenv("PANDASCORE_API_KEY"))
+		go poller.Start()
+		log.Println("PandaScore poller started")
+	case "liquipedia":
+		go func() {
+			if err := web.Start(web.Config{Addr: ":8080", API: apiInstance}); err != nil {
+				log.Fatalf("failed to start web server: %v", err)
+			}
+		}()
+		log.Println("Liquipedia webhook server starting on :8080")
+	default:
+		log.Fatalf("unknown data_source %q in config.toml", cfg.DataSource)
+	}
 
 	if err := botInstance.Run(); err != nil {
 		log.Fatal(fmt.Errorf("an unrecoverable error occured whilst running the bot: %w", err))
