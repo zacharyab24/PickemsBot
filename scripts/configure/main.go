@@ -1,13 +1,15 @@
 //go:build !test
 
 /* scripts/configure
- * Generates config.toml from a Liquipedia tournament URL by parsing the
- * page wikitext for the tournament name and available sub-stages.
+ * Generates config.toml from a tournament URL or PandaScore series ID.
  *
- * Usage:
- *   go run ./scripts/configure -url https://liquipedia.net/counterstrike/Foo/2026/Bar
- *   go run ./scripts/configure -url <url> -stage Stage_1
- *   go run ./scripts/configure -url <url> -out custom.toml
+ * Liquipedia usage:
+ *   go run ./scripts/configure -source liquipedia -url https://liquipedia.net/counterstrike/Foo/2026/Bar
+ *   go run ./scripts/configure -source liquipedia -url <url> -stage Stage_1
+ *   go run ./scripts/configure -source liquipedia -url <url> -out custom.toml
+ *
+ * PandaScore usage:
+ *   go run ./scripts/configure -source pandascore -series-id 10488 -name "IEM_Cologne_2026" -round "Stage_1"
  */
 
 package main
@@ -20,17 +22,55 @@ import (
 )
 
 func main() {
-	tourneyURL := flag.String("url", "", "Liquipedia tournament URL (required)")
-	stage := flag.String("stage", "", "Stage name to use (skips interactive picker)")
-	format := flag.String("format", "", `Format override: "swiss" or "single-elimination". Leave empty to auto-detect (fine for single-stage tournaments; required when a page contains multiple stages)`)
+	source := flag.String("source", "liquipedia", `Data source: "liquipedia" or "pandascore"`)
 	out := flag.String("out", "config.toml", "Output config file path")
+
+	// Liquipedia flags
+	tourneyURL := flag.String("url", "", "Liquipedia tournament URL (liquipedia source only)")
+	stage := flag.String("stage", "", `Stage name to use, skips interactive picker (liquipedia source only)`)
+	format := flag.String("format", "", `Format override: "swiss" or "single-elimination" (liquipedia source only)`)
+
+	// PandaScore flags
+	seriesId := flag.Int("series-id", 0, "PandaScore series ID (pandascore source only)")
+	name := flag.String("name", "", "Tournament name, used as MongoDB database name (pandascore source only)")
+	round := flag.String("round", "", "Round/stage name (pandascore source only)")
+
 	flag.Parse()
 
-	if *tourneyURL == "" {
+	var cfg tournamentConfig
+
+	switch *source {
+	case "liquipedia":
+		cfg = runLiquipedia(*tourneyURL, *stage, *format)
+
+	case "pandascore":
+		cfg = runPandaScore(*seriesId, *name, *round)
+
+	default:
+		log.Fatalf("unknown -source %q — use \"liquipedia\" or \"pandascore\"", *source)
+	}
+
+	if err := writeConfig(*out, cfg); err != nil {
+		log.Fatalf("write config: %v", err)
+	}
+	fmt.Printf("\nWrote %s:\n", *out)
+	fmt.Printf("  data_source     = %q\n", cfg.DataSource)
+	fmt.Printf("  tournament_name = %q\n", cfg.Name)
+	fmt.Printf("  round           = %q\n", cfg.Round)
+	switch cfg.DataSource {
+	case "liquipedia":
+		fmt.Printf("  page            = %q\n", cfg.Page)
+	case "pandascore":
+		fmt.Printf("  series_id       = %d\n", cfg.SeriesId)
+	}
+}
+
+func runLiquipedia(tourneyURL, stage, format string) tournamentConfig {
+	if tourneyURL == "" {
 		log.Fatal("missing required flag: -url")
 	}
 
-	basePath, err := pagePathFromURL(*tourneyURL)
+	basePath, err := pagePathFromURL(tourneyURL)
 	if err != nil {
 		log.Fatalf("invalid URL: %v", err)
 	}
@@ -48,8 +88,7 @@ func main() {
 	fmt.Printf("Tournament: %s\n", tournamentName)
 
 	stages := extractStages(wikitext, basePath)
-
-	chosenStage, chosenPage, err := resolveStage(*stage, stages, basePath, os.Stdin, os.Stdout)
+	chosenStage, chosenPage, err := resolveStage(stage, stages, basePath, os.Stdin, os.Stdout)
 	if err != nil {
 		log.Fatalf("resolve stage: %v", err)
 	}
@@ -61,18 +100,30 @@ func main() {
 		}
 	}
 
-	cfg := tournamentConfig{
-		Name:   mongoSafe(tournamentName),
-		Page:   chosenPage,
-		Round:  chosenStage,
-		Format: *format,
+	return tournamentConfig{
+		DataSource: "liquipedia",
+		Name:       mongoSafe(tournamentName),
+		Page:       chosenPage,
+		Round:      chosenStage,
+		Format:     format,
+	}
+}
+
+func runPandaScore(seriesId int, name, round string) tournamentConfig {
+	if seriesId == 0 {
+		log.Fatal("missing required flag: -series-id")
+	}
+	if name == "" {
+		log.Fatal("missing required flag: -name")
+	}
+	if round == "" {
+		log.Fatal("missing required flag: -round")
 	}
 
-	if err := writeConfig(*out, cfg); err != nil {
-		log.Fatalf("write config: %v", err)
+	return tournamentConfig{
+		DataSource: "pandascore",
+		Name:       mongoSafe(name),
+		SeriesId:   seriesId,
+		Round:      round,
 	}
-	fmt.Printf("\nWrote %s:\n", *out)
-	fmt.Printf("  tournament_name = %q\n", cfg.Name)
-	fmt.Printf("  page            = %q\n", cfg.Page)
-	fmt.Printf("  round           = %q\n", cfg.Round)
 }
