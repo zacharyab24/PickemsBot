@@ -9,20 +9,20 @@ import (
 	"strings"
 	"testing"
 
-	"pickems-bot/api/api"
-	"pickems-bot/api/external"
-	"pickems-bot/api/format"
+	"pickems-bot/app"
+	"pickems-bot/sources"
+	"pickems-bot/tournament"
 )
 
 // Create a mock API for testing
-func createMockAPI(kind format.Kind) *api.API {
-	mockStore := api.NewMockStore(kind, "test_round")
-	mockStore.SetScheduledMatches([]external.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+func createMockAPI(kind tournament.Kind) *app.App {
+	mockStore := app.NewMockStore(kind, "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
 	mockStore.SetSwissResults(map[string]string{
 		"Team A": "3-0",
 		"Team B": "3-1",
 	})
-	return &api.API{Store: mockStore}
+	return &app.App{Store: mockStore}
 }
 
 // region NewBot tests

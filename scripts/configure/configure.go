@@ -21,12 +21,18 @@ import (
 const liquipediaBase = "https://liquipedia.net/counterstrike/"
 
 type tournamentConfig struct {
+	DataSource   string // "liquipedia" or "pandascore"
 	Name         string
-	Page         string
 	Round        string
-	Format       string // empty = auto-detect; set to "swiss" or "single-elimination" for multi-stage pages
 	UpcomingOnly bool
 	Test         bool
+
+	// Liquipedia only
+	Page   string
+	Format string // empty = auto-detect; set to "swiss" or "single-elimination" for multi-stage pages
+
+	// PandaScore only
+	SeriesID int
 }
 
 func fetchWikitext(path string) (string, error) {
@@ -196,11 +202,20 @@ func writeConfig(path string, c tournamentConfig) error {
 	defer f.Close()
 	fmt.Fprintln(f, "# Tournament configuration. Generated/updated by `go run ./scripts/configure`.")
 	fmt.Fprintln(f)
+	fmt.Fprintf(f, "data_source     = %q\n", c.DataSource)
 	fmt.Fprintf(f, "tournament_name = %q\n", c.Name)
-	fmt.Fprintf(f, "page           = %q\n", c.Page)
-	fmt.Fprintf(f, "round          = %q\n", c.Round)
-	fmt.Fprintf(f, "format         = %q\n", c.Format)
-	fmt.Fprintf(f, "upcoming_only  = %t\n", c.UpcomingOnly)
-	fmt.Fprintf(f, "test           = %t\n", c.Test)
+	fmt.Fprintf(f, "round           = %q\n", c.Round)
+	fmt.Fprintf(f, "upcoming_only   = %t\n", c.UpcomingOnly)
+	fmt.Fprintf(f, "test            = %t\n", c.Test)
+	fmt.Fprintln(f)
+	switch c.DataSource {
+	case "liquipedia":
+		fmt.Fprintln(f, "# Liquipedia settings")
+		fmt.Fprintf(f, "page   = %q\n", c.Page)
+		fmt.Fprintf(f, "format = %q\n", c.Format)
+	case "pandascore":
+		fmt.Fprintln(f, "# PandaScore settings")
+		fmt.Fprintf(f, "series_id = %d\n", c.SeriesID)
+	}
 	return nil
 }

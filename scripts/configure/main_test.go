@@ -211,16 +211,16 @@ func TestMongoSafe(t *testing.T) {
 
 // region writeConfig
 
-func TestWriteConfig_RoundTrip(t *testing.T) {
+func TestWriteConfig_Liquipedia(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "out.toml")
 
 	cfg := tournamentConfig{
-		Name:         "Foo_2026",
-		Page:         "Foo/2026/Bar/Stage_1",
-		Round:        "Stage_1",
-		UpcomingOnly: false,
-		Test:         false,
+		DataSource: "liquipedia",
+		Name:       "Foo_2026",
+		Page:       "Foo/2026/Bar/Stage_1",
+		Round:      "Stage_1",
+		Format:     "swiss",
 	}
 	err := writeConfig(path, cfg)
 	assert.NoError(t, err)
@@ -229,11 +229,40 @@ func TestWriteConfig_RoundTrip(t *testing.T) {
 	assert.NoError(t, err)
 
 	out := string(data)
-	assert.Contains(t, out, `tournament_name = "Foo_2026"`)
-	assert.Contains(t, out, `page           = "Foo/2026/Bar/Stage_1"`)
-	assert.Contains(t, out, `round          = "Stage_1"`)
-	assert.Contains(t, out, `upcoming_only  = false`)
 	assert.True(t, strings.HasPrefix(out, "#"), "expected header comment")
+	assert.Contains(t, out, `data_source     = "liquipedia"`)
+	assert.Contains(t, out, `tournament_name = "Foo_2026"`)
+	assert.Contains(t, out, `round           = "Stage_1"`)
+	assert.Contains(t, out, `upcoming_only   = false`)
+	assert.Contains(t, out, `page   = "Foo/2026/Bar/Stage_1"`)
+	assert.Contains(t, out, `format = "swiss"`)
+	assert.NotContains(t, out, "series_id")
+}
+
+func TestWriteConfig_PandaScore(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "out.toml")
+
+	cfg := tournamentConfig{
+		DataSource: "pandascore",
+		Name:       "IEM_Cologne_2026",
+		SeriesID:   10488,
+		Round:      "Stage_1",
+	}
+	err := writeConfig(path, cfg)
+	assert.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	assert.NoError(t, err)
+
+	out := string(data)
+	assert.True(t, strings.HasPrefix(out, "#"), "expected header comment")
+	assert.Contains(t, out, `data_source     = "pandascore"`)
+	assert.Contains(t, out, `tournament_name = "IEM_Cologne_2026"`)
+	assert.Contains(t, out, `round           = "Stage_1"`)
+	assert.Contains(t, out, `series_id = 10488`)
+	assert.NotContains(t, out, "page")
+	assert.NotContains(t, out, "format")
 }
 
 func TestWriteConfig_BadPath(t *testing.T) {

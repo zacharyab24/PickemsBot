@@ -15,7 +15,7 @@ import (
 	"log"
 	"os"
 
-	api "pickems-bot/api/api"
+	"pickems-bot/app"
 	bot "pickems-bot/bot"
 	"pickems-bot/config"
 	"pickems-bot/web"
@@ -33,7 +33,7 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	apiInstance, err := api.NewAPI(cfg.TournamentName, os.Getenv("MONGO_PROD_URI"), cfg.Page, cfg.Format, cfg.Round)
+	apiInstance, err := app.NewApp(cfg, os.Getenv("MONGO_PROD_URI"))
 	if err != nil {
 		log.Fatalf("failed to initialize API: %v", err)
 	}
@@ -72,11 +72,21 @@ func main() {
 		log.Fatal(err)
 	}
 
-	go func() {
-		if err := web.Start(web.Config{Addr: ":8080", API: apiInstance}); err != nil {
-			log.Fatalf("failed to start web server: %v", err)
-		}
-	}()
+	switch cfg.DataSource {
+	case "pandascore":
+		poller := web.NewPoller(apiInstance, cfg.SeriesID, os.Getenv("PANDASCORE_API_KEY"))
+		go poller.Start()
+		log.Println("PandaScore poller started")
+	case "liquipedia":
+		go func() {
+			if err := web.Start(web.Config{Addr: ":8080", API: apiInstance, Page: cfg.Page}); err != nil {
+				log.Fatalf("failed to start web server: %v", err)
+			}
+		}()
+		log.Println("Liquipedia webhook server starting on :8080")
+	default:
+		log.Fatalf("unknown data_source %q in config.toml", cfg.DataSource)
+	}
 
 	if err := botInstance.Run(); err != nil {
 		log.Fatal(fmt.Errorf("an unrecoverable error occured whilst running the bot: %w", err))

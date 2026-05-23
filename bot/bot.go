@@ -8,18 +8,18 @@ package bot
 
 import (
 	"fmt"
-	"pickems-bot/api/api"
+	"pickems-bot/app"
 	"strings"
 )
 
 // Bot represents a Discord bot instance with its token and API pointer
 type Bot struct {
 	BotToken string
-	APIPtr   *api.API
+	APIPtr   *app.App
 }
 
 // NewBot creates a new Bot instance with the provided token and API pointer
-func NewBot(botToken string, apiPtr *api.API) (*Bot, error) {
+func NewBot(botToken string, apiPtr *app.App) (*Bot, error) {
 	if botToken == "" {
 		return nil, fmt.Errorf("botToken is required but none was provided")
 	}

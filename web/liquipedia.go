@@ -6,10 +6,11 @@ import (
 	"log"
 	"net/http"
 	"os"
-	api "pickems-bot/api/api"
-	"pickems-bot/api/external"
-	"pickems-bot/api/format"
 	"strings"
+
+	"pickems-bot/app"
+	"pickems-bot/sources"
+	"pickems-bot/tournament"
 
 	"github.com/zacharyab24/pickems-renderer/render"
 )
@@ -50,7 +51,7 @@ func (s *Server) LiquipediaWebhookHandler(w http.ResponseWriter, r *http.Request
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	if !isRelevantTournamentPage(event.Page, s.api.Store.GetPage()) {
+	if !isRelevantTournamentPage(event.Page, s.page) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -79,7 +80,7 @@ const resultImagePath = "resources/result.png"
 
 // RenderResultsImage fetches match nodes from the DB and regenerates the result image on disk.
 // It is called at startup and after each webhook update to ensure the image is always current.
-func RenderResultsImage(a *api.API) error {
+func RenderResultsImage(a *app.App) error {
 	if err := os.MkdirAll("resources", 0755); err != nil {
 		return fmt.Errorf("failed to create resources directory: %w", err)
 	}
@@ -95,9 +96,9 @@ func RenderResultsImage(a *api.API) error {
 	// all bracket nodes with Section = "Bracket/8" (the template name), but
 	// the renderer groups by Section to build columns and only recognises
 	// names like "Quarterfinals", "Semifinals", "Grand Final".
-	if kind == format.SingleElim {
-		nodes = format.TrimSingleElimNodes(nodes)
-		nodes = format.NormalizeSingleElimSections(nodes)
+	if kind == tournament.SingleElim {
+		nodes = tournament.TrimSingleElimNodes(nodes)
+		nodes = tournament.NormalizeSingleElimSections(nodes)
 	}
 
 	renderNodes := toRenderNodes(nodes)
@@ -107,9 +108,9 @@ func RenderResultsImage(a *api.API) error {
 	return nil
 }
 
-// toRenderNodes converts external.MatchNode slice to the renderer's input type.
+// toRenderNodes converts sources.MatchNode slice to the renderer's input type.
 // The two types are structurally identical; this bridges the package boundary.
-func toRenderNodes(nodes []external.MatchNode) []render.MatchNode {
+func toRenderNodes(nodes []sources.MatchNode) []render.MatchNode {
 	out := make([]render.MatchNode, len(nodes))
 	for i, n := range nodes {
 		out[i] = render.MatchNode{

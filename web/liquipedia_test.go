@@ -12,7 +12,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	apiPkg "pickems-bot/api/api"
+	apiPkg "pickems-bot/app"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -99,7 +99,7 @@ func TestLiquipediaWebhookHandler_WrongWiki(t *testing.T) {
 
 func TestLiquipediaWebhookHandler_IrrelevantPage(t *testing.T) {
 	mockStore := apiPkg.NewMockStore("swiss", "test_round")
-	server := &Server{api: &apiPkg.API{Store: mockStore}}
+	server := &Server{api: &apiPkg.App{Store: mockStore}, page: "Test/Tournament/2025"}
 
 	event := LiquipediaEvent{
 		Wiki:  "counterstrike",
@@ -124,12 +124,11 @@ func TestLiquipediaWebhookHandler_IrrelevantPage(t *testing.T) {
 // TestLiquipediaWebhookHandler_RelevantEvent_ReturnsOK tests that relevant events return 200 OK
 // This test uses a mock API to test the full flow
 func TestLiquipediaWebhookHandler_RelevantEvent_ReturnsOK(t *testing.T) {
-	// Create server with mock API from api package (mock GetPage returns "Test/Tournament/2025")
 	mockStore := apiPkg.NewMockStore("swiss", "test_round")
 	mockStore.SetSwissResults(map[string]string{"Team A": "3-0"})
-	mockAPI := &apiPkg.API{Store: mockStore}
+	mockAPI := &apiPkg.App{Store: mockStore}
 
-	server := &Server{api: mockAPI}
+	server := &Server{api: mockAPI, page: "Test/Tournament/2025"}
 
 	event := LiquipediaEvent{
 		Wiki:  "counterstrike",
@@ -149,12 +148,11 @@ func TestLiquipediaWebhookHandler_RelevantEvent_ReturnsOK(t *testing.T) {
 
 // TestLiquipediaWebhookHandler_SubPageMatch_ReturnsOK tests sub-page matching
 func TestLiquipediaWebhookHandler_SubPageMatch_ReturnsOK(t *testing.T) {
-	// Create server with mock API (mock GetPage returns "Test/Tournament/2025")
 	mockStore := apiPkg.NewMockStore("swiss", "test_round")
 	mockStore.SetSwissResults(map[string]string{"Team A": "3-0"})
-	mockAPI := &apiPkg.API{Store: mockStore}
+	mockAPI := &apiPkg.App{Store: mockStore}
 
-	server := &Server{api: mockAPI}
+	server := &Server{api: mockAPI, page: "Test/Tournament/2025"}
 
 	event := LiquipediaEvent{
 		Wiki:  "counterstrike",

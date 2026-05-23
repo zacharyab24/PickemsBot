@@ -3,7 +3,7 @@ package bot
 import (
 	"fmt"
 	"log"
-	"pickems-bot/api/format"
+	format "pickems-bot/tournament"
 	"regexp"
 	"sort"
 	"strings"
