@@ -254,8 +254,8 @@ func (b *Bot) teamsHandler(session DiscordSession, message *discordgo.MessageCre
 		Title: "Teams in this Stage",
 		Color: green,
 		Fields: []*discordgo.MessageEmbedField{
-			{Name: "​", Value: leftCol.String(), Inline: true},
-			{Name: "​", Value: rightCol.String(), Inline: true},
+			{Name: "\u200b", Value: leftCol.String(), Inline: true},
+			{Name: "\u200b", Value: rightCol.String(), Inline: true},
 		},
 		Footer: &discordgo.MessageEmbedFooter{
 			Text: fmt.Sprintf("%d teams • Fuzzy matching is active, but keep names as close as possible!", len(teams)),
