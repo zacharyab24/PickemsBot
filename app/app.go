@@ -9,7 +9,7 @@ package app
 import (
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"pickems-bot/config"
 	"pickems-bot/models"
@@ -28,10 +28,20 @@ import (
 type App struct {
 	Store       store.Interface
 	rateLimiter *rate.Limiter
+	log         *slog.Logger
 }
 
-// NewApp creates a new App instance with the provided configuration
-func NewApp(cfg config.Config, mongoURI string) (*App, error) {
+// logger returns the app's logger, falling back to the global default when none was injected.
+func (a *App) logger() *slog.Logger {
+	if a.log == nil {
+		return slog.Default()
+	}
+	return a.log
+}
+
+// NewApp creates a new App instance with the provided configuration.
+// log may be nil; if so the global slog default is used.
+func NewApp(cfg config.Config, mongoURI string, log *slog.Logger) (*App, error) {
 	var fetcher store.DataSourceFetcher
 	var limiter *rate.Limiter
 	switch cfg.DataSource {
@@ -47,7 +57,14 @@ func NewApp(cfg config.Config, mongoURI string) (*App, error) {
 		return nil, fmt.Errorf("unsupported data source: %s", cfg.DataSource)
 	}
 
-	s, err := store.NewStore(cfg.TournamentName, mongoURI, cfg.Round, fetcher)
+	// Tag each layer's logger with its own component before storing, so that
+	// every log line carries exactly one "component" field without double-stamping.
+	var appLog, storeLog *slog.Logger
+	if log != nil {
+		appLog = log.With("component", "app")
+		storeLog = log.With("component", "store")
+	}
+	s, err := store.NewStore(cfg.TournamentName, mongoURI, cfg.Round, fetcher, storeLog)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize store: %w", err)
 	}
@@ -55,6 +72,7 @@ func NewApp(cfg config.Config, mongoURI string) (*App, error) {
 	return &App{
 		Store:       s,
 		rateLimiter: limiter,
+		log:         appLog,
 	}, nil
 }
 
@@ -199,7 +217,11 @@ func (a *App) GenerateLeaderboard() error {
 		if err != nil {
 			// Skip predictions that can't be scored — most likely a stale entry
 			// stored by an older code version or a different format for this round.
-			log.Printf("warning: skipping prediction for user %s (round=%s): %v", pred.Username, pred.Round, err)
+			a.logger().Warn("skipping prediction (stale or incompatible format)",
+				"user", pred.Username,
+				"round", pred.Round,
+				"error", err,
+			)
 			continue
 		}
 		scores := scoreReport.GetScore()
@@ -327,7 +349,6 @@ func (a *App) GetTournamentInfo() (TournamentInfo, error) {
 // When scheduleOnly is false, match results are also fetched and stored.
 func (a *App) PopulateMatches(scheduleOnly bool) error {
 	if !a.Allow() {
-		log.Printf("Rate limit exceeded")
 		return fmt.Errorf("rate limiter limit reached")
 	}
 
@@ -347,7 +368,6 @@ func (a *App) PopulateMatches(scheduleOnly bool) error {
 // across the app and ensuring we comply with api specifications
 func (a *App) UpdateMatchResults() error {
 	if !a.Allow() {
-		log.Println("Rate limiter is reached")
 		return fmt.Errorf("rate limiter exceeded, skipping match result update")
 	}
 

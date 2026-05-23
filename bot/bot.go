@@ -8,6 +8,7 @@ package bot
 
 import (
 	"fmt"
+	"log/slog"
 	"pickems-bot/app"
 	"strings"
 )
@@ -16,17 +17,32 @@ import (
 type Bot struct {
 	BotToken string
 	APIPtr   *app.App
+	log      *slog.Logger
 }
 
-// NewBot creates a new Bot instance with the provided token and API pointer
-func NewBot(botToken string, apiPtr *app.App) (*Bot, error) {
+// logger returns the bot's logger, falling back to the global default when none was injected.
+func (b *Bot) logger() *slog.Logger {
+	if b.log == nil {
+		return slog.Default()
+	}
+	return b.log
+}
+
+// NewBot creates a new Bot instance with the provided token and API pointer.
+// log may be nil; if so the global slog default is used.
+func NewBot(botToken string, apiPtr *app.App, log *slog.Logger) (*Bot, error) {
 	if botToken == "" {
 		return nil, fmt.Errorf("botToken is required but none was provided")
 	}
 
+	var botLog *slog.Logger
+	if log != nil {
+		botLog = log.With("component", "bot")
+	}
 	return &Bot{
 		BotToken: botToken,
 		APIPtr:   apiPtr,
+		log:      botLog,
 	}, nil
 }
 

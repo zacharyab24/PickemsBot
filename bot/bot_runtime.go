@@ -9,7 +9,6 @@
 package bot
 
 import (
-	"log"
 	"os"
 	"os/signal"
 
@@ -32,7 +31,7 @@ func (b *Bot) Run() error {
 	defer discord.Close() // close session, after function termination
 
 	// keep bot running until there is NO os interruption (ctrl + C)
-	log.Println("Pickems Bot started")
+	b.logger().Info("Pickems Bot started")
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	<-c

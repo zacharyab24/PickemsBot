@@ -3,7 +3,6 @@ package web
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -42,7 +41,7 @@ func (s *Server) LiquipediaWebhookHandler(w http.ResponseWriter, r *http.Request
 
 	var event LiquipediaEvent
 	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
-		log.Println("failed to decode webhook:", err)
+		s.logger().Error("failed to decode webhook body", "error", fmt.Errorf("LiquipediaWebhookHandler: %w", err))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -56,20 +55,20 @@ func (s *Server) LiquipediaWebhookHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	log.Printf("Recieved relevant webhook, running update functions")
+	s.logger().Info("received relevant webhook, running update pipeline", "page", event.Page)
 
 	// Kick async pipeline – call into your existing packages (/api, /bot, etc)
 	go func(e LiquipediaEvent) {
 		if err := s.api.UpdateMatchResults(); err != nil {
-			log.Println("RefreshTournamentData failed:", err)
+			s.logger().Error("update match results failed", "error", fmt.Errorf("webhook pipeline: %w", err))
 			return
 		}
 		if err := s.api.GenerateLeaderboard(); err != nil {
-			log.Println("RecalculateAndStoreLeaderboard failed:", err)
+			s.logger().Error("generate leaderboard failed", "error", fmt.Errorf("webhook pipeline: %w", err))
 			return
 		}
 		if err := RenderResultsImage(s.api); err != nil {
-			log.Println("RenderResultsImage failed:", err)
+			s.logger().Error("render results image failed", "error", fmt.Errorf("webhook pipeline: %w", err))
 		}
 	}(event)
 

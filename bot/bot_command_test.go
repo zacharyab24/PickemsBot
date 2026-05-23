@@ -29,7 +29,7 @@ func createMockAPI(kind tournament.Kind) *app.App {
 
 func TestNewBot_Success(t *testing.T) {
 	apiPtr := createMockAPI("swiss")
-	bot, err := NewBot("test_token", apiPtr)
+	bot, err := NewBot("test_token", apiPtr, nil)
 
 	if err != nil {
 		t.Errorf("Expected no error, got: %s", err.Error())
@@ -46,7 +46,7 @@ func TestNewBot_Success(t *testing.T) {
 
 func TestNewBot_EmptyToken(t *testing.T) {
 	apiPtr := createMockAPI("swiss")
-	_, err := NewBot("", apiPtr)
+	_, err := NewBot("", apiPtr, nil)
 
 	if err == nil {
 		t.Error("Expected error for empty bot token, got nil")

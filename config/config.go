@@ -31,6 +31,11 @@ type Config struct {
 	// Bot modes
 	UpcomingOnly bool `toml:"upcoming_only"`
 	Test         bool `toml:"test"`
+
+	// Logging
+	// LogLevel controls the minimum log level emitted (debug, info, warn, error).
+	// Defaults to "info". When test=true and log_level is unset, defaults to "debug".
+	LogLevel string `toml:"log_level"`
 }
 
 // Load reads and validates a config.toml file at path.

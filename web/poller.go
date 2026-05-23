@@ -2,7 +2,8 @@ package web
 
 import (
 	"errors"
-	"log"
+	"fmt"
+	"log/slog"
 	"pickems-bot/app"
 	"pickems-bot/sources"
 	"time"
@@ -16,16 +17,31 @@ type Poller struct {
 	apiKey      string
 	interval    time.Duration
 	knownStatus map[string]string // matchID -> last known status
+	log         *slog.Logger
 }
 
-// NewPoller is the poller constructor
-func NewPoller(a *app.App, seriesID int, apiKey string) *Poller {
+// logger returns the poller's logger, falling back to the global default when none was injected.
+func (p *Poller) logger() *slog.Logger {
+	if p.log == nil {
+		return slog.Default()
+	}
+	return p.log
+}
+
+// NewPoller is the poller constructor.
+// log may be nil; if so the global slog default is used.
+func NewPoller(a *app.App, seriesID int, apiKey string, log *slog.Logger) *Poller {
+	var pollerLog *slog.Logger
+	if log != nil {
+		pollerLog = log.With("component", "poller")
+	}
 	return &Poller{
 		app:         a,
 		seriesID:    seriesID,
 		apiKey:      apiKey,
 		interval:    time.Minute,
 		knownStatus: make(map[string]string),
+		log:         pollerLog,
 	}
 }
 
@@ -36,7 +52,6 @@ func (p *Poller) Start() {
 
 	for range ticker.C {
 		if !p.tick() {
-			log.Println("Poller: stopping due to unrecoverable error")
 			return
 		}
 	}
@@ -47,19 +62,23 @@ func (p *Poller) Start() {
 func (p *Poller) tick() bool {
 	// make sure we are not exceeding our rate limiter limitation
 	if !p.app.Allow() {
-		log.Println("Poller: rate limit reached, skipping tick")
+		p.logger().Warn("rate limit reached, skipping tick")
 		return true
 	}
 
 	raw, err := sources.GetPandaScoreMatches(p.apiKey, p.seriesID)
 	if err != nil {
-		log.Printf("Poller: fetch error: %v", err)
-		return !errors.Is(err, sources.ErrUnrecoverable)
+		if errors.Is(err, sources.ErrUnrecoverable) {
+			p.logger().Error("unrecoverable fetch error, stopping poller", "error", fmt.Errorf("poller.tick: %w", err))
+			return false
+		}
+		p.logger().Warn("failed to fetch matches from PandaScore, will retry next tick", "error", fmt.Errorf("poller.tick: %w", err))
+		return true
 	}
 
 	matchNodes, err := sources.ParsePandaScoreMatches(raw)
 	if err != nil {
-		log.Printf("Poller: parse error: %v", err)
+		p.logger().Warn("failed to parse PandaScore matches, will retry next tick", "error", fmt.Errorf("poller.tick: %w", err))
 		return true
 	}
 
@@ -72,15 +91,17 @@ func (p *Poller) tick() bool {
 		p.knownStatus[matchNode.ID] = matchNode.Status
 	}
 
+	p.logger().Debug("poller tick complete", "matches_checked", len(matchNodes), "finished_transition", finishedTransition)
+
 	if finishedTransition {
 		if err := p.app.UpdateMatchResults(); err != nil {
-			log.Printf("Poller: update match results error: %v", err)
+			p.logger().Warn("failed to update match results", "error", fmt.Errorf("poller.tick: %w", err))
 		}
 		if err := p.app.GenerateLeaderboard(); err != nil {
-			log.Printf("Poller: generate leaderboard error: %v", err)
+			p.logger().Warn("failed to generate leaderboard", "error", fmt.Errorf("poller.tick: %w", err))
 		}
 		if err := RenderResultsImage(p.app); err != nil {
-			log.Printf("Poller: render results image error: %v", err)
+			p.logger().Warn("failed to render results image", "error", fmt.Errorf("poller.tick: %w", err))
 		}
 	}
 

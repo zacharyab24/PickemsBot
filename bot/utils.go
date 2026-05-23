@@ -2,7 +2,7 @@ package bot
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	format "pickems-bot/tournament"
 	"regexp"
 	"sort"
@@ -102,6 +102,6 @@ func sendError(session DiscordSession, channelID string, msg string) {
 		Color:       red,
 	}
 	if _, err := session.ChannelMessageSendEmbed(channelID, embed); err != nil {
-		log.Printf("send error embed: %v", err)
+		slog.Error("failed to send error embed", "error", fmt.Errorf("sendError: %w", err))
 	}
 }
