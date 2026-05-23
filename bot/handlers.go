@@ -9,7 +9,6 @@ package bot
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"pickems-bot/models"
 	"pickems-bot/tournament"
@@ -75,7 +74,7 @@ func (b *Bot) helpMessageHandler(session DiscordSession, message *discordgo.Mess
 	}
 
 	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-		log.Fatalf("send embed: %v", err)
+		b.logger().Error("failed to send help embed", "error", fmt.Errorf("helpMessageHandler: %w", err))
 	}
 }
 
@@ -83,7 +82,7 @@ func (b *Bot) helpMessageHandler(session DiscordSession, message *discordgo.Mess
 func (b *Bot) detailsHandler(session DiscordSession, message *discordgo.MessageCreate) {
 	info, err := b.APIPtr.GetTournamentInfo()
 	if err != nil {
-		log.Println(err)
+		b.logger().Error("failed to get tournament info", "error", fmt.Errorf("detailsHandler: %w", err))
 		sendError(session, message.ChannelID, "An unexpected error occurred.")
 		return
 	}
@@ -116,7 +115,7 @@ func (b *Bot) detailsHandler(session DiscordSession, message *discordgo.MessageC
 	}
 
 	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-		log.Fatalf("send embed: %v", err)
+		b.logger().Error("failed to send details embed", "error", fmt.Errorf("detailsHandler: %w", err))
 	}
 }
 
@@ -131,7 +130,7 @@ func (b *Bot) setPredictionsHandler(session DiscordSession, message *discordgo.M
 
 	err := b.APIPtr.SetUserPrediction(user, userPreds, b.APIPtr.Store.GetRound())
 	if err != nil {
-		log.Println(err)
+		b.logger().Error("failed to set user prediction", "user", user.Username, "error", fmt.Errorf("setPredictionsHandler: %w", err))
 		sendError(session, message.ChannelID, err.Error())
 		return
 	}
@@ -142,7 +141,7 @@ func (b *Bot) setPredictionsHandler(session DiscordSession, message *discordgo.M
 		Color:       green,
 	}
 	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-		log.Printf("send embed: %v", err)
+		b.logger().Error("failed to send set-predictions embed", "error", fmt.Errorf("setPredictionsHandler: %w", err))
 	}
 }
 
@@ -154,7 +153,7 @@ func (b *Bot) checkPredictionsHandler(session DiscordSession, message *discordgo
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			sendError(session, message.ChannelID, fmt.Sprintf("%s does not have any Pick'Ems stored. Use `$set` to set your predictions.", user.Username))
 		} else {
-			log.Println(err)
+			b.logger().Error("failed to check prediction", "user", user.Username, "error", fmt.Errorf("checkPredictionsHandler: %w", err))
 			sendError(session, message.ChannelID, fmt.Sprintf("An error occurred checking %s's Pick'Ems.", user.Username))
 		}
 		return
@@ -174,7 +173,7 @@ func (b *Bot) checkPredictionsHandler(session DiscordSession, message *discordgo
 
 	info, err := b.APIPtr.GetTournamentInfo()
 	if err != nil {
-		log.Println(err)
+		b.logger().Error("failed to get tournament info", "error", fmt.Errorf("checkPredictionsHandler: %w", err))
 		sendError(session, message.ChannelID, "An unexpected error occurred.")
 		return
 	}
@@ -187,7 +186,7 @@ func (b *Bot) checkPredictionsHandler(session DiscordSession, message *discordgo
 	}
 
 	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-		log.Printf("send embed: %v", err)
+		b.logger().Error("failed to send check-predictions embed", "user", user.Username, "error", fmt.Errorf("checkPredictionsHandler: %w", err))
 	}
 }
 
@@ -195,7 +194,7 @@ func (b *Bot) checkPredictionsHandler(session DiscordSession, message *discordgo
 func (b *Bot) leaderboardHandler(session DiscordSession, message *discordgo.MessageCreate) {
 	leaderboard, err := b.APIPtr.GetLeaderboard()
 	if err != nil {
-		log.Println(err)
+		b.logger().Error("failed to get leaderboard", "error", fmt.Errorf("leaderboardHandler: %w", err))
 		sendError(session, message.ChannelID, "An error occurred getting the leaderboard.")
 		return
 	}
@@ -224,7 +223,7 @@ func (b *Bot) leaderboardHandler(session DiscordSession, message *discordgo.Mess
 	}
 
 	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-		log.Fatalf("send embed: %v", err)
+		b.logger().Error("failed to send leaderboard embed", "error", fmt.Errorf("leaderboardHandler: %w", err))
 	}
 }
 
@@ -232,7 +231,7 @@ func (b *Bot) leaderboardHandler(session DiscordSession, message *discordgo.Mess
 func (b *Bot) teamsHandler(session DiscordSession, message *discordgo.MessageCreate) {
 	teams, err := b.APIPtr.GetTeams()
 	if err != nil {
-		log.Println(err)
+		b.logger().Error("failed to get teams", "error", fmt.Errorf("teamsHandler: %w", err))
 		sendError(session, message.ChannelID, "An error occurred getting the teams list.")
 		return
 	}
@@ -264,7 +263,7 @@ func (b *Bot) teamsHandler(session DiscordSession, message *discordgo.MessageCre
 	}
 
 	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-		log.Printf("send embed: %v", err)
+		b.logger().Error("failed to send teams embed", "error", fmt.Errorf("teamsHandler: %w", err))
 	}
 }
 
@@ -272,7 +271,7 @@ func (b *Bot) teamsHandler(session DiscordSession, message *discordgo.MessageCre
 func (b *Bot) upcomingMatchesHandler(session DiscordSession, message *discordgo.MessageCreate) {
 	matches, err := b.APIPtr.GetUpcomingMatches()
 	if err != nil {
-		log.Println(err)
+		b.logger().Error("failed to get upcoming matches", "error", fmt.Errorf("upcomingMatchesHandler: %w", err))
 		sendError(session, message.ChannelID, "An error occurred getting upcoming matches.")
 		return
 	}
@@ -284,7 +283,7 @@ func (b *Bot) upcomingMatchesHandler(session DiscordSession, message *discordgo.
 			Color:       green,
 		}
 		if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-			log.Printf("send embed: %v", err)
+			b.logger().Error("failed to send upcoming-matches embed", "error", fmt.Errorf("upcomingMatchesHandler: %w", err))
 		}
 		return
 	}
@@ -311,7 +310,7 @@ func (b *Bot) upcomingMatchesHandler(session DiscordSession, message *discordgo.
 	}
 
 	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-		log.Printf("send embed: %v", err)
+		b.logger().Error("failed to send upcoming-matches embed", "error", fmt.Errorf("upcomingMatchesHandler: %w", err))
 	}
 }
 
@@ -324,7 +323,7 @@ func (b *Bot) resultsHandler(session DiscordSession, message *discordgo.MessageC
 	// Load image from disk
 	f, err := os.Open(outputPath)
 	if err != nil {
-		log.Printf("open png: %v", err)
+		b.logger().Error("failed to open results image", "path", outputPath, "error", fmt.Errorf("resultsHandler: %w", err))
 		sendError(session, message.ChannelID, "An error occurred fetching the match results.")
 		return
 	}

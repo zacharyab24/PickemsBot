@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 
 	"pickems-bot/tournament"
 
@@ -115,7 +114,7 @@ func (s *Store) FetchAndUpdateMatchResults() error {
 		return err
 	}
 	if err := s.StoreMatchNodes(nodes, result.GetType()); err != nil {
-		log.Printf("warning: failed to store match nodes: %v", err)
+		s.logger().Warn("failed to store match nodes", "error", fmt.Errorf("FetchAndUpdateMatchResults: %w", err))
 	}
 	return nil
 }

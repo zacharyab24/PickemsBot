@@ -12,7 +12,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	"pickems-bot/app"
@@ -25,17 +25,35 @@ import (
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using environment variables")
+		slog.Info("no .env file found, using environment variables")
 	}
 
 	cfg, err := config.Load("config.toml")
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		slog.Error("failed to load config", "error", err)
+		os.Exit(1)
 	}
 
-	apiInstance, err := app.NewApp(cfg, os.Getenv("MONGO_PROD_URI"))
+	// Determine log level: explicit config value wins; otherwise debug in test
+	// mode and info in production.
+	level := slog.LevelInfo
+	if cfg.LogLevel != "" {
+		if parseErr := level.UnmarshalText([]byte(cfg.LogLevel)); parseErr != nil {
+			slog.Warn("unrecognised log_level in config.toml, defaulting to info", "value", cfg.LogLevel)
+			level = slog.LevelInfo
+		}
+	} else if cfg.Test {
+		level = slog.LevelDebug
+	}
+
+	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+
+	apiInstance, err := app.NewApp(cfg, os.Getenv("MONGO_PROD_URI"), logger)
 	if err != nil {
-		log.Fatalf("failed to initialize API: %v", err)
+		logger.Error("failed to initialize app", "error", err)
+		os.Exit(1)
 	}
 	defer func() {
 		if err = apiInstance.Store.GetClient().Disconnect(context.TODO()); err != nil {
@@ -43,12 +61,18 @@ func main() {
 		}
 	}()
 
+	logger.Debug("populating matches from data source", "source", cfg.DataSource, "schedule_only", cfg.UpcomingOnly)
 	if err := apiInstance.PopulateMatches(cfg.UpcomingOnly); err != nil {
-		log.Fatal(err)
+		logger.Error("failed to populate matches", "error", err)
+		os.Exit(1)
 	}
+	logger.Debug("match data populated")
+
 	if err := apiInstance.GenerateLeaderboard(); err != nil {
-		log.Fatal(err)
+		logger.Error("failed to generate leaderboard", "error", err)
+		os.Exit(1)
 	}
+	logger.Debug("leaderboard generated")
 
 	// Regenerate the result image on startup so it always reflects the current
 	// tournament/bracket. The image on disk can be stale if the bot was previously
@@ -57,8 +81,10 @@ func main() {
 	// mode there are no match results yet so this is expected to fail; skip it.
 	if !cfg.UpcomingOnly {
 		if err := web.RenderResultsImage(apiInstance); err != nil {
-			log.Fatalf("could not render results image on startup: %v", err)
+			logger.Error("could not render results image on startup", "error", err)
+			os.Exit(1)
 		}
+		logger.Debug("results image rendered")
 	}
 
 	var discordToken string
@@ -67,28 +93,32 @@ func main() {
 	} else {
 		discordToken = os.Getenv("DISCORD_PROD_TOKEN")
 	}
-	botInstance, err := bot.NewBot(discordToken, apiInstance)
+	botInstance, err := bot.NewBot(discordToken, apiInstance, logger)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("failed to initialize bot", "error", err)
+		os.Exit(1)
 	}
 
 	switch cfg.DataSource {
 	case "pandascore":
-		poller := web.NewPoller(apiInstance, cfg.SeriesID, os.Getenv("PANDASCORE_API_KEY"))
+		poller := web.NewPoller(apiInstance, cfg.SeriesID, os.Getenv("PANDASCORE_API_KEY"), logger)
 		go poller.Start()
-		log.Println("PandaScore poller started")
+		logger.Info("PandaScore poller started")
 	case "liquipedia":
 		go func() {
-			if err := web.Start(web.Config{Addr: ":8080", API: apiInstance, Page: cfg.Page}); err != nil {
-				log.Fatalf("failed to start web server: %v", err)
+			if err := web.Start(web.Config{Addr: ":8080", API: apiInstance, Page: cfg.Page, Logger: logger}); err != nil {
+				logger.Error("web server exited", "error", err)
+				os.Exit(1)
 			}
 		}()
-		log.Println("Liquipedia webhook server starting on :8080")
+		logger.Info("Liquipedia webhook server starting", "addr", ":8080")
 	default:
-		log.Fatalf("unknown data_source %q in config.toml", cfg.DataSource)
+		logger.Error("unknown data_source in config.toml", "data_source", cfg.DataSource)
+		os.Exit(1)
 	}
 
 	if err := botInstance.Run(); err != nil {
-		log.Fatal(fmt.Errorf("an unrecoverable error occured whilst running the bot: %w", err))
+		logger.Error("unrecoverable error running the bot", "error", fmt.Errorf("bot.Run: %w", err))
+		os.Exit(1)
 	}
 }

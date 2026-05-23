@@ -21,7 +21,7 @@ import (
 // region NewApp tests
 
 func TestNewApp_UnsupportedDataSource(t *testing.T) {
-	_, err := NewApp(config.Config{DataSource: "unknown", TournamentName: "db", Round: "r1"}, "mongodb://localhost")
+	_, err := NewApp(config.Config{DataSource: "unknown", TournamentName: "db", Round: "r1"}, "mongodb://localhost", nil)
 	if err == nil {
 		t.Error("Expected error for unsupported data source, got nil")
 	}

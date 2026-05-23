@@ -9,6 +9,7 @@ package store
 
 import (
 	"context"
+	"log/slog"
 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -27,10 +28,20 @@ type Store struct {
 		Leaderboard   *mongo.Collection
 	}
 	Fetcher DataSourceFetcher
+	log     *slog.Logger
 }
 
-// NewStore initializes Store. Sets global values and initialises db connection
-func NewStore(dbName string, mongoURI string, round string, fetcher DataSourceFetcher) (*Store, error) {
+// logger returns the store's logger, falling back to the global default when none was injected.
+func (s *Store) logger() *slog.Logger {
+	if s.log == nil {
+		return slog.Default()
+	}
+	return s.log
+}
+
+// NewStore initializes Store. Sets global values and initialises db connection.
+// log may be nil; if so the global slog default is used.
+func NewStore(dbName string, mongoURI string, round string, fetcher DataSourceFetcher, log *slog.Logger) (*Store, error) {
 	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(mongoURI))
 	if err != nil {
 		return nil, err
@@ -55,6 +66,7 @@ func NewStore(dbName string, mongoURI string, round string, fetcher DataSourceFe
 			Leaderboard:   db.Collection("leaderboard"),
 		},
 		Fetcher: fetcher,
+		log:     log,
 	}, nil
 }
 

@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"pickems-bot/sources"
 	"sort"
 
@@ -59,7 +58,7 @@ func (s *Store) StoreMatchSchedule(scheduledMatches []sources.ScheduledMatch) er
 	}
 	update := bson.M{"$set": upcomingMatchDoc}
 
-	log.Println("updating match schedule in db")
+	s.logger().Info("updating match schedule in db", "round", s.Round)
 
 	// Perform insert or update
 	if notFound {

@@ -12,6 +12,16 @@ PandaScore integration — second data source alongside Liquipedia:
 - `scripts/fetchtest`: new smoke-test tool — `go run ./scripts/fetchtest <liquipedia|pandascore> <page|seriesID> <round>` — verifies both data sources return well-formed match data before deploying.
 - `Dockerfile`: added comments listing all required runtime environment variables (`PANDASCORE_API_KEY` added alongside the existing secrets).
 
+Structured logging uplift — `log` → `slog` with JSON output:
+- Replaced all `log.*` calls in the bot runtime (`main`, `app`, `bot`, `store`, `web`) with `log/slog`. Logs are now emitted as structured JSON to stdout, ready for Promtail → Loki ingestion without any code changes.
+- Log level is configurable via `log_level` in `config.toml` (`debug`, `info`, `warn`, `error`). Defaults to `debug` when `test = true`, `info` otherwise.
+- Each major component (`app`, `store`, `bot`, `poller`, `web`) has its own injected `*slog.Logger` tagged with a `component` field, so every log line identifies its source without relying on message text.
+- `log.Fatalf` calls in Discord handlers replaced with `slog.Error` + `return` — a failed embed send no longer crashes the entire bot process.
+- Errors at log sites wrapped with `fmt.Errorf("functionName: %w", err)` to provide call-site breadcrumbs in the absence of stack traces.
+- Duplicate log entries eliminated: rate-limit events were previously logged in `app.go` and again by the caller; now logged once at the handling site only.
+- Poller continuable errors (transient fetch failures, parse errors, update/render failures) are `Warn`; only an unrecoverable API error that stops the poller is `Error`.
+- `scripts/configure` and `scripts/fetchtest` left unchanged — their `fmt.Printf` output is intentional CLI output, not application logging.
+
 Bug fixes and data layer improvements:
 - Fixed Swiss `$check` off-by-one: 3-0 and 0-3 buckets each showed 1 team instead of 2, advance showed 4 instead of 6. Root cause: `setSwissPredictions` divided the input list length by the wrong denominator.
 - Fixed `$results` for single-elimination: trimmed the 3rd-place consolation match that Liquipedia's `Bracket/8` template appends as an 8th node (the renderer only supports the 7-match main bracket). Also fixed column layout — Liquipedia returns all bracket nodes with `Section = "Bracket/8"`, causing the renderer to stack all matches in one column; sections are now normalised to `Quarterfinals` / `Semifinals` / `Grand Final` by match position before rendering.

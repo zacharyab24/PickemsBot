@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"reflect"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -54,7 +53,7 @@ func (s *Store) StoreLeaderboard(leaderboard Leaderboard) error {
 	}
 
 	// Perform insert or update
-	log.Println("updating leaderboard in db")
+	s.logger().Info("updating leaderboard in db", "round", s.Round)
 	if notFound {
 		_, err := s.Collections.Leaderboard.InsertOne(context.TODO(), leaderboard)
 		if err != nil {
