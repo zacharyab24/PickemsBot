@@ -12,17 +12,17 @@ import (
 // since PandaScore does not support callbacks
 type Poller struct {
 	app         *app.App
-	seriesId    int
+	seriesID    int
 	apiKey      string
 	interval    time.Duration
 	knownStatus map[string]string // matchID -> last known status
 }
 
 // NewPoller is the poller constructor
-func NewPoller(a *app.App, seriesId int, apiKey string) *Poller {
+func NewPoller(a *app.App, seriesID int, apiKey string) *Poller {
 	return &Poller{
 		app:         a,
-		seriesId:    seriesId,
+		seriesID:    seriesID,
 		apiKey:      apiKey,
 		interval:    time.Minute,
 		knownStatus: make(map[string]string),
@@ -51,7 +51,7 @@ func (p *Poller) tick() bool {
 		return true
 	}
 
-	raw, err := sources.GetPandaScoreMatches(p.apiKey, p.seriesId)
+	raw, err := sources.GetPandaScoreMatches(p.apiKey, p.seriesID)
 	if err != nil {
 		log.Printf("Poller: fetch error: %v", err)
 		return !errors.Is(err, sources.ErrUnrecoverable)

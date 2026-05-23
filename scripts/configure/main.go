@@ -31,7 +31,7 @@ func main() {
 	format := flag.String("format", "", `Format override: "swiss" or "single-elimination" (liquipedia source only)`)
 
 	// PandaScore flags
-	seriesId := flag.Int("series-id", 0, "PandaScore series ID (pandascore source only)")
+	seriesID := flag.Int("series-id", 0, "PandaScore series ID (pandascore source only)")
 	name := flag.String("name", "", "Tournament name, used as MongoDB database name (pandascore source only)")
 	round := flag.String("round", "", "Round/stage name (pandascore source only)")
 
@@ -44,7 +44,7 @@ func main() {
 		cfg = runLiquipedia(*tourneyURL, *stage, *format)
 
 	case "pandascore":
-		cfg = runPandaScore(*seriesId, *name, *round)
+		cfg = runPandaScore(*seriesID, *name, *round)
 
 	default:
 		log.Fatalf("unknown -source %q — use \"liquipedia\" or \"pandascore\"", *source)
@@ -61,7 +61,7 @@ func main() {
 	case "liquipedia":
 		fmt.Printf("  page            = %q\n", cfg.Page)
 	case "pandascore":
-		fmt.Printf("  series_id       = %d\n", cfg.SeriesId)
+		fmt.Printf("  series_id       = %d\n", cfg.SeriesID)
 	}
 }
 
@@ -109,8 +109,8 @@ func runLiquipedia(tourneyURL, stage, format string) tournamentConfig {
 	}
 }
 
-func runPandaScore(seriesId int, name, round string) tournamentConfig {
-	if seriesId == 0 {
+func runPandaScore(seriesID int, name, round string) tournamentConfig {
+	if seriesID == 0 {
 		log.Fatal("missing required flag: -series-id")
 	}
 	if name == "" {
@@ -123,7 +123,7 @@ func runPandaScore(seriesId int, name, round string) tournamentConfig {
 	return tournamentConfig{
 		DataSource: "pandascore",
 		Name:       mongoSafe(name),
-		SeriesId:   seriesId,
+		SeriesID:   seriesID,
 		Round:      round,
 	}
 }

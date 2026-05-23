@@ -7,8 +7,8 @@ package tournament
 import (
 	"testing"
 
-	"pickems-bot/sources"
 	"pickems-bot/models"
+	"pickems-bot/sources"
 
 	"github.com/stretchr/testify/assert"
 )

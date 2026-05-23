@@ -8,8 +8,8 @@ package scoring
 import (
 	"strings"
 
-	"pickems-bot/tournament"
 	"pickems-bot/models"
+	"pickems-bot/tournament"
 
 	"github.com/lithammer/fuzzysearch/fuzzy"
 )

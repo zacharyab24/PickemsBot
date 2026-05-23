@@ -6,8 +6,8 @@
 package store
 
 import (
-	"pickems-bot/sources"
 	"pickems-bot/models"
+	"pickems-bot/sources"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -15,7 +15,7 @@ import (
 
 // UpcomingMatchDoc represents upcoming match data stored in the database
 type UpcomingMatchDoc struct {
-	Round            string                    `bson:"round,omitempty"`
+	Round            string                   `bson:"round,omitempty"`
 	ScheduledMatches []sources.ScheduledMatch `bson:"scheduled_matches,omitempty"`
 }
 

@@ -13,9 +13,9 @@ import (
 	"testing"
 
 	"pickems-bot/app"
+	"pickems-bot/models"
 	"pickems-bot/sources"
 	"pickems-bot/tournament"
-	"pickems-bot/models"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/stretchr/testify/assert"

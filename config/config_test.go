@@ -56,7 +56,7 @@ test = true
 	assert.NoError(t, err)
 	assert.Equal(t, "MyEvent_2026", cfg.TournamentName)
 	assert.Equal(t, "pandascore", cfg.DataSource)
-	assert.Equal(t, 10583, cfg.SeriesId)
+	assert.Equal(t, 10583, cfg.SeriesID)
 	assert.Equal(t, "Stage_1", cfg.Round)
 	assert.True(t, cfg.UpcomingOnly)
 	assert.True(t, cfg.Test)
@@ -110,7 +110,7 @@ page = "Y/Z"
 	assert.Error(t, err)
 }
 
-func TestLoad_MissingSeriesId(t *testing.T) {
+func TestLoad_MissingSeriesID(t *testing.T) {
 	path := writeTemp(t, `
 tournament_name = "X"
 data_source = "pandascore"

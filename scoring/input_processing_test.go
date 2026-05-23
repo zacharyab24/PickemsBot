@@ -8,8 +8,8 @@ package scoring
 import (
 	"testing"
 
-	"pickems-bot/tournament"
 	"pickems-bot/models"
+	"pickems-bot/tournament"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -318,9 +318,9 @@ func TestCalculateUserScore_EliminationTeamNotInResults(t *testing.T) {
 // UnknownResult is a mock type for testing unknown result types
 type UnknownResult struct{}
 
-func (u UnknownResult) GetType() tournament.Kind   { return "unknown" }
-func (u UnknownResult) GetRound() string       { return "" }
-func (u UnknownResult) GetTeamNames() []string { return nil }
+func (u UnknownResult) GetType() tournament.Kind { return "unknown" }
+func (u UnknownResult) GetRound() string         { return "" }
+func (u UnknownResult) GetTeamNames() []string   { return nil }
 
 // TestCalculateUserScore_UnknownType tests handling of unknown result type
 func TestCalculateUserScore_UnknownType(t *testing.T) {

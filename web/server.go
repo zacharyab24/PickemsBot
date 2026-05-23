@@ -1,5 +1,3 @@
-//go:build !test
-
 /* server.go
  * Contains the HTTP server Start function that listens for incoming connections.
  * Excluded from test coverage as it blocks and requires real network binding.

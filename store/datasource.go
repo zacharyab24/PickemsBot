@@ -20,10 +20,10 @@ type LiquipediaFetcher struct {
 // PandaScoreFetcher implements the DataSourceFetcher interface
 type PandaScoreFetcher struct {
 	apiKey   string
-	seriesId int
+	seriesID int
 }
 
-// Liquipedia Constructor
+// NewLiquipediaFetcher creates a LiquipediaFetcher with the given API key and page path.
 func NewLiquipediaFetcher(apiKey, page string) LiquipediaFetcher {
 	return LiquipediaFetcher{apiKey: apiKey, page: page}
 }
@@ -70,14 +70,14 @@ func (f LiquipediaFetcher) FetchSchedule() ([]sources.ScheduledMatch, error) {
 	return sources.ParseLiquipediaSchedule(matchData)
 }
 
-// PandaScore Constructor
-func NewPandaScoreFetcher(apiKey string, seriesId int) PandaScoreFetcher {
-	return PandaScoreFetcher{apiKey: apiKey, seriesId: seriesId}
+// NewPandaScoreFetcher creates a PandaScoreFetcher with the given API key and series ID.
+func NewPandaScoreFetcher(apiKey string, seriesID int) PandaScoreFetcher {
+	return PandaScoreFetcher{apiKey: apiKey, seriesID: seriesID}
 }
 
 // FetchMatchData fetches match data using PandaSource as a datasource, filtered to the current round of a tournament
 func (f PandaScoreFetcher) FetchMatchData(round string) (tournament.MatchResult, []sources.MatchNode, error) {
-	matchData, err := sources.GetPandaScoreMatches(f.apiKey, f.seriesId)
+	matchData, err := sources.GetPandaScoreMatches(f.apiKey, f.seriesID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -110,7 +110,7 @@ func (f PandaScoreFetcher) FetchMatchData(round string) (tournament.MatchResult,
 // FetchSchedule fetches the scheduled matches for the tournament using PandaScore as a datasource.
 // Doesn't do any filtering, callers are responsible for filtering by round / time / etc
 func (f PandaScoreFetcher) FetchSchedule() ([]sources.ScheduledMatch, error) {
-	matchData, err := sources.GetPandaScoreMatches(f.apiKey, f.seriesId)
+	matchData, err := sources.GetPandaScoreMatches(f.apiKey, f.seriesID)
 	if err != nil {
 		return nil, err
 	}

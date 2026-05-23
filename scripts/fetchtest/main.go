@@ -1,10 +1,12 @@
+//go:build !test
+
 // fetchtest is a manual smoke-test tool for verifying both data sources
 // return well-formed match data before running the full bot.
 //
 // Usage:
 //
 //	go run ./scripts/fetchtest liquipedia  <page>     <round>
-//	go run ./scripts/fetchtest pandascore  <seriesId> <round>
+//	go run ./scripts/fetchtest pandascore  <seriesID> <round>
 //
 // Examples:
 //
@@ -29,7 +31,7 @@ func main() {
 	}
 
 	if len(os.Args) < 4 {
-		fmt.Fprintf(os.Stderr, "Usage: fetchtest <liquipedia|pandascore> <page|seriesId> <round>\n")
+		fmt.Fprintf(os.Stderr, "Usage: fetchtest <liquipedia|pandascore> <page|seriesID> <round>\n")
 		os.Exit(1)
 	}
 
@@ -52,11 +54,11 @@ func main() {
 		if apiKey == "" {
 			log.Fatal("PANDASCORE_API_KEY not set")
 		}
-		seriesId, err := strconv.Atoi(arg)
+		seriesID, err := strconv.Atoi(arg)
 		if err != nil {
-			log.Fatalf("seriesId must be an integer, got %q", arg)
+			log.Fatalf("seriesID must be an integer, got %q", arg)
 		}
-		fetcher = store.NewPandaScoreFetcher(apiKey, seriesId)
+		fetcher = store.NewPandaScoreFetcher(apiKey, seriesID)
 
 	default:
 		log.Fatalf("unknown source %q — use 'liquipedia' or 'pandascore'", source)

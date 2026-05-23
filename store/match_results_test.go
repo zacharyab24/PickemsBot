@@ -9,8 +9,8 @@ package store
 import (
 	"testing"
 
-	"pickems-bot/tournament"
 	"pickems-bot/models"
+	"pickems-bot/tournament"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

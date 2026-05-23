@@ -1,6 +1,17 @@
 # Changelog
 
 ## 3.3
+PandaScore integration — second data source alongside Liquipedia:
+- Added PandaScore as a supported `data_source` in `config.toml`. Set `data_source = "pandascore"` and `series_id = <id>` to use it; `data_source = "liquipedia"` retains the existing webhook-driven behaviour.
+- `store.DataSourceFetcher` interface (`FetchMatchData`, `FetchSchedule`) with `LiquipediaFetcher` and `PandaScoreFetcher` implementations — makes it straightforward to add more sources in the future.
+- `web.Poller` — polls the PandaScore API once per minute and triggers `UpdateMatchResults` + `GenerateLeaderboard` + `RenderResultsImage` on the first tick where any match transitions to `finished`. Stops automatically on unrecoverable errors (401/403/404) via `sources.ErrUnrecoverable`.
+- `MatchNode.Status` field added (transient, not persisted) so the poller can track per-match status transitions without an extra DB round-trip.
+- `sources/pandascore.go`: fixed API endpoint (`/csgo/matches?filter[serie_id]=…` instead of the non-existent `/csgo/series/{id}/matches`); Twitch stream priority over Kick for `$upcoming` match links.
+- `sources/liquipedia.go`: switched to `streamurls=true` to get full stream URLs directly from the API; stream parsing now falls back gracefully (empty URL) instead of erroring when no Twitch/Kick key is present.
+- `scripts/configure`: added `-source` flag (`liquipedia` | `pandascore`); PandaScore path accepts `-series-id`, `-name`, `-round` flags and writes a PandaScore-specific `config.toml` (no `page`/`format` fields).
+- `scripts/fetchtest`: new smoke-test tool — `go run ./scripts/fetchtest <liquipedia|pandascore> <page|seriesID> <round>` — verifies both data sources return well-formed match data before deploying.
+- `Dockerfile`: added comments listing all required runtime environment variables (`PANDASCORE_API_KEY` added alongside the existing secrets).
+
 Bug fixes and data layer improvements:
 - Fixed Swiss `$check` off-by-one: 3-0 and 0-3 buckets each showed 1 team instead of 2, advance showed 4 instead of 6. Root cause: `setSwissPredictions` divided the input list length by the wrong denominator.
 - Fixed `$results` for single-elimination: trimmed the 3rd-place consolation match that Liquipedia's `Bracket/8` template appends as an 8th node (the renderer only supports the 7-match main bracket). Also fixed column layout — Liquipedia returns all bracket nodes with `Section = "Bracket/8"`, causing the renderer to stack all matches in one column; sections are now normalised to `Quarterfinals` / `Semifinals` / `Grand Final` by match position before rendering.

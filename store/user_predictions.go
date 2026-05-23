@@ -10,8 +10,8 @@ import (
 	"errors"
 	"fmt"
 
-	"pickems-bot/tournament"
 	"pickems-bot/models"
+	"pickems-bot/tournament"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"

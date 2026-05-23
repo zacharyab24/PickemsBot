@@ -21,9 +21,9 @@ import (
 const liquipediaBase = "https://liquipedia.net/counterstrike/"
 
 type tournamentConfig struct {
-	DataSource string // "liquipedia" or "pandascore"
-	Name       string
-	Round      string
+	DataSource   string // "liquipedia" or "pandascore"
+	Name         string
+	Round        string
 	UpcomingOnly bool
 	Test         bool
 
@@ -32,7 +32,7 @@ type tournamentConfig struct {
 	Format string // empty = auto-detect; set to "swiss" or "single-elimination" for multi-stage pages
 
 	// PandaScore only
-	SeriesId int
+	SeriesID int
 }
 
 func fetchWikitext(path string) (string, error) {
@@ -215,7 +215,7 @@ func writeConfig(path string, c tournamentConfig) error {
 		fmt.Fprintf(f, "format = %q\n", c.Format)
 	case "pandascore":
 		fmt.Fprintln(f, "# PandaScore settings")
-		fmt.Fprintf(f, "series_id = %d\n", c.SeriesId)
+		fmt.Fprintf(f, "series_id = %d\n", c.SeriesID)
 	}
 	return nil
 }

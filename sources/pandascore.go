@@ -18,7 +18,7 @@ var ErrUnrecoverable = errors.New("unrecoverable api error")
 
 // GetPandaScoreMatches fetches all matches for a given series from the PandaScore API.
 // Returns the raw JSON response body as a string.
-func GetPandaScoreMatches(apiKey string, seriesId int) (string, error) {
+func GetPandaScoreMatches(apiKey string, seriesID int) (string, error) {
 	apiURL := "https://api.pandascore.co/csgo/matches"
 
 	parsedURL, err := url.Parse(apiURL)
@@ -27,7 +27,7 @@ func GetPandaScoreMatches(apiKey string, seriesId int) (string, error) {
 	}
 
 	params := parsedURL.Query()
-	params.Set("filter[serie_id]", strconv.Itoa(seriesId))
+	params.Set("filter[serie_id]", strconv.Itoa(seriesID))
 	params.Set("filter[status]", "finished,running,not_started")
 	params.Set("per_page", "50")
 	parsedURL.RawQuery = params.Encode()
@@ -157,6 +157,7 @@ func parsePandaScoreMatch(result interface{}) (*MatchNode, error) {
 	}, nil
 }
 
+// ParsePandaScoreSchedule parses a PandaScore matches JSON response into a slice of ScheduledMatches.
 func ParsePandaScoreSchedule(matchData string) ([]ScheduledMatch, error) {
 	var raw []interface{}
 	if err := json.Unmarshal([]byte(matchData), &raw); err != nil {

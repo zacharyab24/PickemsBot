@@ -26,7 +26,7 @@ type Config struct {
 	Format string `toml:"format"` // liquipedia only
 
 	// Pandascore only fields
-	SeriesId int `toml:"series_id"` // PandaScore serie ID (note: API field is serie_id without 's')
+	SeriesID int `toml:"series_id"` // PandaScore serie ID (note: API field is serie_id without 's')
 
 	// Bot modes
 	UpcomingOnly bool `toml:"upcoming_only"`
@@ -50,7 +50,7 @@ func Load(path string) (Config, error) {
 			return Config{}, fmt.Errorf("page is a required field for liquipedia as a datasource in %s", path)
 		}
 	case "pandascore":
-		if c.SeriesId == 0 {
+		if c.SeriesID == 0 {
 			return Config{}, fmt.Errorf("series_id is a required field for pandascore as a datasource in %s", path)
 		}
 	default:

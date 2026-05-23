@@ -24,7 +24,7 @@ func TestNewPoller_Fields(t *testing.T) {
 	p := NewPoller(nil, 99, "my-api-key")
 
 	assert.Nil(t, p.app)
-	assert.Equal(t, 99, p.seriesId)
+	assert.Equal(t, 99, p.seriesID)
 	assert.Equal(t, "my-api-key", p.apiKey)
 }
 

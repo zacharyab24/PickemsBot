@@ -52,7 +52,7 @@ func (s *Store) StoreMatchNodes(nodes []sources.MatchNode, kind tournament.Kind)
 func (s *Store) FetchMatchNodesFromDb() ([]sources.MatchNode, tournament.Kind, error) {
 	var doc struct {
 		Nodes  []sources.MatchNode `bson:"nodes"`
-		Format tournament.Kind          `bson:"format"`
+		Format tournament.Kind     `bson:"format"`
 	}
 	err := s.Collections.MatchNodes.FindOne(context.TODO(), bson.M{"round": s.Round}).Decode(&doc)
 	if err != nil {

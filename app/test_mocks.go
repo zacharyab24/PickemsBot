@@ -9,10 +9,10 @@ import (
 	"context"
 	"fmt"
 
-	"pickems-bot/sources"
-	"pickems-bot/tournament"
 	"pickems-bot/models"
+	"pickems-bot/sources"
 	"pickems-bot/store"
+	"pickems-bot/tournament"
 
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -27,17 +27,17 @@ type MockStore struct {
 	Format           tournament.Kind
 
 	// Error injection for testing error paths
-	EnsureScheduledMatchesError             error
-	GetValidTeamsError                      error
-	StoreUserPredictionError                error
-	GetUserPredictionError                  error
-	GetMatchResultsError                    error
-	GetAllUserPredictionsError              error
-	FetchMatchScheduleError                 error
-	StoreMatchScheduleError                 error
+	EnsureScheduledMatchesError     error
+	GetValidTeamsError              error
+	StoreUserPredictionError        error
+	GetUserPredictionError          error
+	GetMatchResultsError            error
+	GetAllUserPredictionsError      error
+	FetchMatchScheduleError         error
+	StoreMatchScheduleError         error
 	FetchAndUpdateMatchResultsError error
 	StoreLeaderboardError           error
-	FetchLeaderboardFromDBError             error
+	FetchLeaderboardFromDBError     error
 
 	// Leaderboard storage
 	Leaderboard []store.LeaderboardEntry

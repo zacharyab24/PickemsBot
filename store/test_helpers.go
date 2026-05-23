@@ -9,9 +9,9 @@ import (
 	"context"
 	"time"
 
+	"pickems-bot/models"
 	"pickems-bot/sources"
 	"pickems-bot/tournament"
-	"pickems-bot/models"
 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"

@@ -246,7 +246,7 @@ func TestWriteConfig_PandaScore(t *testing.T) {
 	cfg := tournamentConfig{
 		DataSource: "pandascore",
 		Name:       "IEM_Cologne_2026",
-		SeriesId:   10488,
+		SeriesID:   10488,
 		Round:      "Stage_1",
 	}
 	err := writeConfig(path, cfg)
