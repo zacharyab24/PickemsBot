@@ -20,7 +20,7 @@ import (
 // NewMockStore creates a Store instance for testing purposes.
 // This can be used with a real test database or in-memory MongoDB.
 func NewMockStore(dbName string, mongoURI string) (*Store, error) {
-	return NewStore(dbName, mongoURI, "Test/Tournament/2025", "", "test_round")
+	return NewStore(dbName, mongoURI, "test_round", NewLiquipediaFetcher("", "Test/Tournament/2025"))
 }
 
 // CreateTestStore creates a Store connected to a test database.

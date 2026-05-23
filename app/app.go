@@ -1,4 +1,4 @@
-/* api.go
+/* app.go
  * This file contains the public methods for interacting with this package. For consistent results, fuctions should
  * only be called from this file, not the sub packages for match and processing. For details about functionality see `api.md`
  * Authors: Zachary Bower
@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"pickems-bot/config"
 	"pickems-bot/models"
 	"pickems-bot/scoring"
 	"pickems-bot/sources"
@@ -29,21 +30,42 @@ type App struct {
 	rateLimiter *rate.Limiter
 }
 
-// NewAPI creates a new App instance with the provided configuration
-func NewAPI(dbName string, mongoURI string, page string, format string, round string) (*App, error) {
-	if dbName == "" || page == "" || round == "" {
-		return nil, fmt.Errorf("dbName, page, and round are required")
+// NewApp creates a new App instance with the provided configuration
+func NewApp(cfg config.Config, mongoURI string) (*App, error) {
+	var fetcher store.DataSourceFetcher
+	var limiter *rate.Limiter
+	switch cfg.DataSource {
+	case "liquipedia":
+		fetcher = store.NewLiquipediaFetcher(os.Getenv("LIQUIDPEDIADB_API_KEY"), cfg.Page)
+		limiter = rate.NewLimiter(rate.Every(time.Minute), 10) // 60/hr per API guidelines
+
+	case "pandascore":
+		fetcher = store.NewPandaScoreFetcher(os.Getenv("PANDASCORE_API_KEY"), cfg.SeriesId)
+		limiter = rate.NewLimiter(rate.Every(4*time.Second), 5) // ~900/hr, less than the 1000 limit of our api plan
+
+	default:
+		return nil, fmt.Errorf("unsupported data source: %s", cfg.DataSource)
 	}
 
-	s, err := store.NewStore(dbName, mongoURI, page, format, round)
+	s, err := store.NewStore(cfg.TournamentName, mongoURI, cfg.Round, fetcher)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize store: %w", err)
 	}
 
 	return &App{
 		Store:       s,
-		rateLimiter: rate.NewLimiter(rate.Every(time.Minute), 10), // Rate limit liquipedia calls to 60 per hour as per api guidelines
+		rateLimiter: limiter,
 	}, nil
+}
+
+// Allow calls the app's configured rate limiter's Allow() function.
+// Returns false if the limiter is nil or the limit has been reached.
+// Required since we are treating it as a singleton
+func (a *App) Allow() bool {
+	if a.rateLimiter == nil {
+		return false
+	}
+	return a.rateLimiter.Allow()
 }
 
 // SetUserPrediction contains the logic to set a user prediction in the DB.
@@ -308,44 +330,25 @@ func (a *App) GetTournamentInfo() (TournamentInfo, error) {
 	}, nil
 }
 
-// PopulateMatches fetches all match data for the tournament page in a single
-// LiquipediaDB call and stores both the match schedule and (when scheduleOnly
-// is false) the match results. Using one API call avoids a duplicate request
-// that would otherwise be made by the separate schedule and result fetchers.
-// Preconditions: Receives receiver pointer to App and returns nil, or an error if it occurs.
+// PopulateMatches fetches and stores the match schedule via the configured data source.
+// When scheduleOnly is false, match results are also fetched and stored.
 func (a *App) PopulateMatches(scheduleOnly bool) error {
-	if a.rateLimiter == nil {
-		return fmt.Errorf("rate limiter not initialised")
-	}
-	if !a.rateLimiter.Allow() {
+	if !a.Allow() {
 		log.Printf("Rate limit exceeded")
 		return fmt.Errorf("rate limiter limit reached")
 	}
 
-	jsonResponse, err := sources.GetLiquipediaMatchDataByPage(os.Getenv("LIQUIDPEDIADB_API_KEY"), a.Store.GetPage())
-	if err != nil {
-		return fmt.Errorf("error fetching match data from liquipedia api: %w", err)
-	}
-
-	scheduledMatches, err := sources.ParseLiquipediaSchedule(jsonResponse)
-	if err != nil {
-		return err
-	}
-	sort.Slice(scheduledMatches, func(i, j int) bool {
-		return scheduledMatches[i].EpochTime < scheduledMatches[j].EpochTime
-	})
-	if err = a.Store.StoreMatchSchedule(scheduledMatches); err != nil {
+	if err := a.Store.FetchAndStoreSchedule(); err != nil {
 		return err
 	}
 
 	if !scheduleOnly {
-		if err = a.Store.FetchAndUpdateMatchResultsFromJSON(jsonResponse); err != nil {
+		if err := a.Store.FetchAndUpdateMatchResults(); err != nil {
 			return err
 		}
 	}
 	return nil
 }
-
 
 // getTwitchURL is a helper function to get the twitch url from the liquipedia stream url.
 // It receives a string containing stream name and returns the correct steam name or unknown if it is not in the hard coded list of steam names.
@@ -367,11 +370,7 @@ func getTwitchURL(streamURL string) string {
 // Preconditions: Receives receiver pointer for api
 // Postconditions: Updates the match results database, or throws an error if rate limit has been reached or other error occurs
 func (a *App) UpdateMatchResults() error {
-	if a.rateLimiter == nil {
-		return fmt.Errorf("rate limiter not initialised")
-	}
-
-	if !a.rateLimiter.Allow() {
+	if !a.Allow() {
 		log.Println("Rate limiter is reached")
 		return fmt.Errorf("rate limiter exceeded, skipping match result update")
 	}

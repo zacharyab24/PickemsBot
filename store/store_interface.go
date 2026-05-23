@@ -8,9 +8,9 @@ package store
 import (
 	"context"
 
+	"pickems-bot/models"
 	"pickems-bot/sources"
 	"pickems-bot/tournament"
-	"pickems-bot/models"
 )
 
 // Interface defines the methods that Store implements.
@@ -24,15 +24,14 @@ type Interface interface {
 	GetAllUserPredictions() ([]models.Prediction, error)
 	FetchMatchSchedule() ([]sources.ScheduledMatch, error)
 	StoreMatchSchedule(matches []sources.ScheduledMatch) error
+	FetchAndStoreSchedule() error
 
 	// Getter methods for accessing fields
 	GetDatabase() interface{ Name() string }
 	GetRound() string
 	GetPage() string
-	GetFormat() string
 	GetClient() interface{ Disconnect(context.Context) error }
 	FetchAndUpdateMatchResults() error
-	FetchAndUpdateMatchResultsFromJSON(jsonResponse string) error
 	FetchMatchNodesFromDb() ([]sources.MatchNode, tournament.Kind, error)
 	StoreLeaderboard(leaderboard Leaderboard) error
 	FetchLeaderboardFromDB() ([]LeaderboardEntry, error)
@@ -51,14 +50,12 @@ func (s *Store) GetRound() string {
 	return s.Round
 }
 
-// GetPage returns the Liquipedia page path
+// GetPage returns the Liquipedia page path, or "" if not using Liquipedia.
 func (s *Store) GetPage() string {
-	return s.Page
-}
-
-// GetFormat returns the optional format override (empty string = auto-detect)
-func (s *Store) GetFormat() string {
-	return s.Format
+	if lf, ok := s.Fetcher.(LiquipediaFetcher); ok {
+		return lf.page
+	}
+	return ""
 }
 
 // GetClient returns the MongoDB client

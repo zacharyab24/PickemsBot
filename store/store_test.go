@@ -18,7 +18,7 @@ func TestStore_GetRound(t *testing.T) {
 }
 
 func TestStore_GetPage(t *testing.T) {
-	s := &Store{Page: "Test/Page"}
+	s := &Store{Fetcher: NewLiquipediaFetcher("", "Test/Page")}
 	if s.GetPage() != "Test/Page" {
 		t.Errorf("Expected 'Test/Page', got '%s'", s.GetPage())
 	}

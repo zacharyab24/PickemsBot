@@ -7,8 +7,9 @@ package app
 
 import (
 	"fmt"
-	"pickems-bot/sources"
+	"pickems-bot/config"
 	"pickems-bot/models"
+	"pickems-bot/sources"
 	"pickems-bot/store"
 	"strings"
 	"testing"
@@ -17,41 +18,15 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// region NewAPI tests
+// region NewApp tests
 
-func TestNewAPI_Success(t *testing.T) {
-	// This test requires a real MongoDB connection or would need significant refactoring
-	// For now, we test the validation logic
-	_, err := NewAPI("", "", "", "", "")
+func TestNewApp_UnsupportedDataSource(t *testing.T) {
+	_, err := NewApp(config.Config{DataSource: "unknown", TournamentName: "db", Round: "r1"}, "mongodb://localhost")
 	if err == nil {
-		t.Error("Expected error when dbName is empty, got nil")
+		t.Error("Expected error for unsupported data source, got nil")
 	}
-
-	if !strings.Contains(err.Error(), "dbName, page, and round are required") {
-		t.Errorf("Expected error message about required fields, got: %s", err.Error())
-	}
-}
-
-func TestNewAPI_MissingParameters(t *testing.T) {
-	tests := []struct {
-		name   string
-		dbName string
-		page   string
-		round  string
-	}{
-		{"missing dbName", "", "page", "round"},
-		{"missing page", "db", "", "round"},
-		{"missing round", "db", "page", ""},
-		{"all missing", "", "", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewAPI(tt.dbName, "mongodb://localhost", tt.page, "", tt.round)
-			if err == nil {
-				t.Errorf("Expected error for %s, got nil", tt.name)
-			}
-		})
+	if !strings.Contains(err.Error(), "unsupported data source") {
+		t.Errorf("Expected 'unsupported data source' error, got: %s", err.Error())
 	}
 }
 
@@ -555,51 +530,6 @@ func TestGetTournamentInfo_SingleElimination(t *testing.T) {
 
 // region PopulateMatches tests
 
-func TestPopulateMatches_ScheduleOnly(t *testing.T) {
-	// This test would require mocking external App calls
-	// For now, we test the error cases
-	mockStore := NewMockStore("swiss", "test_round")
-	api := &App{Store: mockStore}
-
-	// This will fail because we can't actually call external APIs in unit tests
-	// In a real implementation, we'd need to mock sources.FetchScheduledMatches
-	err := api.PopulateMatches(true)
-	if err == nil {
-		// Expect an error because LIQUIDPEDIADB_API_KEY is not set
-		// or external App is not available
-	}
-}
-
-// endregion
-
-// region getTwitchURL tests
-
-func TestGetTwitchURL_KnownStream(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"BLAST_Premier", "https://www.twitch.tv/blastpremier"},
-		{"BLAST", "https://www.twitch.tv/blast"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := getTwitchURL(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected %s, got %s", tt.expected, result)
-			}
-		})
-	}
-}
-
-func TestGetTwitchURL_UnknownStream(t *testing.T) {
-	result := getTwitchURL("unknown_stream")
-	if result != "unknown" {
-		t.Errorf("Expected 'unknown', got %s", result)
-	}
-}
-
 // endregion
 
 // region UpdateMatchResults tests
@@ -632,7 +562,7 @@ func TestUpdateMatchResults_RateLimiterNil(t *testing.T) {
 		t.Error("Expected error when rate limiter is nil, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "rate limiter not initialised") {
+	if !strings.Contains(err.Error(), "rate limiter") {
 		t.Errorf("Expected rate limiter error, got: %s", err.Error())
 	}
 }
@@ -695,7 +625,7 @@ func TestPopulateMatches_RateLimiterNil(t *testing.T) {
 		t.Error("Expected error when rate limiter is nil, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "rate limiter not initialised") {
+	if !strings.Contains(err.Error(), "rate limiter") {
 		t.Errorf("Expected rate limiter error, got: %s", err.Error())
 	}
 }

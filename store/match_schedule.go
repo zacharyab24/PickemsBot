@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"pickems-bot/sources"
+	"sort"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -97,4 +98,16 @@ func (s *Store) EnsureScheduledMatches() error {
 		return fmt.Errorf("scheduled match collection found but its results were empty for round %s", s.Round)
 	}
 	return nil
+}
+
+// FetchAndStoreSchedule fetches the upcoming matches and stored them in the db
+func (s *Store) FetchAndStoreSchedule() error {
+	matches, err := s.Fetcher.FetchSchedule()
+	if err != nil {
+		return err
+	}
+	sort.Slice(matches, func(i, j int) bool {
+		return matches[i].EpochTime < matches[j].EpochTime
+	})
+	return s.StoreMatchSchedule(matches)
 }

@@ -33,7 +33,7 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	apiInstance, err := app.NewAPI(cfg.TournamentName, os.Getenv("MONGO_PROD_URI"), cfg.Page, cfg.Format, cfg.Round)
+	apiInstance, err := app.NewApp(cfg, os.Getenv("MONGO_PROD_URI"))
 	if err != nil {
 		log.Fatalf("failed to initialize API: %v", err)
 	}
