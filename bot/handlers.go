@@ -26,7 +26,7 @@ func (b *Bot) helpMessageHandler(session DiscordSession, message *discordgo.Mess
 	embed := &discordgo.MessageEmbed{
 		Title: "PickEms Bot v3.3",
 		Description: "Manage your tournament predictions and check standings. All commands use the `$` prefix.\n\n" +
-			"*Data sourced from the [Liquipedia Counter-Strike API](https://liquipedia.net)*",
+			"*Data sourced from the [Liquipedia Counter-Strike API](https://liquipedia.net) and [PandaScore](https://pandascore.co)*",
 		Color: burple,
 		Fields: []*discordgo.MessageEmbedField{
 			{
