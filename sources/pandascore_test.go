@@ -160,7 +160,7 @@ func TestParsePandaScoreMatches_StatusPopulated(t *testing.T) {
 
 // region ParsePandaScoreSchedule tests
 
-func TestParsePandaScoreSchedule_WithStream(t *testing.T) {
+func TestParsePandaScoreSchedule_TwitchOnly(t *testing.T) {
 	json := `[{
 		"status": "not_started",
 		"scheduled_at": "2025-11-15T14:00:00Z",
@@ -170,8 +170,7 @@ func TestParsePandaScoreSchedule_WithStream(t *testing.T) {
 			{"opponent": {"name": "Team B"}}
 		],
 		"streams_list": [
-			{"main": true, "official": true, "raw_url": "https://www.twitch.tv/blastpremier"},
-			{"main": false, "official": true, "raw_url": "https://www.youtube.com/blast"}
+			{"main": true, "official": true, "raw_url": "https://www.twitch.tv/eslcs"}
 		]
 	}]`
 
@@ -179,7 +178,74 @@ func TestParsePandaScoreSchedule_WithStream(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, matches, 1)
-	assert.Equal(t, "https://www.twitch.tv/blastpremier", matches[0].StreamURL)
+	assert.Equal(t, "https://www.twitch.tv/eslcs", matches[0].StreamURL)
+}
+
+func TestParsePandaScoreSchedule_KickOnly(t *testing.T) {
+	json := `[{
+		"status": "not_started",
+		"scheduled_at": "2025-11-15T14:00:00Z",
+		"number_of_games": 3,
+		"opponents": [
+			{"opponent": {"name": "Team A"}},
+			{"opponent": {"name": "Team B"}}
+		],
+		"streams_list": [
+			{"main": true, "official": true, "raw_url": "https://kick.com/cct_cs2"}
+		]
+	}]`
+
+	matches, err := ParsePandaScoreSchedule(json)
+
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+	assert.Equal(t, "https://kick.com/cct_cs2", matches[0].StreamURL)
+}
+
+func TestParsePandaScoreSchedule_TwitchPriorityWhenKickFirst(t *testing.T) {
+	// Kick appears first in the list — Twitch should still win
+	json := `[{
+		"status": "not_started",
+		"scheduled_at": "2025-11-15T14:00:00Z",
+		"number_of_games": 3,
+		"opponents": [
+			{"opponent": {"name": "Team A"}},
+			{"opponent": {"name": "Team B"}}
+		],
+		"streams_list": [
+			{"main": true, "official": true, "raw_url": "https://kick.com/eslcs"},
+			{"main": true, "official": true, "raw_url": "https://www.twitch.tv/eslcs"}
+		]
+	}]`
+
+	matches, err := ParsePandaScoreSchedule(json)
+
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+	assert.Equal(t, "https://www.twitch.tv/eslcs", matches[0].StreamURL)
+}
+
+func TestParsePandaScoreSchedule_NonOfficialStreamsIgnored(t *testing.T) {
+	// Non-official/non-main Twitch stream should not beat a main+official Kick stream
+	json := `[{
+		"status": "not_started",
+		"scheduled_at": "2025-11-15T14:00:00Z",
+		"number_of_games": 3,
+		"opponents": [
+			{"opponent": {"name": "Team A"}},
+			{"opponent": {"name": "Team B"}}
+		],
+		"streams_list": [
+			{"main": false, "official": false, "raw_url": "https://www.twitch.tv/some_caster"},
+			{"main": true,  "official": true,  "raw_url": "https://kick.com/cct_cs2"}
+		]
+	}]`
+
+	matches, err := ParsePandaScoreSchedule(json)
+
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+	assert.Equal(t, "https://kick.com/cct_cs2", matches[0].StreamURL)
 }
 
 func TestParsePandaScoreSchedule_NoStream(t *testing.T) {

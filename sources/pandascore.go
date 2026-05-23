@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -215,7 +216,9 @@ func parsePandaScoreScheduledMatch(result interface{}) (*ScheduledMatch, error) 
 		}
 	}
 
-	// Find the main official stream URL; default to empty if none assigned yet
+	// Find the main official stream URL; prefer Twitch over other platforms.
+	// Scan all main+official streams rather than stopping at the first match,
+	// so a Twitch entry later in the list beats an earlier Kick entry.
 	streamURL := ""
 	if streams, ok := match["streams_list"].([]interface{}); ok {
 		for _, s := range streams {
@@ -225,9 +228,16 @@ func parsePandaScoreScheduledMatch(result interface{}) (*ScheduledMatch, error) 
 			}
 			main, _ := stream["main"].(bool)
 			official, _ := stream["official"].(bool)
-			if main && official {
-				streamURL, _ = stream["raw_url"].(string)
-				break
+			if !main || !official {
+				continue
+			}
+			raw, _ := stream["raw_url"].(string)
+			if strings.Contains(raw, "twitch.tv") {
+				streamURL = raw
+				break // Twitch found — no need to look further
+			}
+			if streamURL == "" {
+				streamURL = raw // first main+official as fallback
 			}
 		}
 	}
