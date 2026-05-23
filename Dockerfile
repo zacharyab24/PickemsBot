@@ -25,4 +25,10 @@ COPY --from=builder /app/pickems .
 COPY resources/ resources/
 COPY config.toml .
 
+# Required environment variables at runtime:
+#   DISCORD_PROD_TOKEN    - Discord bot token
+#   DISCORD_BETA_TOKEN    - Discord bot token (test server)
+#   MONGO_PROD_URI        - MongoDB connection string
+#   LIQUIDPEDIADB_API_KEY - Liquipedia API key (liquipedia data source only)
+#   PANDASCORE_API_KEY    - PandaScore API key (pandascore data source only)
 CMD ["./pickems"]

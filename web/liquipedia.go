@@ -51,7 +51,7 @@ func (s *Server) LiquipediaWebhookHandler(w http.ResponseWriter, r *http.Request
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	if !isRelevantTournamentPage(event.Page, s.api.Store.GetPage()) {
+	if !isRelevantTournamentPage(event.Page, s.page) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}

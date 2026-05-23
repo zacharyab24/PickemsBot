@@ -17,13 +17,6 @@ func TestStore_GetRound(t *testing.T) {
 	}
 }
 
-func TestStore_GetPage(t *testing.T) {
-	s := &Store{Fetcher: NewLiquipediaFetcher("", "Test/Page")}
-	if s.GetPage() != "Test/Page" {
-		t.Errorf("Expected 'Test/Page', got '%s'", s.GetPage())
-	}
-}
-
 func TestStore_GetDatabase(t *testing.T) {
 	// Test that the getter works - actual database would be set by NewStore
 	s := &Store{}

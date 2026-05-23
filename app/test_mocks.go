@@ -204,11 +204,6 @@ func (m *MockStore) GetRound() string {
 	return m.Round
 }
 
-// GetPage returns the page path
-func (m *MockStore) GetPage() string {
-	return "Test/Tournament/2025"
-}
-
 // FetchAndStoreSchedule mock implementation
 func (m *MockStore) FetchAndStoreSchedule() error {
 	return nil

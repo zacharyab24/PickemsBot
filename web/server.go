@@ -19,17 +19,20 @@ import (
 type Config struct {
 	Addr string
 	API  *app.App
+	Page string // Liquipedia page path, used for webhook filtering
 }
 
 // Server is the HTTP server that handles webhook requests
 type Server struct {
-	api *app.App
+	api  *app.App
+	page string // Liquipedia page path, used for webhook filtering
 }
 
 // Start initializes and starts the HTTP server with the given configuration
 func Start(cfg Config) error {
 	s := &Server{
-		api: cfg.API,
+		api:  cfg.API,
+		page: cfg.Page,
 	}
 
 	mux := http.NewServeMux()

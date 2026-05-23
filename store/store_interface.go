@@ -29,7 +29,6 @@ type Interface interface {
 	// Getter methods for accessing fields
 	GetDatabase() interface{ Name() string }
 	GetRound() string
-	GetPage() string
 	GetClient() interface{ Disconnect(context.Context) error }
 	FetchAndUpdateMatchResults() error
 	FetchMatchNodesFromDb() ([]sources.MatchNode, tournament.Kind, error)
@@ -48,14 +47,6 @@ func (s *Store) GetDatabase() interface{ Name() string } {
 // GetRound returns the tournament round name
 func (s *Store) GetRound() string {
 	return s.Round
-}
-
-// GetPage returns the Liquipedia page path, or "" if not using Liquipedia.
-func (s *Store) GetPage() string {
-	if lf, ok := s.Fetcher.(LiquipediaFetcher); ok {
-		return lf.page
-	}
-	return ""
 }
 
 // GetClient returns the MongoDB client

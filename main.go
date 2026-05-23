@@ -79,7 +79,7 @@ func main() {
 		log.Println("PandaScore poller started")
 	case "liquipedia":
 		go func() {
-			if err := web.Start(web.Config{Addr: ":8080", API: apiInstance}); err != nil {
+			if err := web.Start(web.Config{Addr: ":8080", API: apiInstance, Page: cfg.Page}); err != nil {
 				log.Fatalf("failed to start web server: %v", err)
 			}
 		}()
