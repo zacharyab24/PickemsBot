@@ -1,39 +1,47 @@
-name: CD - Deploy App
-on: 
-  push:
-    branches:
-      - main
+name: CD - Publish Docker Image
 
-jobs:  
-  build-and-deploy:
-    name: Build and Deploy
+# Fires only when a version tag is pushed (e.g. v1.0.0, v2.3.1).
+# The image is NOT published on every push to main — only on explicit releases.
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    name: Build and Push Docker Image
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write   # allows GITHUB_TOKEN to push to GHCR
+
     steps:
-      # 1. Checkout repository
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # 2. Setup Tailscale via OIDC (no secrets required)
-      - name: Setup Tailscale via OIDC
-        uses: tailscale/github-action@v2
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
-          oidc: true
-          hostname: github-runner
-          version: latest
-          args: up --accept-dns=true
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 3. Debug Tailscale connectivity (optional)
-      - name: Test Tailscale connection
-        run: |
-          ping -c 4 100.109.98.83 || echo "Ping failed"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      # 4. Setup SSH key for deployment
-      - name: Setup SSH Key
-        uses: webfactory/ssh-agent@v0.5.4
+      - name: Build and push
+        uses: docker/build-push-action@v6
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      # 5. Run the deploy script on your VM
-      - name: Deploy Script
-        run: |
-          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null latte@100.109.98.83 '/usr/bin/sh -s' < ./scripts/deploy.sh
+          context: .
+          push: true
+          # 'latest' is what Watchtower watches on the server.
+          # The version tag (e.g. v1.0.0) gives a pinned reference for rollbacks:
+          #   docker pull ghcr.io/zacharyab24/pickems-bot:v1.0.0
+          tags: |
+            ghcr.io/zacharyab24/pickems-bot:latest
+            ghcr.io/zacharyab24/pickems-bot:${{ github.ref_name }}
+          # Re-use the layer cache from previous builds so only changed
+          # layers are rebuilt — keeps publish times short.
+          cache-from: type=registry,ref=ghcr.io/zacharyab24/pickems-bot:buildcache
+          cache-to: type=registry,ref=ghcr.io/zacharyab24/pickems-bot:buildcache,mode=max
