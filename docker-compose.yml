@@ -4,6 +4,8 @@ services:
     container_name: pickems-bot
     env_file:
       - .env
+    volumes:
+      - ./config.toml:/app/config.toml:ro
     ports:
       - "8080:8080"
     restart: unless-stopped

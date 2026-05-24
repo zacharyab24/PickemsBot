@@ -23,7 +23,6 @@ WORKDIR /app
 
 COPY --from=builder /app/pickems .
 COPY resources/ resources/
-COPY config.toml .
 
 # Required environment variables at runtime:
 #   DISCORD_PROD_TOKEN    - Discord bot token
