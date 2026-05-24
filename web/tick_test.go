@@ -28,8 +28,10 @@ const finishedMatchJSON = `[{"id": 1, "name": "Round 1", "status": "finished",
   "results": [{"team_id": 1, "score": 2}, {"team_id": 2, "score": 0}]
 }]`
 
-// newTestPoller creates a Poller backed by a mock App (unlimited rate limiter).
-func newTestPoller(a *app.App, apiURL string) *Poller {
+// newMockPoller creates a Poller backed by a mock App for unit tests.
+// Named differently from the integration test helper to avoid redeclaration
+// when the binary is compiled with -tags integration.
+func newMockPoller(a *app.App, apiURL string) *Poller {
 	return NewPoller(a, 99001, "test-key", apiURL, nil)
 }
 
@@ -43,7 +45,7 @@ func TestTick_RateLimitReached_ReturnsTrue(t *testing.T) {
 	// NewTestApp gives unlimited; for a nil limiter we need a nil-limiter App.
 	// Use a Poller whose app.Allow() returns false.
 	a := &app.App{Store: mockStore} // rateLimiter is nil → Allow() returns false
-	p := newTestPoller(a, "http://localhost")
+	p := newMockPoller(a, "http://localhost")
 
 	result := p.tick()
 	assert.True(t, result, "tick() must return true when rate-limited (poller keeps running)")
@@ -58,7 +60,7 @@ func TestTick_UnrecoverableError_ReturnsFalse(t *testing.T) {
 
 	mockStore := app.NewMockStore("swiss", "test_round")
 	a := app.NewTestApp(mockStore)
-	p := newTestPoller(a, srv.URL)
+	p := newMockPoller(a, srv.URL)
 
 	result := p.tick()
 	assert.False(t, result, "tick() must return false on unrecoverable error")
@@ -73,7 +75,7 @@ func TestTick_RetriableError_ReturnsTrue(t *testing.T) {
 
 	mockStore := app.NewMockStore("swiss", "test_round")
 	a := app.NewTestApp(mockStore)
-	p := newTestPoller(a, srv.URL)
+	p := newMockPoller(a, srv.URL)
 
 	result := p.tick()
 	assert.True(t, result, "tick() must return true on retriable error")
@@ -89,7 +91,7 @@ func TestTick_ParseError_ReturnsTrue(t *testing.T) {
 
 	mockStore := app.NewMockStore("swiss", "test_round")
 	a := app.NewTestApp(mockStore)
-	p := newTestPoller(a, srv.URL)
+	p := newMockPoller(a, srv.URL)
 
 	result := p.tick()
 	assert.True(t, result, "tick() must return true on parse error (will retry)")
@@ -105,7 +107,7 @@ func TestTick_NoTransition_ReturnsTrue(t *testing.T) {
 
 	mockStore := app.NewMockStore("swiss", "test_round")
 	a := app.NewTestApp(mockStore)
-	p := newTestPoller(a, srv.URL)
+	p := newMockPoller(a, srv.URL)
 
 	result := p.tick()
 	assert.True(t, result)
@@ -128,7 +130,7 @@ func TestTick_FinishedTransition_TriggersUpdateAndReturnsTrue(t *testing.T) {
 	})
 
 	a := app.NewTestApp(mockStore)
-	p := newTestPoller(a, srv.URL)
+	p := newMockPoller(a, srv.URL)
 
 	// Seed knownStatus so the match looks like it was "running" before this tick.
 	p.knownStatus["1"] = "running"
