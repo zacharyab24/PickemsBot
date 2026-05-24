@@ -1,0 +1,19 @@
+# Integration test config. Assumes the test server is running on localhost:8081.
+# Run with: go test -tags integration ./...
+
+data_source     = "pandascore"
+tournament_name = "Test_Tournament"
+round           = "Playoffs"
+upcoming_only   = false
+test            = true
+log_level       = "debug"
+
+[liquipedia]
+api_url = "http://localhost:8081/liquipedia/api/v3/match"
+page    = "Test/Tournament/2026"
+params  = ""
+format  = ""
+
+[pandascore]
+api_url   = "http://localhost:8081/pandascore/csgo/matches"
+series_id = 99001

@@ -47,7 +47,7 @@ func main() {
 		if apiKey == "" {
 			log.Fatal("LIQUIDPEDIADB_API_KEY not set")
 		}
-		fetcher = store.NewLiquipediaFetcher(apiKey, arg)
+		fetcher = store.NewLiquipediaFetcher("https://api.liquipedia.net/api/v3/match", apiKey, arg)
 
 	case "pandascore":
 		apiKey := os.Getenv("PANDASCORE_API_KEY")
@@ -58,7 +58,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("seriesID must be an integer, got %q", arg)
 		}
-		fetcher = store.NewPandaScoreFetcher(apiKey, seriesID)
+		fetcher = store.NewPandaScoreFetcher("https://api.pandascore.co/csgo/matches", apiKey, seriesID)
 
 	default:
 		log.Fatalf("unknown source %q — use 'liquipedia' or 'pandascore'", source)

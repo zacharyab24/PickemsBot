@@ -101,12 +101,12 @@ func main() {
 
 	switch cfg.DataSource {
 	case "pandascore":
-		poller := web.NewPoller(apiInstance, cfg.SeriesID, os.Getenv("PANDASCORE_API_KEY"), logger)
+		poller := web.NewPoller(apiInstance, cfg.PandaScore.SeriesID, os.Getenv("PANDASCORE_API_KEY"), cfg.PandaScore.APIURL, logger)
 		go poller.Start()
 		logger.Info("PandaScore poller started")
 	case "liquipedia":
 		go func() {
-			if err := web.Start(web.Config{Addr: ":8080", API: apiInstance, Page: cfg.Page, Logger: logger}); err != nil {
+			if err := web.Start(web.Config{Addr: ":8080", API: apiInstance, Page: cfg.Liquipedia.Page, Logger: logger}); err != nil {
 				logger.Error("web server exited", "error", err)
 				os.Exit(1)
 			}

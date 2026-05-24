@@ -15,6 +15,7 @@ type Poller struct {
 	app         *app.App
 	seriesID    int
 	apiKey      string
+	apiURL      string
 	interval    time.Duration
 	knownStatus map[string]string // matchID -> last known status
 	log         *slog.Logger
@@ -30,7 +31,7 @@ func (p *Poller) logger() *slog.Logger {
 
 // NewPoller is the poller constructor.
 // log may be nil; if so the global slog default is used.
-func NewPoller(a *app.App, seriesID int, apiKey string, log *slog.Logger) *Poller {
+func NewPoller(a *app.App, seriesID int, apiKey string, apiURL string, log *slog.Logger) *Poller {
 	var pollerLog *slog.Logger
 	if log != nil {
 		pollerLog = log.With("component", "poller")
@@ -39,6 +40,7 @@ func NewPoller(a *app.App, seriesID int, apiKey string, log *slog.Logger) *Polle
 		app:         a,
 		seriesID:    seriesID,
 		apiKey:      apiKey,
+		apiURL:      apiURL,
 		interval:    time.Minute,
 		knownStatus: make(map[string]string),
 		log:         pollerLog,
@@ -66,7 +68,7 @@ func (p *Poller) tick() bool {
 		return true
 	}
 
-	raw, err := sources.GetPandaScoreMatches(p.apiKey, p.seriesID)
+	raw, err := sources.GetPandaScoreMatches(p.apiURL, p.apiKey, p.seriesID)
 	if err != nil {
 		if errors.Is(err, sources.ErrUnrecoverable) {
 			p.logger().Error("unrecoverable fetch error, stopping poller", "error", fmt.Errorf("poller.tick: %w", err))
