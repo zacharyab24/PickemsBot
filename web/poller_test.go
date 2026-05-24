@@ -15,13 +15,13 @@ import (
 // region NewPoller tests
 
 func TestNewPoller_DefaultInterval(t *testing.T) {
-	p := NewPoller(nil, 42, "test-key", nil)
+	p := NewPoller(nil, 42, "test-key", "", nil)
 
 	assert.Equal(t, time.Minute, p.interval)
 }
 
 func TestNewPoller_Fields(t *testing.T) {
-	p := NewPoller(nil, 99, "my-api-key", nil)
+	p := NewPoller(nil, 99, "my-api-key", "", nil)
 
 	assert.Nil(t, p.app)
 	assert.Equal(t, 99, p.seriesID)
@@ -30,7 +30,7 @@ func TestNewPoller_Fields(t *testing.T) {
 
 func TestNewPoller_KnownStatusInitialised(t *testing.T) {
 	// knownStatus map must be initialised — a nil map panics on write
-	p := NewPoller(nil, 1, "key", nil)
+	p := NewPoller(nil, 1, "key", "", nil)
 
 	assert.NotNil(t, p.knownStatus)
 	// writing to it should not panic
@@ -42,7 +42,7 @@ func TestNewPoller_KnownStatusInitialised(t *testing.T) {
 // region knownStatus transition logic tests
 
 func TestPoller_StatusTransition_DetectsFinished(t *testing.T) {
-	p := NewPoller(nil, 1, "key", nil)
+	p := NewPoller(nil, 1, "key", "", nil)
 	p.knownStatus["match-1"] = "running"
 
 	// Simulate a tick where match-1 transitions to finished
@@ -63,7 +63,7 @@ func TestPoller_StatusTransition_DetectsFinished(t *testing.T) {
 
 func TestPoller_StatusTransition_NoTriggerIfAlreadyFinished(t *testing.T) {
 	// A match already marked finished should not trigger again on next tick
-	p := NewPoller(nil, 1, "key", nil)
+	p := NewPoller(nil, 1, "key", "", nil)
 	p.knownStatus["match-1"] = "finished"
 
 	finishedTransition := false
@@ -83,7 +83,7 @@ func TestPoller_StatusTransition_NoTriggerIfAlreadyFinished(t *testing.T) {
 func TestPoller_StatusTransition_NoTriggerForFirstSeen(t *testing.T) {
 	// A brand-new match seen as "finished" (never tracked before) should not trigger —
 	// we only react to transitions, not initial state.
-	p := NewPoller(nil, 1, "key", nil)
+	p := NewPoller(nil, 1, "key", "", nil)
 
 	finishedTransition := false
 	statuses := map[string]string{"match-new": "finished"}

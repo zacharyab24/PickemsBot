@@ -234,9 +234,15 @@ func TestWriteConfig_Liquipedia(t *testing.T) {
 	assert.Contains(t, out, `tournament_name = "Foo_2026"`)
 	assert.Contains(t, out, `round           = "Stage_1"`)
 	assert.Contains(t, out, `upcoming_only   = false`)
-	assert.Contains(t, out, `page   = "Foo/2026/Bar/Stage_1"`)
-	assert.Contains(t, out, `format = "swiss"`)
-	assert.NotContains(t, out, "series_id")
+	// Nested liquipedia section
+	assert.Contains(t, out, "[liquipedia]")
+	assert.Contains(t, out, `api_url = "https://api.liquipedia.net/api/v3/match"`)
+	assert.Contains(t, out, `page    = "Foo/2026/Bar/Stage_1"`)
+	assert.Contains(t, out, `format  = "swiss"`)
+	// PandaScore section always written, but api_url is blank when not the active source
+	assert.Contains(t, out, "[pandascore]")
+	assert.Contains(t, out, `api_url   = ""`)
+	assert.Contains(t, out, "series_id = 0")
 }
 
 func TestWriteConfig_PandaScore(t *testing.T) {
@@ -260,9 +266,13 @@ func TestWriteConfig_PandaScore(t *testing.T) {
 	assert.Contains(t, out, `data_source     = "pandascore"`)
 	assert.Contains(t, out, `tournament_name = "IEM_Cologne_2026"`)
 	assert.Contains(t, out, `round           = "Stage_1"`)
-	assert.Contains(t, out, `series_id = 10488`)
-	assert.NotContains(t, out, "page")
-	assert.NotContains(t, out, "format")
+	// Nested pandascore section
+	assert.Contains(t, out, "[pandascore]")
+	assert.Contains(t, out, `api_url   = "https://api.pandascore.co/csgo/matches"`)
+	assert.Contains(t, out, "series_id = 10488")
+	// Liquipedia section always written, but api_url is blank when not the active source
+	assert.Contains(t, out, "[liquipedia]")
+	assert.Contains(t, out, `api_url = ""`)
 }
 
 func TestWriteConfig_BadPath(t *testing.T) {

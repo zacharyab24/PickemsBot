@@ -35,6 +35,11 @@ type tournamentConfig struct {
 	SeriesID int
 }
 
+const (
+	liquipediaProdAPIURL = "https://api.liquipedia.net/api/v3/match"
+	pandaScoreProdAPIURL = "https://api.pandascore.co/csgo/matches"
+)
+
 func fetchWikitext(path string) (string, error) {
 	req, err := http.NewRequest("GET", liquipediaBase+path+"?action=raw", nil)
 	if err != nil {
@@ -207,15 +212,30 @@ func writeConfig(path string, c tournamentConfig) error {
 	fmt.Fprintf(f, "round           = %q\n", c.Round)
 	fmt.Fprintf(f, "upcoming_only   = %t\n", c.UpcomingOnly)
 	fmt.Fprintf(f, "test            = %t\n", c.Test)
+	fmt.Fprintln(f, "log_level       = \"\"")
 	fmt.Fprintln(f)
-	switch c.DataSource {
-	case "liquipedia":
-		fmt.Fprintln(f, "# Liquipedia settings")
-		fmt.Fprintf(f, "page   = %q\n", c.Page)
-		fmt.Fprintf(f, "format = %q\n", c.Format)
-	case "pandascore":
-		fmt.Fprintln(f, "# PandaScore settings")
-		fmt.Fprintf(f, "series_id = %d\n", c.SeriesID)
+
+	// Liquipedia section — always written; api_url uses the production URL when
+	// liquipedia is the active source, empty string otherwise.
+	liqAPIURL := ""
+	if c.DataSource == "liquipedia" {
+		liqAPIURL = liquipediaProdAPIURL
 	}
+	fmt.Fprintln(f, "[liquipedia]")
+	fmt.Fprintf(f, "api_url = %q\n", liqAPIURL)
+	fmt.Fprintf(f, "page    = %q\n", c.Page)
+	fmt.Fprintf(f, "params  = \"\"\n")
+	fmt.Fprintf(f, "format  = %q\n", c.Format)
+	fmt.Fprintln(f)
+
+	// PandaScore section — always written; api_url uses the production URL when
+	// pandascore is the active source, empty string otherwise.
+	psAPIURL := ""
+	if c.DataSource == "pandascore" {
+		psAPIURL = pandaScoreProdAPIURL
+	}
+	fmt.Fprintln(f, "[pandascore]")
+	fmt.Fprintf(f, "api_url   = %q\n", psAPIURL)
+	fmt.Fprintf(f, "series_id = %d\n", c.SeriesID)
 	return nil
 }

@@ -18,9 +18,7 @@ var ErrUnrecoverable = errors.New("unrecoverable api error")
 
 // GetPandaScoreMatches fetches all matches for a given series from the PandaScore API.
 // Returns the raw JSON response body as a string.
-func GetPandaScoreMatches(apiKey string, seriesID int) (string, error) {
-	apiURL := "https://api.pandascore.co/csgo/matches"
-
+func GetPandaScoreMatches(apiURL string, apiKey string, seriesID int) (string, error) {
 	parsedURL, err := url.Parse(apiURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid url: %w", err)

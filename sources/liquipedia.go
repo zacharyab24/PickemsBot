@@ -25,9 +25,7 @@ import (
 //
 // Preconditions: valid API key, pagename is a slash-separated Liquipedia path
 // Postconditions: returns raw JSON string or an error
-func GetLiquipediaMatchDataByPage(apiKey string, pagename string) (string, error) {
-	apiURL := "https://api.liquipedia.net/api/v3/match"
-
+func GetLiquipediaMatchDataByPage(apiURL string, apiKey string, pagename string) (string, error) {
 	parsedURL, err := url.Parse(apiURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid api url: %w", err)
@@ -69,9 +67,7 @@ func GetLiquipediaMatchDataByPage(apiKey string, pagename string) (string, error
 
 // GetLiquipediaMatchData fetches match data from the LiquipediaDB API filtered by match2bracketid.
 // Each match2bracketid corresponds to a bracket table on a tournament page.
-func GetLiquipediaMatchData(apiKey string, bracketIds []string) (string, error) {
-	apiURL := "https://api.liquipedia.net/api/v3/match"
-
+func GetLiquipediaMatchData(apiURL string, apiKey string, bracketIds []string) (string, error) {
 	var conditions []string
 	for _, id := range bracketIds {
 		conditions = append(conditions, fmt.Sprintf("[[match2bracketid::%s]]", id))

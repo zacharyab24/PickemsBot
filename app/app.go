@@ -46,11 +46,11 @@ func NewApp(cfg config.Config, mongoURI string, log *slog.Logger) (*App, error) 
 	var limiter *rate.Limiter
 	switch cfg.DataSource {
 	case "liquipedia":
-		fetcher = store.NewLiquipediaFetcher(os.Getenv("LIQUIDPEDIADB_API_KEY"), cfg.Page)
+		fetcher = store.NewLiquipediaFetcher(cfg.Liquipedia.APIURL, os.Getenv("LIQUIDPEDIADB_API_KEY"), cfg.Liquipedia.Page)
 		limiter = rate.NewLimiter(rate.Every(time.Minute), 10) // 60/hr per API guidelines
 
 	case "pandascore":
-		fetcher = store.NewPandaScoreFetcher(os.Getenv("PANDASCORE_API_KEY"), cfg.SeriesID)
+		fetcher = store.NewPandaScoreFetcher(cfg.PandaScore.APIURL, os.Getenv("PANDASCORE_API_KEY"), cfg.PandaScore.SeriesID)
 		limiter = rate.NewLimiter(rate.Every(4*time.Second), 5) // ~900/hr, less than the 1000 limit of our api plan
 
 	default:
