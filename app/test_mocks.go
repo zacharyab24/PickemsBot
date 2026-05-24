@@ -15,6 +15,7 @@ import (
 	"pickems-bot/tournament"
 
 	"go.mongodb.org/mongo-driver/mongo"
+	"golang.org/x/time/rate"
 )
 
 // MockStore implements the Store interface for testing
@@ -249,4 +250,14 @@ func (m *MockStore) FetchLeaderboardFromDB() ([]store.LeaderboardEntry, error) {
 		return nil, m.FetchLeaderboardFromDBError
 	}
 	return m.Leaderboard, nil
+}
+
+// NewTestApp creates a minimal App for unit tests in other packages that need
+// an App instance with a rate limiter but without a real MongoDB connection.
+// The injected store is used as-is; callers are responsible for configuring it.
+func NewTestApp(s store.Interface) *App {
+	return &App{
+		Store:       s,
+		rateLimiter: rate.NewLimiter(rate.Inf, 1),
+	}
 }

@@ -6,6 +6,7 @@
 package web
 
 import (
+	"log/slog"
 	"testing"
 	"time"
 
@@ -35,6 +36,22 @@ func TestNewPoller_KnownStatusInitialised(t *testing.T) {
 	assert.NotNil(t, p.knownStatus)
 	// writing to it should not panic
 	p.knownStatus["test-id"] = "not_started"
+}
+
+// endregion
+
+// region logger tests
+
+func TestPoller_Logger_NilLog_ReturnsDefault(t *testing.T) {
+	p := NewPoller(nil, 1, "key", "", nil)
+	l := p.logger()
+	assert.NotNil(t, l)
+}
+
+func TestPoller_Logger_InjectedLog(t *testing.T) {
+	p := NewPoller(nil, 1, "key", "", slog.Default())
+	l := p.logger()
+	assert.NotNil(t, l)
 }
 
 // endregion

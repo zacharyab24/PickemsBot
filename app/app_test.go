@@ -610,6 +610,51 @@ func TestUpdateMatchResults_StoreError(t *testing.T) {
 
 // endregion
 
+// region logger tests
+
+func TestApp_Logger_NilLogger_ReturnsDefault(t *testing.T) {
+	a := &App{}
+	// logger() must not panic and must return slog.Default()
+	l := a.logger()
+	if l == nil {
+		t.Error("Expected non-nil logger when no logger injected")
+	}
+}
+
+// endregion
+
+// region PopulateMatches success paths
+
+func TestPopulateMatches_ScheduleOnly_Success(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+
+	api := &App{
+		Store:       mockStore,
+		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10),
+	}
+
+	err := api.PopulateMatches(true)
+	if err != nil {
+		t.Errorf("Expected no error for scheduleOnly=true, got: %s", err.Error())
+	}
+}
+
+func TestPopulateMatches_FullUpdate_Success(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+
+	api := &App{
+		Store:       mockStore,
+		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10),
+	}
+
+	err := api.PopulateMatches(false)
+	if err != nil {
+		t.Errorf("Expected no error for scheduleOnly=false, got: %s", err.Error())
+	}
+}
+
+// endregion
+
 // region PopulateMatches rate limiter tests
 
 func TestPopulateMatches_RateLimiterNil(t *testing.T) {
