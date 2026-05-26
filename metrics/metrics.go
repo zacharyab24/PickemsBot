@@ -2,27 +2,37 @@ package metrics
 
 import "github.com/prometheus/client_golang/prometheus"
 
-var (
-	DiscordCommandsTotal = newCounterVec("discord_commands_total", "Total number of discord commands recieved, labelled by command name", "command")
-	PollerTicksTotal     = newCounter("poller_ticks_total", "Total number of PandaScore poller ticks completed.")
-	PollerErrorsTotal    = newCounter("poller_errors_total", "Total number of errors from the PandaScore poller")
-	MatchUpdatesTotal    = newCounter("match_updates_total", "Total number of match updates recieved")
-	MongoOpsTotal        = newCounterVec("mongodb_operations_total", "Total number of calls made to mongodb", "operation")
+// DiscordCommandsTotal counts Discord bot commands received, labelled by command name.
+var DiscordCommandsTotal = newCounterVec("discord_commands_total", "Total number of discord commands recieved, labelled by command name", "command")
 
-	LeaderboardDuration = prometheus.NewHistogram(
-		prometheus.HistogramOpts{
-			Name:    "leaderboard_generation_duration_seconds",
-			Help:    "Time taken to regenerate the leaderboard, in seconds.",
-			Buckets: prometheus.DefBuckets,
-		},
-	)
-	ImageRenderDuration = prometheus.NewHistogram(
-		prometheus.HistogramOpts{
-			Name:    "image_render_duration_seconds",
-			Help:    "Time taken for Chromium to render the results bracket image, in seconds",
-			Buckets: []float64{0.5, 1, 2, 5, 10, 20, 30},
-		},
-	)
+// PollerTicksTotal counts successful PandaScore poller ticks.
+var PollerTicksTotal = newCounter("poller_ticks_total", "Total number of PandaScore poller ticks completed.")
+
+// PollerErrorsTotal counts errors encountered during PandaScore poller ticks.
+var PollerErrorsTotal = newCounter("poller_errors_total", "Total number of errors from the PandaScore poller")
+
+// MatchUpdatesTotal counts match result updates successfully written to MongoDB.
+var MatchUpdatesTotal = newCounter("match_updates_total", "Total number of match updates recieved")
+
+// MongoOpsTotal counts MongoDB operations, labelled by operation type (read or write).
+var MongoOpsTotal = newCounterVec("mongodb_operations_total", "Total number of calls made to mongodb", "operation")
+
+// LeaderboardDuration measures time taken to regenerate the leaderboard.
+var LeaderboardDuration = prometheus.NewHistogram(
+	prometheus.HistogramOpts{
+		Name:    "leaderboard_generation_duration_seconds",
+		Help:    "Time taken to regenerate the leaderboard, in seconds.",
+		Buckets: prometheus.DefBuckets,
+	},
+)
+
+// ImageRenderDuration measures time taken for Chromium to render the results image.
+var ImageRenderDuration = prometheus.NewHistogram(
+	prometheus.HistogramOpts{
+		Name:    "image_render_duration_seconds",
+		Help:    "Time taken for Chromium to render the results bracket image, in seconds",
+		Buckets: []float64{0.5, 1, 2, 5, 10, 20, 30},
+	},
 )
 
 // init registers the prometheus methods

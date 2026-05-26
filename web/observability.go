@@ -53,12 +53,14 @@ func StartTelemetryServer(cfg TelemetryConfig) error {
 	return srv.ListenAndServe()
 }
 
+// HealthResponse is the JSON response body returned by the /health endpoint.
 type HealthResponse struct {
 	Status string         `json:"status"`
 	Checks ResponseChecks `json:"checks"`
 	Uptime int64          `json:"uptime"`
 }
 
+// ResponseChecks holds the individual dependency check results within a HealthResponse.
 type ResponseChecks struct {
 	MongoDb string `json:"mongodb"`
 	Discord string `json:"discord"`
