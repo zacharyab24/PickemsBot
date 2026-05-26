@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"pickems-bot/metrics"
 	"pickems-bot/models"
 	"pickems-bot/tournament"
 	"strconv"
@@ -342,27 +343,35 @@ func (b *Bot) newMessageHandler(session DiscordSession, message *discordgo.Messa
 	// Route to appropriate handler
 	switch {
 	case startsWith(message.Content, "$help"):
+		metrics.DiscordCommandsTotal.WithLabelValues("help").Inc()
 		b.helpMessageHandler(session, message)
 
 	case startsWith(message.Content, "$details"):
+		metrics.DiscordCommandsTotal.WithLabelValues("details").Inc()
 		b.detailsHandler(session, message)
 
 	case startsWith(message.Content, "$set"):
+		metrics.DiscordCommandsTotal.WithLabelValues("set").Inc()
 		b.setPredictionsHandler(session, message)
 
 	case startsWith(message.Content, "$check"):
+		metrics.DiscordCommandsTotal.WithLabelValues("check").Inc()
 		b.checkPredictionsHandler(session, message)
 
 	case startsWith(message.Content, "$leaderboard"):
+		metrics.DiscordCommandsTotal.WithLabelValues("leaderboard").Inc()
 		b.leaderboardHandler(session, message)
 
 	case startsWith(message.Content, "$teams"):
+		metrics.DiscordCommandsTotal.WithLabelValues("teams").Inc()
 		b.teamsHandler(session, message)
 
 	case startsWith(message.Content, "$upcoming"):
+		metrics.DiscordCommandsTotal.WithLabelValues("upcoming").Inc()
 		b.upcomingMatchesHandler(session, message)
 
 	case startsWith(message.Content, "$result"):
+		metrics.DiscordCommandsTotal.WithLabelValues("results").Inc()
 		b.resultsHandler(session, message)
 	}
 }

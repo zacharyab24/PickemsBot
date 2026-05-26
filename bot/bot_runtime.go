@@ -28,6 +28,7 @@ func (b *Bot) Run() error {
 
 	// open session
 	discord.Open()
+	b.session = discord
 	defer discord.Close() // close session, after function termination
 
 	// keep bot running until there is NO os interruption (ctrl + C)

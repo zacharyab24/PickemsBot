@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"pickems-bot/app"
 	bot "pickems-bot/bot"
@@ -24,6 +25,8 @@ import (
 )
 
 func main() {
+	startTime := time.Now()
+
 	if err := godotenv.Load(); err != nil {
 		slog.Info("no .env file found, using environment variables")
 	}
@@ -98,6 +101,19 @@ func main() {
 		logger.Error("failed to initialize bot", "error", err)
 		os.Exit(1)
 	}
+
+	go func() {
+		if err := web.StartTelemetryServer(web.TelemetryConfig{
+			Addr:      ":9090",
+			App:       apiInstance,
+			Discord:   botInstance,
+			StartTime: startTime,
+			Logger:    logger,
+		}); err != nil {
+			logger.Error("telemetry server exited", "error", err)
+			os.Exit(1)
+		}
+	}()
 
 	switch cfg.DataSource {
 	case "pandascore":

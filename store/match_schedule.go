@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"pickems-bot/metrics"
 	"pickems-bot/sources"
 	"sort"
 
@@ -21,6 +22,7 @@ import (
 // Preconditions: Receives receiver pointer for Store which contains DB information such as database name, collection and round
 // Postconditions: Returns slice of upcoming matches or error message if the operation was unsuccessful
 func (s *Store) FetchMatchSchedule() ([]sources.ScheduledMatch, error) {
+	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
 	opts := options.FindOne()
 
 	// Get UpcomingMatchDoc result from db
@@ -37,6 +39,7 @@ func (s *Store) FetchMatchSchedule() ([]sources.ScheduledMatch, error) {
 // and slice of []sources.ScheduledMatch containing the data to be stored
 // Postconditions: Updates the data stored in the db, returns error message if the operation was unsuccessful
 func (s *Store) StoreMatchSchedule(scheduledMatches []sources.ScheduledMatch) error {
+	metrics.MongoOpsTotal.WithLabelValues("write").Inc()
 	if len(scheduledMatches) == 0 {
 		return fmt.Errorf("scheduled matches input has length 0, requires at least 1")
 	}

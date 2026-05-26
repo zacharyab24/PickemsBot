@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 
+	"pickems-bot/metrics"
 	"pickems-bot/models"
 	"pickems-bot/tournament"
 
@@ -22,6 +23,7 @@ import (
 // Preconditions: Receives strings containing db name, collection name and userID, and models.Prediction containing the users predictions
 // Postconditions: Stores or updates the user's prediction stored in the db, or returns an error if the operations was unsuccessful
 func (s *Store) StoreUserPrediction(userID string, userPrediction models.Prediction) error {
+	metrics.MongoOpsTotal.WithLabelValues("write").Inc()
 	// Attempt to find an existing document
 	var result models.Prediction
 	err := s.Collections.Predictions.FindOne(context.TODO(), bson.M{"userid": userID, "round": userPrediction.Round}).Decode(&result)
@@ -60,6 +62,7 @@ func (s *Store) StoreUserPrediction(userID string, userPrediction models.Predict
 // Preconditions: Receives strings containing db name, collection name and userID
 // Postconditions: Returns a user's prediction if it exists, or an error if it occurs
 func (s *Store) GetUserPrediction(userID string) (models.Prediction, error) {
+	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
 	opts := options.FindOne()
 
 	var result models.Prediction
@@ -78,6 +81,7 @@ func (s *Store) GetUserPrediction(userID string) (models.Prediction, error) {
 // It receives strings containing database name, collection name and round.
 // It returns slice of Predictions or an error if it occurs.
 func (s *Store) GetAllUserPredictions() ([]models.Prediction, error) {
+	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
 	// Filter query to match documents where the round is the round sting input to the function
 	filter := bson.D{{Key: "round", Value: s.Round}}
 

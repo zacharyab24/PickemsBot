@@ -39,6 +39,7 @@ type MockStore struct {
 	FetchAndUpdateMatchResultsError error
 	StoreLeaderboardError           error
 	FetchLeaderboardFromDBError     error
+	PingError                       error
 
 	// Leaderboard storage
 	Leaderboard []store.LeaderboardEntry
@@ -251,6 +252,9 @@ func (m *MockStore) FetchLeaderboardFromDB() ([]store.LeaderboardEntry, error) {
 	}
 	return m.Leaderboard, nil
 }
+
+// Ping mock implementation returns PingError
+func (m *MockStore) Ping(ctx context.Context) error { return m.PingError }
 
 // NewTestApp creates a minimal App for unit tests in other packages that need
 // an App instance with a rate limiter but without a real MongoDB connection.
