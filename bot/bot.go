@@ -11,12 +11,15 @@ import (
 	"log/slog"
 	"pickems-bot/app"
 	"strings"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 // Bot represents a Discord bot instance with its token and API pointer
 type Bot struct {
 	BotToken string
 	APIPtr   *app.App
+	session  *discordgo.Session
 	log      *slog.Logger
 }
 
@@ -46,9 +49,12 @@ func NewBot(botToken string, apiPtr *app.App, log *slog.Logger) (*Bot, error) {
 	}, nil
 }
 
-// Helper function to check if a string starts with a given substring
-// Preconditions: Receives an input string and a substring
-// Postconditions: Returns true if the substring is at the start of the string, else returns false
+// IsConnected reports whether the Discord gateway session is open
+func (b *Bot) IsConnected() bool {
+	return b.session != nil && b.session.DataReady
+}
+
+// startsWith is an internal helper to check if a string starts with a given substring
 func startsWith(inputString string, substring string) bool {
 	//Check if the substring is present in the input string
 	if !strings.Contains(inputString, substring) {

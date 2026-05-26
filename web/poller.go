@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"pickems-bot/app"
+	"pickems-bot/metrics"
 	"pickems-bot/sources"
 	"time"
 )
@@ -72,15 +73,18 @@ func (p *Poller) tick() bool {
 	if err != nil {
 		if errors.Is(err, sources.ErrUnrecoverable) {
 			p.logger().Error("unrecoverable fetch error, stopping poller", "error", fmt.Errorf("poller.tick: %w", err))
+			metrics.PollerErrorsTotal.Inc()
 			return false
 		}
 		p.logger().Warn("failed to fetch matches from PandaScore, will retry next tick", "error", fmt.Errorf("poller.tick: %w", err))
+		metrics.PollerErrorsTotal.Inc()
 		return true
 	}
 
 	matchNodes, err := sources.ParsePandaScoreMatches(raw)
 	if err != nil {
 		p.logger().Warn("failed to parse PandaScore matches, will retry next tick", "error", fmt.Errorf("poller.tick: %w", err))
+		metrics.PollerErrorsTotal.Inc()
 		return true
 	}
 
@@ -94,6 +98,7 @@ func (p *Poller) tick() bool {
 	}
 
 	p.logger().Debug("poller tick complete", "matches_checked", len(matchNodes), "finished_transition", finishedTransition)
+	metrics.PollerTicksTotal.Inc()
 
 	if finishedTransition {
 		if err := p.app.UpdateMatchResults(); err != nil {

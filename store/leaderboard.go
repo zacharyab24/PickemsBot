@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"pickems-bot/metrics"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -20,6 +22,7 @@ import (
 // Preconditions: Receives receiver pointer for Store which contains DB information such as database name, collection and round
 // Postconditions: Returns slice of LeaderboardEntry with user data, or an error if it occurs
 func (s *Store) FetchLeaderboardFromDB() ([]LeaderboardEntry, error) {
+	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
 	s.Collections.Leaderboard.Name()
 	opts := options.FindOne()
 
@@ -39,6 +42,7 @@ func (s *Store) FetchLeaderboardFromDB() ([]LeaderboardEntry, error) {
 // Preconditions: Receives receiver pointer for Store and the Leaderboard value to be stored
 // Postconditions: Updates the leaderboard collection in Mongo and returns nil, or an error if it occurs
 func (s *Store) StoreLeaderboard(leaderboard Leaderboard) error {
+	metrics.MongoOpsTotal.WithLabelValues("write").Inc()
 	if reflect.DeepEqual(leaderboard, Leaderboard{}) {
 		return fmt.Errorf("leaderboard is empty")
 	}

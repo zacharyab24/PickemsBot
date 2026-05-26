@@ -30,4 +30,7 @@ COPY resources/ resources/
 #   MONGO_PROD_URI        - MongoDB connection string
 #   LIQUIDPEDIADB_API_KEY - Liquipedia API key (liquipedia data source only)
 #   PANDASCORE_API_KEY    - PandaScore API key (pandascore data source only)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- http://localhost:9090/health || exit 1
+
 CMD ["./pickems"]

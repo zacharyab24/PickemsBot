@@ -8,9 +8,11 @@ import (
 	"strings"
 
 	"pickems-bot/app"
+	"pickems-bot/metrics"
 	"pickems-bot/sources"
 	"pickems-bot/tournament"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/zacharyab24/pickems-renderer/render"
 )
 
@@ -80,6 +82,9 @@ const resultImagePath = "resources/result.png"
 // RenderResultsImage fetches match nodes from the DB and regenerates the result image on disk.
 // It is called at startup and after each webhook update to ensure the image is always current.
 func RenderResultsImage(a *app.App) error {
+	timer := prometheus.NewTimer(metrics.ImageRenderDuration)
+	defer timer.ObserveDuration()
+
 	if err := os.MkdirAll("resources", 0755); err != nil {
 		return fmt.Errorf("failed to create resources directory: %w", err)
 	}

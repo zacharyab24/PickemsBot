@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"pickems-bot/config"
+	"pickems-bot/metrics"
 	"pickems-bot/models"
 	"pickems-bot/scoring"
 	"pickems-bot/sources"
@@ -21,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/time/rate"
 )
 
@@ -189,6 +191,9 @@ func (a *App) CheckPrediction(user models.User) (tournament.ScoreReport, error) 
 // Preconditions: Receives receiver pointer to api
 // Postconditions: Generates the leaderboard, updates it in the DB and returns nil, or returns an error if it occurs
 func (a *App) GenerateLeaderboard() error {
+	timer := prometheus.NewTimer(metrics.LeaderboardDuration)
+	defer timer.ObserveDuration()
+
 	// Check if results have been initialised
 	err := a.Store.EnsureScheduledMatches()
 	if err != nil {
@@ -371,5 +376,9 @@ func (a *App) UpdateMatchResults() error {
 		return fmt.Errorf("rate limiter exceeded, skipping match result update")
 	}
 
-	return a.Store.FetchAndUpdateMatchResults()
+	if err := a.Store.FetchAndUpdateMatchResults(); err != nil {
+		return err
+	}
+	metrics.MatchUpdatesTotal.Inc()
+	return nil
 }

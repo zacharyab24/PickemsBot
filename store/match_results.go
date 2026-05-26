@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 
+	"pickems-bot/metrics"
 	"pickems-bot/tournament"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -22,6 +23,7 @@ import (
 // (e.g. PW Shanghai Major 2024_results, and round as string (e.g. stage_1).
 // It returns MatchResult interface if the operation was successful, or an error if it was not.
 func (s *Store) FetchMatchResultsFromDb() (tournament.MatchResult, error) {
+	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
 	s.Collections.MatchResults.Name()
 	opts := options.FindOne()
 
@@ -70,6 +72,7 @@ func (s *Store) GetMatchResults() (tournament.MatchResult, error) {
 // FetchMatchResultsFromDb can decode into the right concrete type later.
 // Format-agnostic: works for any registered format without code changes here.
 func (s *Store) StoreMatchResults(matchResult tournament.MatchResult) error {
+	metrics.MongoOpsTotal.WithLabelValues("write").Inc()
 	var raw bson.M
 	err := s.Collections.MatchResults.FindOne(context.TODO(), bson.M{"round": s.Round}).Decode(&raw)
 	notFound := err == mongo.ErrNoDocuments

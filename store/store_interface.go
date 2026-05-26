@@ -25,6 +25,7 @@ type Interface interface {
 	FetchMatchSchedule() ([]sources.ScheduledMatch, error)
 	StoreMatchSchedule(matches []sources.ScheduledMatch) error
 	FetchAndStoreSchedule() error
+	Ping(ctx context.Context) error
 
 	// Getter methods for accessing fields
 	GetDatabase() interface{ Name() string }
@@ -34,6 +35,11 @@ type Interface interface {
 	FetchMatchNodesFromDb() ([]sources.MatchNode, tournament.Kind, error)
 	StoreLeaderboard(leaderboard Leaderboard) error
 	FetchLeaderboardFromDB() ([]LeaderboardEntry, error)
+}
+
+// Ping pings the database client to ensure its online
+func (s *Store) Ping(ctx context.Context) error {
+	return s.Client.Ping(ctx, nil)
 }
 
 // Ensure Store implements Interface
