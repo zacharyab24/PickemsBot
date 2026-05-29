@@ -18,10 +18,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// FetchMatchResultsFromDb retrieves match results from the DB.
-// It receives name of database as a string (e.g. user_pickems), receives name of collection as a string,
-// (e.g. PW Shanghai Major 2024_results, and round as string (e.g. stage_1).
-// It returns MatchResult interface if the operation was successful, or an error if it was not.
+// FetchMatchResultsFromDb retrieves the match result document for the current round and decodes it into the appropriate MatchResult implementation.
 func (s *Store) FetchMatchResultsFromDb() (tournament.MatchResult, error) {
 	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
 	s.Collections.MatchResults.Name()

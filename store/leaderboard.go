@@ -10,17 +10,34 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"time"
 
 	"pickems-bot/metrics"
+	"pickems-bot/models"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// FetchLeaderboardFromDB returns the leaderboard from the db
-// Preconditions: Receives receiver pointer for Store which contains DB information such as database name, collection and round
-// Postconditions: Returns slice of LeaderboardEntry with user data, or an error if it occurs
+// LeaderboardEntry represents a single entry in the leaderboard for a user
+type LeaderboardEntry struct {
+	UserID             string `bson:"userid,omitempty"`
+	Username           string `bson:"username,omitempty"`
+	Score              int    `bson:"score,omitempty"`
+	models.ScoreResult `bson:",inline"`
+}
+
+// Leaderboard represents the tournament leaderboard stored in MongoDB
+type Leaderboard struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty"`
+	Round     string             `bson:"round,omitempty"`
+	UpdatedAt time.Time          `bson:"updated_at"`
+	Entries   []LeaderboardEntry `bson:"entries"`
+}
+
+// FetchLeaderboardFromDB returns the leaderboard entries for the current round.
 func (s *Store) FetchLeaderboardFromDB() ([]LeaderboardEntry, error) {
 	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
 	s.Collections.Leaderboard.Name()
@@ -38,9 +55,7 @@ func (s *Store) FetchLeaderboardFromDB() ([]LeaderboardEntry, error) {
 	return res.Entries, nil
 }
 
-// StoreLeaderboard updates the leaderboard stored in the DB
-// Preconditions: Receives receiver pointer for Store and the Leaderboard value to be stored
-// Postconditions: Updates the leaderboard collection in Mongo and returns nil, or an error if it occurs
+// StoreLeaderboard persists the given leaderboard, inserting a new document or replacing an existing one for the current round.
 func (s *Store) StoreLeaderboard(leaderboard Leaderboard) error {
 	metrics.MongoOpsTotal.WithLabelValues("write").Inc()
 	if reflect.DeepEqual(leaderboard, Leaderboard{}) {

@@ -43,7 +43,7 @@ func CreateTestStore(mongoURI string) (*Store, func(), error) {
 	cleanup := func() {
 		if store.Client != nil {
 			// Drop test database
-			store.Database.Drop(context.TODO())
+			store.TournamentDatabase.Drop(context.TODO())
 			// Disconnect client
 			store.Client.Disconnect(context.TODO())
 		}

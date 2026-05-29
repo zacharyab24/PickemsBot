@@ -15,6 +15,7 @@ import (
 	"pickems-bot/app"
 	"pickems-bot/models"
 	"pickems-bot/sources"
+	"pickems-bot/store"
 	"pickems-bot/tournament"
 
 	"github.com/bwmarrin/discordgo"
@@ -139,6 +140,76 @@ func TestTeams_Success(t *testing.T) {
 	assert.Equal(t, "channel123", msg.ChannelID)
 	assert.Contains(t, msg.Content, "Teams in this Stage")
 	assert.Contains(t, msg.Content, "Team")
+}
+
+func TestTeams_ShowsVRSRankInFooter(t *testing.T) {
+	bot := createTestBot("swiss")
+	mockSession := NewMockDiscordSession()
+	message := createMockMessage("$teams", "user123", "TestUser", "channel123")
+
+	bot.teamsHandler(mockSession, message)
+
+	require.Len(t, mockSession.SentMessages, 1)
+	embed := mockSession.GetLastEmbed()
+	require.NotNil(t, embed)
+	assert.Contains(t, embed.Embed.Footer.Text, "VRS world ranking shown")
+}
+
+// endregion
+
+// region team tests
+
+func TestTeam_Success(t *testing.T) {
+	mockStore := app.NewMockStore("swiss", "test_round")
+	mockStore.SetVRSEntries([]store.VRSEntry{
+		{
+			TeamName:      "FaZe",
+			Standing:      5,
+			Points:        1750,
+			Roster:        []string{"karrigan", "broky", "rain", "frozen", "ropz"},
+			StandingsDate: "2026_05_01",
+		},
+	})
+	b := &Bot{BotToken: "test_token", APIPtr: &app.App{Store: mockStore}}
+	mockSession := NewMockDiscordSession()
+	message := createMockMessage("$team faze", "user123", "TestUser", "channel123")
+
+	b.teamHandler(mockSession, message)
+
+	require.Len(t, mockSession.SentMessages, 1)
+	msg := mockSession.GetLastMessage()
+	assert.Contains(t, msg.Content, "FaZe")
+	assert.Contains(t, msg.Content, "#5")
+	assert.Contains(t, msg.Content, "karrigan")
+}
+
+func TestTeam_MissingArg(t *testing.T) {
+	mockStore := app.NewMockStore("swiss", "test_round")
+	b := &Bot{BotToken: "test_token", APIPtr: &app.App{Store: mockStore}}
+	mockSession := NewMockDiscordSession()
+	message := createMockMessage("$team", "user123", "TestUser", "channel123")
+
+	b.teamHandler(mockSession, message)
+
+	require.Len(t, mockSession.SentMessages, 1)
+	msg := mockSession.GetLastMessage()
+	assert.Contains(t, strings.ToLower(msg.Content), "usage")
+}
+
+func TestTeam_NotFound(t *testing.T) {
+	mockStore := app.NewMockStore("swiss", "test_round")
+	mockStore.SetVRSEntries([]store.VRSEntry{
+		{TeamName: "FaZe", Standing: 5},
+	})
+	b := &Bot{BotToken: "test_token", APIPtr: &app.App{Store: mockStore}}
+	mockSession := NewMockDiscordSession()
+	message := createMockMessage("$team unknownteamxyz", "user123", "TestUser", "channel123")
+
+	b.teamHandler(mockSession, message)
+
+	require.Len(t, mockSession.SentMessages, 1)
+	msg := mockSession.GetLastMessage()
+	assert.Contains(t, strings.ToLower(msg.Content), "no vrs data")
 }
 
 // endregion
@@ -440,7 +511,7 @@ func TestLeaderboard_APIError(t *testing.T) {
 func TestTeams_APIError(t *testing.T) {
 	// Create a mock store that will return an error
 	mockStore := app.NewMockStore("swiss", "test_round")
-	// Don't set any results, which should cause an error
+	mockStore.GetValidTeamsError = errors.New("database error")
 
 	bot := &Bot{
 		BotToken: "test_token",

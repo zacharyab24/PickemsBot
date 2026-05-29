@@ -27,3 +27,9 @@ type LeaderboardUser struct {
 	Successes int
 	Failures  int
 }
+
+// Team represents a tournament team with its associated VRS world ranking.
+type Team struct {
+	Name       string
+	VRSRanking int
+}

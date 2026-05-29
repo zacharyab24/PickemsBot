@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/time/rate"
 )
@@ -278,23 +279,94 @@ func (a *App) GetLeaderboard() ([]LeaderboardUser, error) {
 	return response, nil
 }
 
+// normalizeForVRSLookup strips common team name decorators so tournament names
+// (e.g. "Team Liquid", "Sharks Esports") match VRS names (e.g. "Liquid", "Sharks").
+// Used only for map key comparison — original names are never modified.
+func normalizeForVRSLookup(name string) string {
+	s := strings.ToLower(name)
+	s = strings.TrimPrefix(s, "team ")
+	s = strings.TrimSuffix(s, " team")
+	s = strings.TrimSuffix(s, " esports")
+	s = strings.TrimSuffix(s, " gaming")
+	return strings.TrimSpace(s)
+}
+
 // GetTeams gets a list of all valid team names.
 // The valid teams list must be initialized in db.
 // It returns a string slice containing all valid teams for this round.
-func (a *App) GetTeams() ([]string, error) {
-	// We need to ensure scheduled match data exists, as this function relies on the results data being populated, which needs scheduled matches. Theres some pretty bad nesting / dependencies in this code base
-	err := a.Store.EnsureScheduledMatches()
-	if err != nil {
-		return nil, err
-	}
-
+func (a *App) GetTeams() ([]Team, error) {
 	// Get valid team names
 	validTeams, _, err := a.Store.GetValidTeams()
 	if err != nil {
 		return nil, err
 	}
 
-	return validTeams, nil
+	VRSEntries, err := a.Store.FetchVrsDataFromDB()
+	if err != nil {
+		return nil, err
+	}
+
+	// Build a normalised map for lookup only — original names are never modified.
+	// Also keep a slice of normalised keys for fuzzy fallback.
+	vrsNorm := make(map[string]int, len(VRSEntries))
+	vrsNormKeys := make([]string, 0, len(VRSEntries))
+	for _, entry := range VRSEntries {
+		key := normalizeForVRSLookup(entry.TeamName)
+		vrsNorm[key] = entry.Standing
+		vrsNormKeys = append(vrsNormKeys, key)
+	}
+
+	var result []Team
+	for _, teamName := range validTeams {
+		norm := normalizeForVRSLookup(teamName)
+		ranking, ok := vrsNorm[norm]
+		if !ok {
+			// Normalised exact match failed — spacing/punctuation difference; try fuzzy
+			if matches := fuzzy.RankFind(norm, vrsNormKeys); len(matches) > 0 {
+				ranking = vrsNorm[matches[0].Target]
+			}
+		}
+		result = append(result, Team{
+			Name:       teamName,
+			VRSRanking: ranking,
+		})
+	}
+
+	return result, nil
+}
+
+// GetTeam returns the VRS information for a given team
+func (a *App) GetTeam(teamName string) (store.VRSEntry, error) {
+	if teamName == "" {
+		return store.VRSEntry{}, fmt.Errorf("cannot lookup empty team name")
+	}
+
+	VRSEntries, err := a.Store.FetchVrsDataFromDB()
+	if err != nil {
+		return store.VRSEntry{}, err
+	}
+
+	norm := normalizeForVRSLookup(teamName)
+	for _, entry := range VRSEntries {
+		if normalizeForVRSLookup(entry.TeamName) == norm {
+			return entry, nil
+		}
+	}
+
+	// Exact normalised match failed — try fuzzy
+	keys := make([]string, len(VRSEntries))
+	for i, e := range VRSEntries {
+		keys[i] = normalizeForVRSLookup(e.TeamName)
+	}
+	if matches := fuzzy.RankFind(norm, keys); len(matches) > 0 {
+		for _, entry := range VRSEntries {
+			if normalizeForVRSLookup(entry.TeamName) == matches[0].Target {
+				return entry, nil
+			}
+		}
+	}
+
+	return store.VRSEntry{}, fmt.Errorf("no VRS data found for %q", teamName)
 }
 
 // GetUpcomingMatches gets the upcoming matches for this round of the tournament. Will only follow the correct path if the scheduled matches data has been initialized.

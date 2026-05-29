@@ -25,16 +25,10 @@ func TestStoreUserPrediction_InsertNew(t *testing.T) {
 
 	mt.Run("successfully inserts new prediction", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Predictions: mt.Coll,
 			},
 		}
@@ -64,16 +58,10 @@ func TestStoreUserPrediction_UpdateExisting(t *testing.T) {
 
 	mt.Run("successfully updates existing prediction", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Predictions: mt.Coll,
 			},
 		}
@@ -109,16 +97,10 @@ func TestStoreUserPrediction_FindOneError(t *testing.T) {
 
 	mt.Run("returns error when FindOne fails", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Predictions: mt.Coll,
 			},
 		}
@@ -145,16 +127,10 @@ func TestStoreUserPrediction_InsertError(t *testing.T) {
 
 	mt.Run("returns error when insert fails", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Predictions: mt.Coll,
 			},
 		}
@@ -184,16 +160,10 @@ func TestStoreUserPrediction_UpdateError(t *testing.T) {
 
 	mt.Run("returns error when update fails", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Predictions: mt.Coll,
 			},
 		}
@@ -227,16 +197,10 @@ func TestGetUserPrediction_Success(t *testing.T) {
 
 	mt.Run("successfully gets user prediction", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Predictions: mt.Coll,
 			},
 		}
@@ -267,16 +231,10 @@ func TestGetUserPrediction_NotFound(t *testing.T) {
 
 	mt.Run("returns error when prediction not found", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Predictions: mt.Coll,
 			},
 		}
@@ -296,16 +254,10 @@ func TestGetUserPrediction_DatabaseError(t *testing.T) {
 
 	mt.Run("returns error on database failure", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Predictions: mt.Coll,
 			},
 		}
@@ -328,16 +280,10 @@ func TestGetAllUserPredictions_Success(t *testing.T) {
 
 	mt.Run("successfully gets all user predictions", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Predictions: mt.Coll,
 			},
 		}
@@ -369,16 +315,10 @@ func TestGetAllUserPredictions_Empty(t *testing.T) {
 
 	mt.Run("returns empty slice when no predictions", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Predictions: mt.Coll,
 			},
 		}
@@ -397,16 +337,10 @@ func TestGetAllUserPredictions_FindError(t *testing.T) {
 
 	mt.Run("returns error when find fails", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Predictions: mt.Coll,
 			},
 		}
@@ -429,16 +363,10 @@ func TestGetValidTeams_Swiss(t *testing.T) {
 
 	mt.Run("returns valid teams for swiss format", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				MatchResults: mt.Coll,
 			},
 		}
@@ -470,16 +398,10 @@ func TestGetValidTeams_Elimination(t *testing.T) {
 
 	mt.Run("returns valid teams for elimination format", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				MatchResults: mt.Coll,
 			},
 		}
@@ -515,16 +437,10 @@ func TestGetValidTeams_FetchError(t *testing.T) {
 
 	mt.Run("returns error when fetch fails", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				MatchResults: mt.Coll,
 			},
 		}
@@ -548,16 +464,10 @@ func TestStoreUserPrediction_Integration(t *testing.T) {
 
 	mt.Run("insert and retrieve prediction workflow", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Predictions: mt.Coll,
 			},
 		}

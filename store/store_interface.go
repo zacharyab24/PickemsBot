@@ -35,6 +35,7 @@ type Interface interface {
 	FetchMatchNodesFromDb() ([]sources.MatchNode, tournament.Kind, error)
 	StoreLeaderboard(leaderboard Leaderboard) error
 	FetchLeaderboardFromDB() ([]LeaderboardEntry, error)
+	FetchVrsDataFromDB() ([]VRSEntry, error)
 }
 
 // Ping pings the database client to ensure its online
@@ -47,7 +48,7 @@ var _ Interface = (*Store)(nil)
 
 // GetDatabase returns the database instance
 func (s *Store) GetDatabase() interface{ Name() string } {
-	return s.Database
+	return s.TournamentDatabase
 }
 
 // GetRound returns the tournament round name

@@ -13,8 +13,10 @@ import (
 	"pickems-bot/metrics"
 	"pickems-bot/models"
 	"pickems-bot/tournament"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/go-andiamo/splitter"
@@ -26,7 +28,8 @@ func (b *Bot) helpMessageHandler(session DiscordSession, message *discordgo.Mess
 	embed := &discordgo.MessageEmbed{
 		Title: "PickEms Bot v3.3",
 		Description: "Manage your tournament predictions and check standings. All commands use the `$` prefix.\n\n" +
-			"*Data sourced from the [Liquipedia Counter-Strike API](https://liquipedia.net) and [PandaScore](https://pandascore.co)*",
+			"*Match Data sourced from the [Liquipedia Counter-Strike API](https://liquipedia.net) and [PandaScore](https://pandascore.co)*\n" +
+			"*VRS Data sourced from the [counter-strike_regional_standings](https://github.com/ValveSoftware/counter-strike_regional_standings) GitHub repo*",
 		Color: burple,
 		Fields: []*discordgo.MessageEmbedField{
 			{
@@ -50,6 +53,11 @@ func (b *Bot) helpMessageHandler(session DiscordSession, message *discordgo.Mess
 			{
 				Name:   "`$teams`",
 				Value:  "List all teams alive in the current stage. Use these exact names for the `$set` command if fuzzy matching doesn't work.",
+				Inline: false,
+			},
+			{
+				Name:   "`$team <name>`",
+				Value:  "Look up a team's current VRS world ranking and roster.",
 				Inline: false,
 			},
 			{
@@ -206,12 +214,12 @@ func (b *Bot) leaderboardHandler(session DiscordSession, message *discordgo.Mess
 
 	var sb strings.Builder
 	for _, user := range leaderboard {
-		sb.WriteString(fmt.Sprintf("%d. %s - %d Successes, %d Failures\n",
+		fmt.Fprintf(&sb, "%d. %s - %d Successes, %d Failures\n",
 			user.Rank,
 			user.Username,
 			user.Successes,
 			user.Failures,
-		))
+		)
 	}
 
 	embed := &discordgo.MessageEmbed{
@@ -237,34 +245,91 @@ func (b *Bot) teamsHandler(session DiscordSession, message *discordgo.MessageCre
 		return
 	}
 
-	// Split into two columns for a cleaner embed layout
-	mid := (len(teams) + 1) / 2
-	left := teams[:mid]
-	right := teams[mid:]
+	// Sort by VRS ranking ascending; unranked teams (0) go to the end
+	sort.Slice(teams, func(i, j int) bool {
+		ri, rj := teams[i].VRSRanking, teams[j].VRSRanking
+		if ri == 0 {
+			return false
+		}
+		if rj == 0 {
+			return true
+		}
+		return ri < rj
+	})
 
-	var leftCol, rightCol strings.Builder
-	for _, t := range left {
-		leftCol.WriteString(t + "\n")
+	formatEntry := func(name string, ranking int) string {
+		if ranking == 0 {
+			return fmt.Sprintf("\u2014  %s\n", name)
+		}
+		return fmt.Sprintf("`#%d`  %s\n", ranking, name)
 	}
 
-	for _, t := range right {
-		rightCol.WriteString(t + "\n")
+	mid := (len(teams) + 1) / 2
+	var left, right strings.Builder
+	for _, t := range teams[:mid] {
+		left.WriteString(formatEntry(t.Name, t.VRSRanking))
+	}
+	for _, t := range teams[mid:] {
+		right.WriteString(formatEntry(t.Name, t.VRSRanking))
 	}
 
 	embed := &discordgo.MessageEmbed{
 		Title: "Teams in this Stage",
 		Color: green,
 		Fields: []*discordgo.MessageEmbedField{
-			{Name: "\u200b", Value: leftCol.String(), Inline: true},
-			{Name: "\u200b", Value: rightCol.String(), Inline: true},
+			{Name: "\u200b", Value: left.String(), Inline: true},
+			{Name: "\u200b", Value: right.String(), Inline: true},
 		},
 		Footer: &discordgo.MessageEmbedFooter{
-			Text: fmt.Sprintf("%d teams • Fuzzy matching is active, but keep names as close as possible!", len(teams)),
+			Text: fmt.Sprintf("%d teams \u2022 VRS world ranking shown \u2022 Fuzzy matching is active", len(teams)),
 		},
 	}
 
 	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
 		b.logger().Error("failed to send teams embed", "error", fmt.Errorf("teamsHandler: %w", err))
+	}
+}
+
+// teamHandler handles the $team <name> command with a DiscordSession interface
+func (b *Bot) teamHandler(session DiscordSession, message *discordgo.MessageCreate) {
+	spaceSplitter, _ := splitter.NewSplitter(' ', splitter.DoubleQuotes, splitter.LeftRightDoubleDoubleQuotes)
+	msg, _ := spaceSplitter.Split(message.Content)
+	if len(msg) < 2 {
+		sendError(session, message.ChannelID, "Usage: `$team <team name>`")
+		return
+	}
+	teamName := strings.Join(msg[1:], " ")
+
+	entry, err := b.APIPtr.GetTeam(teamName)
+	if err != nil {
+		b.logger().Error("failed to get team", "team", teamName, "error", fmt.Errorf("teamHandler: %w", err))
+		sendError(session, message.ChannelID, fmt.Sprintf("No VRS data found for **%s**.", teamName))
+		return
+	}
+
+	var rosterLines strings.Builder
+	for _, player := range entry.Roster {
+		fmt.Fprintf(&rosterLines, "• %s\n", player)
+	}
+
+	footerText := "VRS Rankings"
+	t, parseErr := time.Parse("2006_01_02", entry.StandingsDate)
+	if parseErr == nil {
+		footerText = "Rankings as of " + t.Format("02 Jan 2006")
+	}
+
+	embed := &discordgo.MessageEmbed{
+		Title:       entry.TeamName,
+		Description: fmt.Sprintf("**#%d** world ranking\n**%d** VRS Points", entry.Standing, entry.Points),
+		Color:       green,
+		Fields: []*discordgo.MessageEmbedField{
+			{Name: "Roster", Value: rosterLines.String(), Inline: false},
+		},
+		Footer: &discordgo.MessageEmbedFooter{Text: footerText},
+	}
+
+	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
+		b.logger().Error("failed to send team embed", "error", fmt.Errorf("teamHandler: %w", err))
 	}
 }
 
@@ -365,6 +430,10 @@ func (b *Bot) newMessageHandler(session DiscordSession, message *discordgo.Messa
 	case startsWith(message.Content, "$teams"):
 		metrics.DiscordCommandsTotal.WithLabelValues("teams").Inc()
 		b.teamsHandler(session, message)
+
+	case startsWith(message.Content, "$team "):
+		metrics.DiscordCommandsTotal.WithLabelValues("team").Inc()
+		b.teamHandler(session, message)
 
 	case startsWith(message.Content, "$upcoming"):
 		metrics.DiscordCommandsTotal.WithLabelValues("upcoming").Inc()
