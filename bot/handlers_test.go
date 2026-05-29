@@ -440,7 +440,7 @@ func TestLeaderboard_APIError(t *testing.T) {
 func TestTeams_APIError(t *testing.T) {
 	// Create a mock store that will return an error
 	mockStore := app.NewMockStore("swiss", "test_round")
-	// Don't set any results, which should cause an error
+	mockStore.GetValidTeamsError = errors.New("database error")
 
 	bot := &Bot{
 		BotToken: "test_token",

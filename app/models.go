@@ -27,3 +27,8 @@ type LeaderboardUser struct {
 	Successes int
 	Failures  int
 }
+
+type Team struct {
+	Name       string
+	VRSRanking int
+}

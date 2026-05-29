@@ -369,14 +369,15 @@ func TestGetTeams_Success(t *testing.T) {
 	}
 }
 
-func TestGetTeams_NoScheduledMatches(t *testing.T) {
+func TestGetTeams_StoreError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.GetValidTeamsError = fmt.Errorf("database error")
 
 	api := &App{Store: mockStore}
 
 	_, err := api.GetTeams()
 	if err == nil {
-		t.Error("Expected error when no scheduled matches, got nil")
+		t.Error("Expected error when store returns an error, got nil")
 	}
 }
 

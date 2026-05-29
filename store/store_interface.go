@@ -35,6 +35,7 @@ type Interface interface {
 	FetchMatchNodesFromDb() ([]sources.MatchNode, tournament.Kind, error)
 	StoreLeaderboard(leaderboard Leaderboard) error
 	FetchLeaderboardFromDB() ([]LeaderboardEntry, error)
+	FetchVrsDataFromDB() ([]VRSEntry, error)
 }
 
 // Ping pings the database client to ensure its online

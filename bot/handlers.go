@@ -13,6 +13,7 @@ import (
 	"pickems-bot/metrics"
 	"pickems-bot/models"
 	"pickems-bot/tournament"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -237,29 +238,37 @@ func (b *Bot) teamsHandler(session DiscordSession, message *discordgo.MessageCre
 		return
 	}
 
-	// Split into two columns for a cleaner embed layout
-	mid := (len(teams) + 1) / 2
-	left := teams[:mid]
-	right := teams[mid:]
+	// Sort by VRS ranking ascending; unranked teams (0) go to the end
+	sort.Slice(teams, func(i, j int) bool {
+		ri, rj := teams[i].VRSRanking, teams[j].VRSRanking
+		if ri == 0 {
+			return false
+		}
+		if rj == 0 {
+			return true
+		}
+		return ri < rj
+	})
 
-	var leftCol, rightCol strings.Builder
-	for _, t := range left {
-		leftCol.WriteString(t + "\n")
-	}
-
-	for _, t := range right {
-		rightCol.WriteString(t + "\n")
+	var names, rankings strings.Builder
+	for _, t := range teams {
+		names.WriteString(t.Name + "\n")
+		if t.VRSRanking == 0 {
+			rankings.WriteString("\u2014\n")
+		} else {
+			rankings.WriteString(fmt.Sprintf("#%d\n", t.VRSRanking))
+		}
 	}
 
 	embed := &discordgo.MessageEmbed{
 		Title: "Teams in this Stage",
 		Color: green,
 		Fields: []*discordgo.MessageEmbedField{
-			{Name: "\u200b", Value: leftCol.String(), Inline: true},
-			{Name: "\u200b", Value: rightCol.String(), Inline: true},
+			{Name: "Team", Value: names.String(), Inline: true},
+			{Name: "VRS Rank", Value: rankings.String(), Inline: true},
 		},
 		Footer: &discordgo.MessageEmbedFooter{
-			Text: fmt.Sprintf("%d teams • Fuzzy matching is active, but keep names as close as possible!", len(teams)),
+			Text: fmt.Sprintf("%d teams \u2022 VRS world ranking shown \u2022 Fuzzy matching is active", len(teams)),
 		},
 	}
 

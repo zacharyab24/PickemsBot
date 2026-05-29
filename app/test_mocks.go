@@ -256,6 +256,9 @@ func (m *MockStore) FetchLeaderboardFromDB() ([]store.LeaderboardEntry, error) {
 // Ping mock implementation returns PingError
 func (m *MockStore) Ping(ctx context.Context) error { return m.PingError }
 
+// FetchVrsDataFromDB mock implementation returns an empty slice
+func (m *MockStore) FetchVrsDataFromDB() ([]store.VRSEntry, error) { return nil, nil }
+
 // NewTestApp creates a minimal App for unit tests in other packages that need
 // an App instance with a rate limiter but without a real MongoDB connection.
 // The injected store is used as-is; callers are responsible for configuring it.
