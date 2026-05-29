@@ -37,9 +37,7 @@ type Leaderboard struct {
 	Entries   []LeaderboardEntry `bson:"entries"`
 }
 
-// FetchLeaderboardFromDB returns the leaderboard from the db
-// Preconditions: Receives receiver pointer for Store which contains DB information such as database name, collection and round
-// Postconditions: Returns slice of LeaderboardEntry with user data, or an error if it occurs
+// FetchLeaderboardFromDB returns the leaderboard entries for the current round.
 func (s *Store) FetchLeaderboardFromDB() ([]LeaderboardEntry, error) {
 	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
 	s.Collections.Leaderboard.Name()
@@ -57,9 +55,7 @@ func (s *Store) FetchLeaderboardFromDB() ([]LeaderboardEntry, error) {
 	return res.Entries, nil
 }
 
-// StoreLeaderboard updates the leaderboard stored in the DB
-// Preconditions: Receives receiver pointer for Store and the Leaderboard value to be stored
-// Postconditions: Updates the leaderboard collection in Mongo and returns nil, or an error if it occurs
+// StoreLeaderboard persists the given leaderboard, inserting a new document or replacing an existing one for the current round.
 func (s *Store) StoreLeaderboard(leaderboard Leaderboard) error {
 	metrics.MongoOpsTotal.WithLabelValues("write").Inc()
 	if reflect.DeepEqual(leaderboard, Leaderboard{}) {

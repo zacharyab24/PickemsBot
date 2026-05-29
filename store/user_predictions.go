@@ -19,9 +19,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// StoreUserPrediction stores user predictions in the db
-// Preconditions: Receives strings containing db name, collection name and userID, and models.Prediction containing the users predictions
-// Postconditions: Stores or updates the user's prediction stored in the db, or returns an error if the operations was unsuccessful
+// StoreUserPrediction inserts a new prediction for the given user, or replaces an existing one for the current round.
 func (s *Store) StoreUserPrediction(userID string, userPrediction models.Prediction) error {
 	metrics.MongoOpsTotal.WithLabelValues("write").Inc()
 	// Attempt to find an existing document
@@ -58,9 +56,7 @@ func (s *Store) StoreUserPrediction(userID string, userPrediction models.Predict
 	return nil
 }
 
-// GetUserPrediction does DB lookup and gets prediction for a user
-// Preconditions: Receives strings containing db name, collection name and userID
-// Postconditions: Returns a user's prediction if it exists, or an error if it occurs
+// GetUserPrediction retrieves the stored prediction for the given user ID in the current round.
 func (s *Store) GetUserPrediction(userID string) (models.Prediction, error) {
 	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
 	opts := options.FindOne()
@@ -77,9 +73,7 @@ func (s *Store) GetUserPrediction(userID string) (models.Prediction, error) {
 	return result, nil
 }
 
-// GetAllUserPredictions does DB lookup and gets predictions for all users with predictions stored for a round. Used in leaderboard calculations.
-// It receives strings containing database name, collection name and round.
-// It returns slice of Predictions or an error if it occurs.
+// GetAllUserPredictions returns all stored predictions for the current round.
 func (s *Store) GetAllUserPredictions() ([]models.Prediction, error) {
 	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
 	// Filter query to match documents where the round is the round sting input to the function
@@ -103,11 +97,7 @@ func (s *Store) GetAllUserPredictions() ([]models.Prediction, error) {
 	return results, nil
 }
 
-// GetValidTeams is a helper function to get valid team names used in setting user predictions. We are going to grab the valid team names
-// from the results table as this already contains a list of names, and lets us filter by round without needing to
-// create and maintain a new collection that will require more api calls.
-// It receives db name, collection name and round strings.
-// It returns string slice containing valid team names for the round, or returns error if an issue occurs.
+// GetValidTeams returns the valid team names and tournament format for the current round, derived from the stored match results.
 func (s *Store) GetValidTeams() ([]string, tournament.Kind, error) {
 	// Get results stored in our db
 	dbResults, err := s.FetchMatchResultsFromDb()

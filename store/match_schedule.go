@@ -24,9 +24,7 @@ type UpcomingMatchDoc struct {
 	ScheduledMatches []sources.ScheduledMatch `bson:"scheduled_matches,omitempty"`
 }
 
-// FetchMatchSchedule fetches scheduled matches for a round from db
-// Preconditions: Receives receiver pointer for Store which contains DB information such as database name, collection and round
-// Postconditions: Returns slice of upcoming matches or error message if the operation was unsuccessful
+// FetchMatchSchedule returns the scheduled matches for the current round from the database.
 func (s *Store) FetchMatchSchedule() ([]sources.ScheduledMatch, error) {
 	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
 	opts := options.FindOne()
@@ -40,10 +38,7 @@ func (s *Store) FetchMatchSchedule() ([]sources.ScheduledMatch, error) {
 	return res.ScheduledMatches, nil
 }
 
-// StoreMatchSchedule stores upcoming matches
-// Preconditions: Receives pointer for Store which contains DB information such as database name, collection and round
-// and slice of []sources.ScheduledMatch containing the data to be stored
-// Postconditions: Updates the data stored in the db, returns error message if the operation was unsuccessful
+// StoreMatchSchedule persists a slice of scheduled matches for the current round, inserting a new document or replacing an existing one.
 func (s *Store) StoreMatchSchedule(scheduledMatches []sources.ScheduledMatch) error {
 	metrics.MongoOpsTotal.WithLabelValues("write").Inc()
 	if len(scheduledMatches) == 0 {
@@ -85,10 +80,8 @@ func (s *Store) StoreMatchSchedule(scheduledMatches []sources.ScheduledMatch) er
 	return nil
 }
 
-// EnsureScheduledMatches checks if scheduled matches are populated in the db. Functions like getting and setting predictions are reliant on this data
-// being present, so this function gives a way to check if that data actually exists before the program tries to use it.
-// It receives receiver pointer for Score which contains information about the DB.
-// It returns nil, or an error if the collection doesn't exist, the results are empty, or another error occurs.
+// EnsureScheduledMatches verifies that at least one scheduled match exists in the database for the current round.
+// Prediction operations depend on this data being present, so callers should use this as a precondition check.
 func (s *Store) EnsureScheduledMatches() error {
 	var result struct {
 		ScheduledMatches []sources.ScheduledMatch `bson:"scheduled_matches"`
@@ -108,7 +101,7 @@ func (s *Store) EnsureScheduledMatches() error {
 	return nil
 }
 
-// FetchAndStoreSchedule fetches the upcoming matches and stored them in the db
+// FetchAndStoreSchedule fetches upcoming matches from the configured data source and persists them to the database.
 func (s *Store) FetchAndStoreSchedule() error {
 	matches, err := s.Fetcher.FetchSchedule()
 	if err != nil {
