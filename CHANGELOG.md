@@ -1,5 +1,34 @@
 # Changelog
 
+## 3.5
+VRS (Valve Regional Standings) integration:
+- Added VRS database support — bot now connects to a separate `VRS_RANKINGS` MongoDB database (populated externally by the [VRS-Tracker](https://github.com/zacharyab24/VRS-Tracker) project) and exposes world ranking data alongside tournament data.
+- `store.VRSEntry` type and `FetchVrsDataFromDB` method added to the store layer. VRS lives in its own database on the same Mongo server, independent of tournament data.
+- `$teams` command reworked — now returns a two-column embed (`Team` / `VRS Rank`) sorted by world ranking, with unranked teams shown at the bottom. Team names are matched to VRS entries using a three-pass strategy: case-insensitive exact match → decorator normalisation (strips `Team`/`Esports`/`Gaming` prefixes/suffixes) → fuzzy fallback. Original team names are never modified.
+- `$team <name>` command added — looks up a single team's VRS entry and returns a rich embed showing world ranking, points, and current roster. Fuzzy matching applies, so approximate names work. Accessible via `$help`.
+- `app.GetTeams` now returns `[]Team` (name + VRS ranking) instead of `[]string`; callers that only need names are unaffected since the name field is preserved exactly as sourced from match data.
+- `app.normalizeForVRSLookup` — internal helper that strips common team name decorators for matching purposes only; stored names on both sides are never changed.
+- `store.Interface` updated to include `FetchVrsDataFromDB`; `MockStore` updated accordingly with injectable error and data fields.
+
+Code quality:
+- All store package functions converted from Preconditions/Postconditions comment style to standard Go godoc format.
+- `Collections` extracted from inline anonymous struct to named `Collections` type in `store.go`; all test files updated.
+- `store/models.go` removed — types co-located with the files that own them (`Leaderboard`/`LeaderboardEntry` in `leaderboard.go`, `UpcomingMatchDoc` in `match_schedule.go`) following idiomatic Go conventions.
+- `FetchVrsDataFromDB` cursor error now correctly returned instead of silently discarded.
+
+## 3.4
+Observability — `/health` and `/metrics` endpoints:
+- New `metrics/` package with Prometheus counters and histograms: `discord_commands_total` (labelled by command), `poller_ticks_total`, `poller_errors_total`, `match_updates_total`, `leaderboard_generation_duration_seconds`, `image_render_duration_seconds`, `mongodb_operations_total` (labelled by operation type).
+- `web.TelemetryServer` added — serves both endpoints on `:9090`, started alongside the bot for both `liquipedia` and `pandascore` data sources.
+- `GET /health` — checks MongoDB connectivity (2 s timeout via `store.Interface.Ping`) and Discord gateway session state (`Bot.IsConnected` backed by `discordgo.Session.DataReady`); returns `200 OK` with a JSON body on success, `503 Service Unavailable` on failure.
+- `GET /metrics` — standard Prometheus scrape endpoint; Prometheus can be reloaded via `systemctl restart prometheus`.
+- `store.Interface.Ping(ctx)` method added to support health checks without exposing the raw MongoDB client.
+- `Bot.IsConnected()` added — reports whether the Discord gateway session is open.
+- Counters wired into `bot/handlers.go`, `web/poller.go`, `app/app.go`, `web/liquipedia.go`, and all store operation methods.
+- `Dockerfile`: added `HEALTHCHECK` pointing at `:9090/health` (30 s interval, 5 s timeout, 3 retries).
+- `docker-compose.yml`: port 9090 exposed; full service definitions added.
+- `promtail-config.yml` added to version control for Promtail → Loki log ingestion.
+
 ## 3.3
 PandaScore integration — second data source alongside Liquipedia:
 - Added PandaScore as a supported `data_source` in `config.toml`. Set `data_source = "pandascore"` and `series_id = <id>` to use it; `data_source = "liquipedia"` retains the existing webhook-driven behaviour.

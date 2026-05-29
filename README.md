@@ -7,7 +7,8 @@ This is a discord bot used to track Pick'Ems for the CS2 Copenhagen major. The s
 The following are discord messages that the bot will respond to. These can be in a server the bot is added to or dm'd to the bot. Note that there is no server-specific rankings. It is all global
 - `$set [team1] [team2] ... [team10]`: Sets your Pick'Ems. 1 & 2 are the 3-0 teams, 3-8 are the 3-1 / 3-2 teams, and 9-10 are the 0-3 teams. Please note that the teams names need to be specified exactly how they appear on liquipedia (not case sensitive) as I'm not doing any proper checking. Names that contains two or more words need to be encased in \" \". E.g. `"The MongolZ"`. Note, the bot now supports fuzzy matching, so `Mongolz` \(or probably even just `mongols`) would work too.
 - `$check`: shows the current status of your Pick'Ems
-- `$teams`: shows the teams currently in the current stage of the tournament. Use this list to set your Pick'Ems \
+- `$teams`: shows the teams currently in the current stage of the tournament, sorted by VRS world ranking. Use this list to set your Pick'Ems.
+- `$team <name>`: looks up a team's current VRS world ranking, points total, and roster. Fuzzy matching applies, so approximate names work.
 - `$leaderboard`: shows which users have the best Pick'Ems in the current stage. This is sorted by number of successful picks. There is no tie breaker in the event two users have the same number of successes
 - `$upcoming`: shows todays live and upcoming matches
 - `$results`: shows the match results for the current round of the tournament including: team names, bracket position, match score. This is handled by a seperate module, which can be found [here](https://github.com/zacharyab24/pickems-renderer)
