@@ -335,6 +335,40 @@ func (a *App) GetTeams() ([]Team, error) {
 	return result, nil
 }
 
+// GetTeam returns the VRS information for a given team
+func (a *App) GetTeam(teamName string) (store.VRSEntry, error) {
+	if teamName == "" {
+		return store.VRSEntry{}, fmt.Errorf("cannot lookup empty team name")
+	}
+
+	VRSEntries, err := a.Store.FetchVrsDataFromDB()
+	if err != nil {
+		return store.VRSEntry{}, err
+	}
+
+	norm := normalizeForVRSLookup(teamName)
+	for _, entry := range VRSEntries {
+		if normalizeForVRSLookup(entry.TeamName) == norm {
+			return entry, nil
+		}
+	}
+
+	// Exact normalised match failed — try fuzzy
+	keys := make([]string, len(VRSEntries))
+	for i, e := range VRSEntries {
+		keys[i] = normalizeForVRSLookup(e.TeamName)
+	}
+	if matches := fuzzy.RankFind(norm, keys); len(matches) > 0 {
+		for _, entry := range VRSEntries {
+			if normalizeForVRSLookup(entry.TeamName) == matches[0].Target {
+				return entry, nil
+			}
+		}
+	}
+
+	return store.VRSEntry{}, fmt.Errorf("no VRS data found for %q", teamName)
+}
+
 // GetUpcomingMatches gets the upcoming matches for this round of the tournament. Will only follow the correct path if the scheduled matches data has been initialized.
 func (a *App) GetUpcomingMatches() ([]sources.ScheduledMatch, error) {
 	err := a.Store.EnsureScheduledMatches()
