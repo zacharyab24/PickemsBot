@@ -257,22 +257,28 @@ func (b *Bot) teamsHandler(session DiscordSession, message *discordgo.MessageCre
 		return ri < rj
 	})
 
-	var names, rankings strings.Builder
-	for _, t := range teams {
-		fmt.Fprintf(&names, "%s\n", t.Name)
-		if t.VRSRanking == 0 {
-			rankings.WriteString("\u2014\n")
-		} else {
-			fmt.Fprintf(&rankings, "#%d\n", t.VRSRanking)
+	formatEntry := func(name string, ranking int) string {
+		if ranking == 0 {
+			return fmt.Sprintf("\u2014  %s\n", name)
 		}
+		return fmt.Sprintf("`#%d`  %s\n", ranking, name)
+	}
+
+	mid := (len(teams) + 1) / 2
+	var left, right strings.Builder
+	for _, t := range teams[:mid] {
+		left.WriteString(formatEntry(t.Name, t.VRSRanking))
+	}
+	for _, t := range teams[mid:] {
+		right.WriteString(formatEntry(t.Name, t.VRSRanking))
 	}
 
 	embed := &discordgo.MessageEmbed{
 		Title: "Teams in this Stage",
 		Color: green,
 		Fields: []*discordgo.MessageEmbedField{
-			{Name: "Team", Value: names.String(), Inline: true},
-			{Name: "VRS Rank", Value: rankings.String(), Inline: true},
+			{Name: "\u200b", Value: left.String(), Inline: true},
+			{Name: "\u200b", Value: right.String(), Inline: true},
 		},
 		Footer: &discordgo.MessageEmbedFooter{
 			Text: fmt.Sprintf("%d teams \u2022 VRS world ranking shown \u2022 Fuzzy matching is active", len(teams)),

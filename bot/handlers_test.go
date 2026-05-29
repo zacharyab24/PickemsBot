@@ -142,7 +142,7 @@ func TestTeams_Success(t *testing.T) {
 	assert.Contains(t, msg.Content, "Team")
 }
 
-func TestTeams_ShowsVRSRankColumn(t *testing.T) {
+func TestTeams_ShowsVRSRankInFooter(t *testing.T) {
 	bot := createTestBot("swiss")
 	mockSession := NewMockDiscordSession()
 	message := createMockMessage("$teams", "user123", "TestUser", "channel123")
@@ -150,8 +150,9 @@ func TestTeams_ShowsVRSRankColumn(t *testing.T) {
 	bot.teamsHandler(mockSession, message)
 
 	require.Len(t, mockSession.SentMessages, 1)
-	msg := mockSession.GetLastMessage()
-	assert.Contains(t, msg.Content, "VRS Rank")
+	embed := mockSession.GetLastEmbed()
+	require.NotNil(t, embed)
+	assert.Contains(t, embed.Embed.Footer.Text, "VRS world ranking shown")
 }
 
 // endregion
