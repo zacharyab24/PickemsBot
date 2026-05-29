@@ -10,13 +10,32 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"time"
 
 	"pickems-bot/metrics"
+	"pickems-bot/models"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
+
+// LeaderboardEntry represents a single entry in the leaderboard for a user
+type LeaderboardEntry struct {
+	UserID             string `bson:"userid,omitempty"`
+	Username           string `bson:"username,omitempty"`
+	Score              int    `bson:"score,omitempty"`
+	models.ScoreResult `bson:",inline"`
+}
+
+// Leaderboard represents the tournament leaderboard stored in MongoDB
+type Leaderboard struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty"`
+	Round     string             `bson:"round,omitempty"`
+	UpdatedAt time.Time          `bson:"updated_at"`
+	Entries   []LeaderboardEntry `bson:"entries"`
+}
 
 // FetchLeaderboardFromDB returns the leaderboard from the db
 // Preconditions: Receives receiver pointer for Store which contains DB information such as database name, collection and round

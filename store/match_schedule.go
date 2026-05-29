@@ -18,6 +18,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// UpcomingMatchDoc represents upcoming match data stored in the database
+type UpcomingMatchDoc struct {
+	Round            string                   `bson:"round,omitempty"`
+	ScheduledMatches []sources.ScheduledMatch `bson:"scheduled_matches,omitempty"`
+}
+
 // FetchMatchSchedule fetches scheduled matches for a round from db
 // Preconditions: Receives receiver pointer for Store which contains DB information such as database name, collection and round
 // Postconditions: Returns slice of upcoming matches or error message if the operation was unsuccessful

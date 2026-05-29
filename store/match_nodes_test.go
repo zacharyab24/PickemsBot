@@ -28,13 +28,7 @@ func TestStoreMatchNodes_Insert(t *testing.T) {
 	mt.Run("successfully inserts new match nodes", func(mt *mtest.T) {
 		store := &Store{
 			Round: "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Collections: Collections{
 				MatchNodes: mt.Coll,
 			},
 		}
@@ -56,13 +50,7 @@ func TestStoreMatchNodes_Update(t *testing.T) {
 	mt.Run("successfully updates existing match nodes", func(mt *mtest.T) {
 		store := &Store{
 			Round: "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Collections: Collections{
 				MatchNodes: mt.Coll,
 			},
 		}
@@ -88,13 +76,7 @@ func TestStoreMatchNodes_FindOneError(t *testing.T) {
 	mt.Run("returns error when lookup fails", func(mt *mtest.T) {
 		store := &Store{
 			Round: "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Collections: Collections{
 				MatchNodes: mt.Coll,
 			},
 		}
@@ -120,13 +102,7 @@ func TestFetchMatchNodesFromDb_Success(t *testing.T) {
 	mt.Run("successfully fetches match nodes", func(mt *mtest.T) {
 		store := &Store{
 			Round: "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Collections: Collections{
 				MatchNodes: mt.Coll,
 			},
 		}
@@ -165,13 +141,7 @@ func TestFetchMatchNodesFromDb_NotFound(t *testing.T) {
 	mt.Run("returns ErrNoDocuments when round not found", func(mt *mtest.T) {
 		store := &Store{
 			Round: "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Collections: Collections{
 				MatchNodes: mt.Coll,
 			},
 		}

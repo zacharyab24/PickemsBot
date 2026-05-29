@@ -25,16 +25,10 @@ func TestFetchLeaderboardFromDB_Success(t *testing.T) {
 
 	mt.Run("successfully fetches leaderboard", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Leaderboard: mt.Coll,
 			},
 		}
@@ -81,16 +75,10 @@ func TestFetchLeaderboardFromDB_NotFound(t *testing.T) {
 
 	mt.Run("returns error when no leaderboard found", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Leaderboard: mt.Coll,
 			},
 		}
@@ -110,16 +98,10 @@ func TestFetchLeaderboardFromDB_DatabaseError(t *testing.T) {
 
 	mt.Run("returns error on database failure", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Leaderboard: mt.Coll,
 			},
 		}
@@ -142,16 +124,10 @@ func TestFetchLeaderboardFromDB_EmptyEntries(t *testing.T) {
 
 	mt.Run("returns empty slice when leaderboard has no entries", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Leaderboard: mt.Coll,
 			},
 		}
@@ -179,16 +155,10 @@ func TestStoreLeaderboard_InsertNew(t *testing.T) {
 
 	mt.Run("successfully inserts new leaderboard", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Leaderboard: mt.Coll,
 			},
 		}
@@ -225,16 +195,10 @@ func TestStoreLeaderboard_UpdateExisting(t *testing.T) {
 
 	mt.Run("successfully updates existing leaderboard", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Leaderboard: mt.Coll,
 			},
 		}
@@ -273,16 +237,10 @@ func TestStoreLeaderboard_EmptyLeaderboard(t *testing.T) {
 
 	mt.Run("returns error when leaderboard is empty", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Leaderboard: mt.Coll,
 			},
 		}
@@ -298,16 +256,10 @@ func TestStoreLeaderboard_FindOneError(t *testing.T) {
 
 	mt.Run("returns error when FindOne fails", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Leaderboard: mt.Coll,
 			},
 		}
@@ -337,16 +289,10 @@ func TestStoreLeaderboard_InsertError(t *testing.T) {
 
 	mt.Run("returns error when insert fails", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Leaderboard: mt.Coll,
 			},
 		}
@@ -379,16 +325,10 @@ func TestStoreLeaderboard_UpdateError(t *testing.T) {
 
 	mt.Run("returns error when update fails", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Leaderboard: mt.Coll,
 			},
 		}
@@ -424,16 +364,10 @@ func TestStoreLeaderboard_MultipleEntries(t *testing.T) {
 
 	mt.Run("successfully stores leaderboard with multiple entries", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				Leaderboard: mt.Coll,
 			},
 		}

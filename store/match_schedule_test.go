@@ -39,9 +39,9 @@ func NewTestStore(t *testing.T, round string) *Store {
 	_ = coll.Drop(context.TODO()) // clear before test
 
 	s := &Store{
-		Client:   client,
-		Database: db,
-		Round:    round,
+		Client:             client,
+		TournamentDatabase: db,
+		Round:              round,
 	}
 
 	s.Collections.MatchSchedule = coll
@@ -96,16 +96,10 @@ func TestFetchMatchSchedule_Success(t *testing.T) {
 
 	mt.Run("successfully fetches match schedule", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				MatchSchedule: mt.Coll,
 			},
 		}
@@ -150,16 +144,10 @@ func TestFetchMatchSchedule_DatabaseError(t *testing.T) {
 
 	mt.Run("returns error on database failure", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				MatchSchedule: mt.Coll,
 			},
 		}
@@ -182,16 +170,10 @@ func TestFetchMatchSchedule_NotFound(t *testing.T) {
 
 	mt.Run("returns error when no schedule found", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				MatchSchedule: mt.Coll,
 			},
 		}
@@ -215,16 +197,10 @@ func TestStoreMatchSchedule_InsertNew(t *testing.T) {
 
 	mt.Run("successfully inserts new match schedule", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				MatchSchedule: mt.Coll,
 			},
 		}
@@ -246,16 +222,10 @@ func TestStoreMatchSchedule_UpdateExisting(t *testing.T) {
 
 	mt.Run("successfully updates existing match schedule", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				MatchSchedule: mt.Coll,
 			},
 		}
@@ -284,16 +254,10 @@ func TestStoreMatchSchedule_EmptySlice(t *testing.T) {
 
 	mt.Run("returns error when empty slice provided", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				MatchSchedule: mt.Coll,
 			},
 		}
@@ -309,16 +273,10 @@ func TestStoreMatchSchedule_FindOneError(t *testing.T) {
 
 	mt.Run("returns error when FindOne fails", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				MatchSchedule: mt.Coll,
 			},
 		}
@@ -342,16 +300,10 @@ func TestStoreMatchSchedule_InsertError(t *testing.T) {
 
 	mt.Run("returns error when insert fails", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				MatchSchedule: mt.Coll,
 			},
 		}
@@ -378,16 +330,10 @@ func TestStoreMatchSchedule_UpdateError(t *testing.T) {
 
 	mt.Run("returns error when update fails", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				MatchSchedule: mt.Coll,
 			},
 		}
@@ -421,16 +367,10 @@ func TestEnsureScheduledMatches_Success(t *testing.T) {
 
 	mt.Run("returns nil when scheduled matches exist", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				MatchSchedule: mt.Coll,
 			},
 		}
@@ -457,16 +397,10 @@ func TestEnsureScheduledMatches_NotFound(t *testing.T) {
 
 	mt.Run("returns error when no document found", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				MatchSchedule: mt.Coll,
 			},
 		}
@@ -485,16 +419,10 @@ func TestEnsureScheduledMatches_EmptyMatches(t *testing.T) {
 
 	mt.Run("returns error when scheduled matches are empty", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				MatchSchedule: mt.Coll,
 			},
 		}
@@ -517,16 +445,10 @@ func TestEnsureScheduledMatches_DatabaseError(t *testing.T) {
 
 	mt.Run("returns error on database failure", func(mt *mtest.T) {
 		store := &Store{
-			Client:   mt.Client,
-			Database: mt.DB,
-			Round:    "test_round",
-			Collections: struct {
-				Predictions   *mongo.Collection
-				MatchResults  *mongo.Collection
-				MatchNodes    *mongo.Collection
-				MatchSchedule *mongo.Collection
-				Leaderboard   *mongo.Collection
-			}{
+			Client:             mt.Client,
+			TournamentDatabase: mt.DB,
+			Round:              "test_round",
+			Collections: Collections{
 				MatchSchedule: mt.Coll,
 			},
 		}

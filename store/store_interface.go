@@ -47,7 +47,7 @@ var _ Interface = (*Store)(nil)
 
 // GetDatabase returns the database instance
 func (s *Store) GetDatabase() interface{ Name() string } {
-	return s.Database
+	return s.TournamentDatabase
 }
 
 // GetRound returns the tournament round name
