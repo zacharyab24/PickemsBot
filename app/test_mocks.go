@@ -27,6 +27,9 @@ type MockStore struct {
 	ValidTeams       []string
 	Format           tournament.Kind
 
+	// VRS data
+	VRSEntries []store.VRSEntry
+
 	// Error injection for testing error paths
 	EnsureScheduledMatchesError     error
 	GetValidTeamsError              error
@@ -39,6 +42,8 @@ type MockStore struct {
 	FetchAndUpdateMatchResultsError error
 	StoreLeaderboardError           error
 	FetchLeaderboardFromDBError     error
+	FetchVrsDataFromDBError         error
+	FetchAndStoreScheduleError      error
 	PingError                       error
 
 	// Leaderboard storage
@@ -208,7 +213,7 @@ func (m *MockStore) GetRound() string {
 
 // FetchAndStoreSchedule mock implementation
 func (m *MockStore) FetchAndStoreSchedule() error {
-	return nil
+	return m.FetchAndStoreScheduleError
 }
 
 // mockClient implements minimal client interface
@@ -256,8 +261,18 @@ func (m *MockStore) FetchLeaderboardFromDB() ([]store.LeaderboardEntry, error) {
 // Ping mock implementation returns PingError
 func (m *MockStore) Ping(ctx context.Context) error { return m.PingError }
 
-// FetchVrsDataFromDB mock implementation returns an empty slice
-func (m *MockStore) FetchVrsDataFromDB() ([]store.VRSEntry, error) { return nil, nil }
+// FetchVrsDataFromDB mock implementation
+func (m *MockStore) FetchVrsDataFromDB() ([]store.VRSEntry, error) {
+	if m.FetchVrsDataFromDBError != nil {
+		return nil, m.FetchVrsDataFromDBError
+	}
+	return m.VRSEntries, nil
+}
+
+// SetVRSEntries sets the mock VRS entries
+func (m *MockStore) SetVRSEntries(entries []store.VRSEntry) {
+	m.VRSEntries = entries
+}
 
 // NewTestApp creates a minimal App for unit tests in other packages that need
 // an App instance with a rate limiter but without a real MongoDB connection.

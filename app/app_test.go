@@ -383,6 +383,184 @@ func TestGetTeams_StoreError(t *testing.T) {
 
 // endregion
 
+// region normalizeForVRSLookup tests
+
+func TestNormalizeForVRSLookup(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"Team Liquid", "liquid"},
+		{"BetBoom Team", "betboom"},
+		{"Sharks Esports", "sharks"},
+		{"Lynn Vision Gaming", "lynn vision"},
+		{"HEROIC", "heroic"},
+		{"The MongolZ", "the mongolz"},
+		{"FaZe", "faze"},
+		{"", ""},
+		{"team liquid", "liquid"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			got := normalizeForVRSLookup(tc.input)
+			if got != tc.want {
+				t.Errorf("normalizeForVRSLookup(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+// endregion
+
+// region GetTeam tests
+
+func TestGetTeam_Success(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetVRSEntries([]store.VRSEntry{
+		{TeamName: "FaZe", Standing: 5, Points: 1750, Roster: []string{"karrigan", "broky", "rain"}},
+	})
+	api := &App{Store: mockStore}
+
+	entry, err := api.GetTeam("FaZe")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if entry.Standing != 5 {
+		t.Errorf("expected standing 5, got %d", entry.Standing)
+	}
+}
+
+func TestGetTeam_NormalisationMatch(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetVRSEntries([]store.VRSEntry{
+		{TeamName: "Liquid", Standing: 47, Points: 1164},
+	})
+	api := &App{Store: mockStore}
+
+	entry, err := api.GetTeam("Team Liquid")
+	if err != nil {
+		t.Fatalf("expected no error for normalised match, got: %v", err)
+	}
+	if entry.Standing != 47 {
+		t.Errorf("expected standing 47, got %d", entry.Standing)
+	}
+}
+
+func TestGetTeam_EmptyName(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	api := &App{Store: mockStore}
+
+	_, err := api.GetTeam("")
+	if err == nil {
+		t.Error("expected error for empty team name, got nil")
+	}
+}
+
+func TestGetTeam_NotFound(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetVRSEntries([]store.VRSEntry{
+		{TeamName: "FaZe", Standing: 5},
+	})
+	api := &App{Store: mockStore}
+
+	_, err := api.GetTeam("Unknown Team")
+	if err == nil {
+		t.Error("expected error for unknown team, got nil")
+	}
+}
+
+func TestGetTeam_FuzzyMatch(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetVRSEntries([]store.VRSEntry{
+		{TeamName: "THUNDER dOWNUNDER", Standing: 22},
+	})
+	api := &App{Store: mockStore}
+
+	// "THUNDERdOWNUNDER" vs "THUNDER dOWNUNDER" — spacing difference, should fuzzy match
+	entry, err := api.GetTeam("THUNDERdOWNUNDER")
+	if err != nil {
+		t.Fatalf("expected fuzzy match to succeed, got: %v", err)
+	}
+	if entry.Standing != 22 {
+		t.Errorf("expected standing 22, got %d", entry.Standing)
+	}
+}
+
+func TestGetTeam_FetchError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.FetchVrsDataFromDBError = fmt.Errorf("db connection failed")
+	api := &App{Store: mockStore}
+
+	_, err := api.GetTeam("FaZe")
+	if err == nil {
+		t.Error("expected error when VRS fetch fails, got nil")
+	}
+}
+
+// endregion
+
+// region GetTeams VRS tests
+
+func TestGetTeams_WithVRSData(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.ValidTeams = []string{"Team Liquid", "FaZe"}
+	mockStore.SetVRSEntries([]store.VRSEntry{
+		{TeamName: "Liquid", Standing: 47},
+		{TeamName: "FaZe", Standing: 5},
+	})
+	api := &App{Store: mockStore}
+
+	teams, err := api.GetTeams()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	rankings := make(map[string]int)
+	for _, tm := range teams {
+		rankings[tm.Name] = tm.VRSRanking
+	}
+	if rankings["Team Liquid"] != 47 {
+		t.Errorf("expected Team Liquid ranking 47, got %d", rankings["Team Liquid"])
+	}
+	if rankings["FaZe"] != 5 {
+		t.Errorf("expected FaZe ranking 5, got %d", rankings["FaZe"])
+	}
+}
+
+func TestGetTeams_UnmatchedTeamGetsZero(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.ValidTeams = []string{"CompletelyUnknownOrg"}
+	mockStore.SetVRSEntries([]store.VRSEntry{
+		{TeamName: "FaZe", Standing: 5},
+	})
+	api := &App{Store: mockStore}
+
+	teams, err := api.GetTeams()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if len(teams) == 0 {
+		t.Fatal("expected at least one team")
+	}
+	if teams[0].VRSRanking != 0 {
+		t.Errorf("expected unmatched team to have ranking 0, got %d", teams[0].VRSRanking)
+	}
+}
+
+func TestGetTeams_VRSFetchError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetSwissResults(map[string]string{"Team A": "1-0"})
+	mockStore.FetchVrsDataFromDBError = fmt.Errorf("db error")
+	api := &App{Store: mockStore}
+
+	_, err := api.GetTeams()
+	if err == nil {
+		t.Error("expected error when VRS fetch fails, got nil")
+	}
+}
+
+// endregion
+
 // region GetUpcomingMatches tests
 
 func TestGetUpcomingMatches_Success(t *testing.T) {
@@ -527,9 +705,64 @@ func TestGetTournamentInfo_SingleElimination(t *testing.T) {
 	}
 }
 
+func TestGetTournamentInfo_GetValidTeamsError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	mockStore.GetValidTeamsError = fmt.Errorf("db error")
+
+	api := &App{Store: mockStore}
+
+	_, err := api.GetTournamentInfo()
+	if err == nil {
+		t.Error("expected error when GetValidTeams fails, got nil")
+	}
+}
+
+func TestGetTournamentInfo_UnknownFormat(t *testing.T) {
+	mockStore := NewMockStore("unknown-format", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+
+	api := &App{Store: mockStore}
+
+	_, err := api.GetTournamentInfo()
+	if err == nil {
+		t.Error("expected error for unknown tournament format, got nil")
+	}
+}
+
 // endregion
 
 // region PopulateMatches tests
+
+func TestPopulateMatches_ScheduleError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.FetchAndStoreScheduleError = fmt.Errorf("schedule fetch failed")
+
+	api := &App{
+		Store:       mockStore,
+		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10),
+	}
+
+	err := api.PopulateMatches(true)
+	if err == nil {
+		t.Error("expected error when schedule fetch fails, got nil")
+	}
+}
+
+func TestPopulateMatches_ResultsError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.FetchAndUpdateMatchResultsError = fmt.Errorf("results fetch failed")
+
+	api := &App{
+		Store:       mockStore,
+		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10),
+	}
+
+	err := api.PopulateMatches(false)
+	if err == nil {
+		t.Error("expected error when results fetch fails, got nil")
+	}
+}
 
 // endregion
 

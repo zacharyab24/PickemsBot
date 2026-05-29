@@ -8,6 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
+// VRSEntry represents a single team's entry in the VRS world rankings database.
 type VRSEntry struct {
 	Standing      int       `bson:"standing"`
 	Points        int       `bson:"points"`
@@ -17,10 +18,9 @@ type VRSEntry struct {
 	SyncedAt      time.Time `bson:"synced_at"`
 }
 
-// fetchVrsDataFromDB gets all results form the VRS database and returns them as a slice
-// Note this function is not efficient, it grabs everything from the db
-// However, there **should** only be ~300 documents, each with 11 fields, so it isn't a concern for now
-// Adding some safety around this is a future enhancement
+// FetchVrsDataFromDB retrieves all entries from the VRS rankings collection.
+// Note: fetches the entire collection on each call. This is acceptable given the
+// expected volume (~300 documents), but should be revisited if that changes.
 func (s *Store) FetchVrsDataFromDB() ([]VRSEntry, error) {
 	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
 	var results []VRSEntry
