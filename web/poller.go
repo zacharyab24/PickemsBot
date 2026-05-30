@@ -83,7 +83,7 @@ func (p *Poller) tick() bool {
 		return true
 	}
 
-	matchNodes, err := sources.ParsePandaScoreMatches(raw)
+	matchNodes, err := sources.ParsePandaScoreMatches(raw, p.tournamentID)
 	if err != nil {
 		p.logger().Warn("failed to parse PandaScore matches, will retry next tick", "error", fmt.Errorf("poller.tick: %w", err))
 		metrics.PollerErrorsTotal.Inc()

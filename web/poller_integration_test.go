@@ -44,7 +44,7 @@ func newPollerTestApp(t *testing.T, cfg config.Config, mongoURI string) *app.App
 // newTestPoller creates a Poller wired to the integration test server.
 func newTestPoller(t *testing.T, a *app.App, cfg config.Config) *Poller {
 	t.Helper()
-	return NewPoller(a, cfg.PandaScore.SeriesID, "pickems-test-key", cfg.PandaScore.APIURL, nil)
+	return NewPoller(a, cfg.PandaScore.SeriesID, cfg.PandaScore.TournamentID, "pickems-test-key", cfg.PandaScore.APIURL, nil)
 }
 
 // TestPoller_NoOp verifies that when the server state is unchanged between

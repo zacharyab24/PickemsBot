@@ -148,7 +148,7 @@ func TestParsePandaScoreMatches_StatusPopulated(t *testing.T) {
 		 "winner": null, "results": []}
 	]`
 
-	nodes, err := ParsePandaScoreMatches(json)
+	nodes, err := ParsePandaScoreMatches(json, 0)
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 2)
@@ -174,7 +174,7 @@ func TestParsePandaScoreSchedule_TwitchOnly(t *testing.T) {
 		]
 	}]`
 
-	matches, err := ParsePandaScoreSchedule(json)
+	matches, err := ParsePandaScoreSchedule(json, 0)
 
 	require.NoError(t, err)
 	require.Len(t, matches, 1)
@@ -195,7 +195,7 @@ func TestParsePandaScoreSchedule_KickOnly(t *testing.T) {
 		]
 	}]`
 
-	matches, err := ParsePandaScoreSchedule(json)
+	matches, err := ParsePandaScoreSchedule(json, 0)
 
 	require.NoError(t, err)
 	require.Len(t, matches, 1)
@@ -218,7 +218,7 @@ func TestParsePandaScoreSchedule_TwitchPriorityWhenKickFirst(t *testing.T) {
 		]
 	}]`
 
-	matches, err := ParsePandaScoreSchedule(json)
+	matches, err := ParsePandaScoreSchedule(json, 0)
 
 	require.NoError(t, err)
 	require.Len(t, matches, 1)
@@ -241,7 +241,7 @@ func TestParsePandaScoreSchedule_NonOfficialStreamsIgnored(t *testing.T) {
 		]
 	}]`
 
-	matches, err := ParsePandaScoreSchedule(json)
+	matches, err := ParsePandaScoreSchedule(json, 0)
 
 	require.NoError(t, err)
 	require.Len(t, matches, 1)
@@ -261,7 +261,7 @@ func TestParsePandaScoreSchedule_NoStream(t *testing.T) {
 		"streams_list": []
 	}]`
 
-	matches, err := ParsePandaScoreSchedule(json)
+	matches, err := ParsePandaScoreSchedule(json, 0)
 
 	require.NoError(t, err)
 	require.Len(t, matches, 1)
@@ -280,7 +280,7 @@ func TestParsePandaScoreSchedule_FinishedMatch(t *testing.T) {
 		"streams_list": []
 	}]`
 
-	matches, err := ParsePandaScoreSchedule(json)
+	matches, err := ParsePandaScoreSchedule(json, 0)
 
 	require.NoError(t, err)
 	require.Len(t, matches, 1)

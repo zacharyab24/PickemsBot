@@ -241,8 +241,9 @@ func TestWriteConfig_Liquipedia(t *testing.T) {
 	assert.Contains(t, out, `format  = "swiss"`)
 	// PandaScore section always written, but api_url is blank when not the active source
 	assert.Contains(t, out, "[pandascore]")
-	assert.Contains(t, out, `api_url   = ""`)
-	assert.Contains(t, out, "series_id = 0")
+	assert.Contains(t, out, `api_url       = ""`)
+	assert.Contains(t, out, "series_id     = 0")
+	assert.Contains(t, out, "tournament_id = 0")
 }
 
 func TestWriteConfig_PandaScore(t *testing.T) {
@@ -250,10 +251,11 @@ func TestWriteConfig_PandaScore(t *testing.T) {
 	path := filepath.Join(dir, "out.toml")
 
 	cfg := tournamentConfig{
-		DataSource: "pandascore",
-		Name:       "IEM_Cologne_2026",
-		SeriesID:   10488,
-		Round:      "Stage_1",
+		DataSource:   "pandascore",
+		Name:         "IEM_Cologne_2026",
+		SeriesID:     10488,
+		TournamentID: 20708,
+		Round:        "Stage_1",
 	}
 	err := writeConfig(path, cfg)
 	assert.NoError(t, err)
@@ -266,11 +268,10 @@ func TestWriteConfig_PandaScore(t *testing.T) {
 	assert.Contains(t, out, `data_source     = "pandascore"`)
 	assert.Contains(t, out, `tournament_name = "IEM_Cologne_2026"`)
 	assert.Contains(t, out, `round           = "Stage_1"`)
-	// Nested pandascore section
 	assert.Contains(t, out, "[pandascore]")
-	assert.Contains(t, out, `api_url   = "https://api.pandascore.co/csgo/matches"`)
-	assert.Contains(t, out, "series_id = 10488")
-	// Liquipedia section always written, but api_url is blank when not the active source
+	assert.Contains(t, out, `api_url       = "https://api.pandascore.co/csgo/matches"`)
+	assert.Contains(t, out, "series_id     = 10488")
+	assert.Contains(t, out, "tournament_id = 20708")
 	assert.Contains(t, out, "[liquipedia]")
 	assert.Contains(t, out, `api_url = ""`)
 }
