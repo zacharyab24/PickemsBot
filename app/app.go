@@ -53,7 +53,7 @@ func NewApp(cfg config.Config, mongoURI string, log *slog.Logger) (*App, error) 
 		limiter = rate.NewLimiter(rate.Every(time.Minute), 10) // 60/hr per API guidelines
 
 	case "pandascore":
-		fetcher = store.NewPandaScoreFetcher(cfg.PandaScore.APIURL, os.Getenv("PANDASCORE_API_KEY"), cfg.PandaScore.SeriesID)
+		fetcher = store.NewPandaScoreFetcher(cfg.PandaScore.APIURL, os.Getenv("PANDASCORE_API_KEY"), cfg.PandaScore.SeriesID, cfg.PandaScore.TournamentID)
 		limiter = rate.NewLimiter(rate.Every(4*time.Second), 5) // ~900/hr, less than the 1000 limit of our api plan
 
 	default:

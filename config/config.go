@@ -44,8 +44,9 @@ type LiquipediaConfig struct {
 
 // PandaScoreConfig holds PandaScore-specific configuration fields.
 type PandaScoreConfig struct {
-	APIURL   string `toml:"api_url"`
-	SeriesID int    `toml:"series_id"` // PandaScore serie ID (note: API field is serie_id without 's')
+	APIURL       string `toml:"api_url"`
+	SeriesID     int    `toml:"series_id"`     // filters by serie_id; covers all stages in a major
+	TournamentID int    `toml:"tournament_id"` // optional; narrows to a single stage within the series
 }
 
 // Load reads and validates a config.toml file at path.
@@ -68,8 +69,8 @@ func Load(path string) (Config, error) {
 			return Config{}, fmt.Errorf("liquipedia.api_url is a required field for liquipedia as a datasource in %s", path)
 		}
 	case "pandascore":
-		if c.PandaScore.SeriesID == 0 {
-			return Config{}, fmt.Errorf("pandascore.series_id is a required field for pandascore as a datasource in %s", path)
+		if c.PandaScore.SeriesID == 0 && c.PandaScore.TournamentID == 0 {
+			return Config{}, fmt.Errorf("pandascore.series_id or pandascore.tournament_id is required for pandascore as a datasource in %s", path)
 		}
 		if strings.TrimSpace(c.PandaScore.APIURL) == "" {
 			return Config{}, fmt.Errorf("pandascore.api_url is a required field for pandascore as a datasource in %s", path)

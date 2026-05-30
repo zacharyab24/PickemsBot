@@ -73,7 +73,7 @@ const psScheduleJSON = `[
 // region NewPandaScoreFetcher tests
 
 func TestNewPandaScoreFetcher_Fields(t *testing.T) {
-	f := NewPandaScoreFetcher("http://example.com", "my-key", 42)
+	f := NewPandaScoreFetcher("http://example.com", "my-key", 42, 0)
 	assert.Equal(t, "http://example.com", f.apiURL)
 	assert.Equal(t, "my-key", f.apiKey)
 	assert.Equal(t, 42, f.seriesID)
@@ -145,7 +145,7 @@ func TestPandaScoreFetcher_FetchMatchData_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := NewPandaScoreFetcher(srv.URL, "test-key", 99001)
+	f := NewPandaScoreFetcher(srv.URL, "test-key", 99001, 0)
 	result, nodes, err := f.FetchMatchData("Round 1")
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -158,7 +158,7 @@ func TestPandaScoreFetcher_FetchMatchData_Unauthorized(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := NewPandaScoreFetcher(srv.URL, "key", 99001)
+	f := NewPandaScoreFetcher(srv.URL, "key", 99001, 0)
 	_, _, err := f.FetchMatchData("Round 1")
 	require.Error(t, err)
 }
@@ -170,7 +170,7 @@ func TestPandaScoreFetcher_FetchSchedule_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := NewPandaScoreFetcher(srv.URL, "test-key", 99001)
+	f := NewPandaScoreFetcher(srv.URL, "test-key", 99001, 0)
 	matches, err := f.FetchSchedule()
 	require.NoError(t, err)
 	require.Len(t, matches, 1)
@@ -183,7 +183,7 @@ func TestPandaScoreFetcher_FetchSchedule_Forbidden(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := NewPandaScoreFetcher(srv.URL, "key", 99001)
+	f := NewPandaScoreFetcher(srv.URL, "key", 99001, 0)
 	_, err := f.FetchSchedule()
 	require.Error(t, err)
 }

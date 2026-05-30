@@ -20,9 +20,10 @@ type LiquipediaFetcher struct {
 
 // PandaScoreFetcher implements the DataSourceFetcher interface
 type PandaScoreFetcher struct {
-	apiURL   string
-	apiKey   string
-	seriesID int
+	apiURL       string
+	apiKey       string
+	seriesID     int
+	tournamentID int
 }
 
 // NewLiquipediaFetcher creates a LiquipediaFetcher with the given API URL, API key and page path.
@@ -72,14 +73,14 @@ func (f LiquipediaFetcher) FetchSchedule() ([]sources.ScheduledMatch, error) {
 	return sources.ParseLiquipediaSchedule(matchData)
 }
 
-// NewPandaScoreFetcher creates a PandaScoreFetcher with the given API URL, API key and series ID.
-func NewPandaScoreFetcher(apiURL string, apiKey string, seriesID int) PandaScoreFetcher {
-	return PandaScoreFetcher{apiURL: apiURL, apiKey: apiKey, seriesID: seriesID}
+// NewPandaScoreFetcher creates a PandaScoreFetcher with the given API URL, API key, series ID, and optional tournament ID.
+func NewPandaScoreFetcher(apiURL string, apiKey string, seriesID int, tournamentID int) PandaScoreFetcher {
+	return PandaScoreFetcher{apiURL: apiURL, apiKey: apiKey, seriesID: seriesID, tournamentID: tournamentID}
 }
 
 // FetchMatchData fetches match data using PandaSource as a datasource, filtered to the current round of a tournament
 func (f PandaScoreFetcher) FetchMatchData(round string) (tournament.MatchResult, []sources.MatchNode, error) {
-	matchData, err := sources.GetPandaScoreMatches(f.apiURL, f.apiKey, f.seriesID)
+	matchData, err := sources.GetPandaScoreMatches(f.apiURL, f.apiKey, f.seriesID, f.tournamentID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -112,7 +113,7 @@ func (f PandaScoreFetcher) FetchMatchData(round string) (tournament.MatchResult,
 // FetchSchedule fetches the scheduled matches for the tournament using PandaScore as a datasource.
 // Doesn't do any filtering, callers are responsible for filtering by round / time / etc
 func (f PandaScoreFetcher) FetchSchedule() ([]sources.ScheduledMatch, error) {
-	matchData, err := sources.GetPandaScoreMatches(f.apiURL, f.apiKey, f.seriesID)
+	matchData, err := sources.GetPandaScoreMatches(f.apiURL, f.apiKey, f.seriesID, f.tournamentID)
 	if err != nil {
 		return nil, err
 	}
