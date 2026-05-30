@@ -58,7 +58,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("seriesID must be an integer, got %q", arg)
 		}
-		fetcher = store.NewPandaScoreFetcher("https://api.pandascore.co/csgo/matches", apiKey, seriesID)
+		fetcher = store.NewPandaScoreFetcher("https://api.pandascore.co/csgo/matches", apiKey, seriesID, 0)
 
 	default:
 		log.Fatalf("unknown source %q — use 'liquipedia' or 'pandascore'", source)

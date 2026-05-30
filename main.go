@@ -117,7 +117,7 @@ func main() {
 
 	switch cfg.DataSource {
 	case "pandascore":
-		poller := web.NewPoller(apiInstance, cfg.PandaScore.SeriesID, os.Getenv("PANDASCORE_API_KEY"), cfg.PandaScore.APIURL, logger)
+		poller := web.NewPoller(apiInstance, cfg.PandaScore.SeriesID, cfg.PandaScore.TournamentID, os.Getenv("PANDASCORE_API_KEY"), cfg.PandaScore.APIURL, logger)
 		go poller.Start()
 		logger.Info("PandaScore poller started")
 	case "liquipedia":

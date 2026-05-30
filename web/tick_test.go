@@ -32,7 +32,7 @@ const finishedMatchJSON = `[{"id": 1, "name": "Round 1", "status": "finished",
 // Named differently from the integration test helper to avoid redeclaration
 // when the binary is compiled with -tags integration.
 func newMockPoller(a *app.App, apiURL string) *Poller {
-	return NewPoller(a, 99001, "test-key", apiURL, nil)
+	return NewPoller(a, 99001, 0, "test-key", apiURL, nil)
 }
 
 // region tick() tests

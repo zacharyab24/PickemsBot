@@ -27,7 +27,7 @@ func TestGetPandaScoreMatches_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	body, err := GetPandaScoreMatches(srv.URL, "test-key", 99001)
+	body, err := GetPandaScoreMatches(srv.URL, "test-key", 99001, 0)
 	require.NoError(t, err)
 	assert.Contains(t, body, "not_started")
 }
@@ -38,7 +38,7 @@ func TestGetPandaScoreMatches_Unauthorized(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := GetPandaScoreMatches(srv.URL, "bad-key", 99001)
+	_, err := GetPandaScoreMatches(srv.URL, "bad-key", 99001, 0)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrUnrecoverable)
 }
@@ -49,7 +49,7 @@ func TestGetPandaScoreMatches_Forbidden(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := GetPandaScoreMatches(srv.URL, "key", 99001)
+	_, err := GetPandaScoreMatches(srv.URL, "key", 99001, 0)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrUnrecoverable)
 }
@@ -60,7 +60,7 @@ func TestGetPandaScoreMatches_NotFound(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := GetPandaScoreMatches(srv.URL, "key", 99001)
+	_, err := GetPandaScoreMatches(srv.URL, "key", 99001, 0)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrUnrecoverable)
 }
@@ -71,14 +71,14 @@ func TestGetPandaScoreMatches_UnexpectedStatus(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := GetPandaScoreMatches(srv.URL, "key", 99001)
+	_, err := GetPandaScoreMatches(srv.URL, "key", 99001, 0)
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, ErrUnrecoverable) // 500 is retriable, not unrecoverable
 	assert.Contains(t, err.Error(), "unexpected status code")
 }
 
 func TestGetPandaScoreMatches_InvalidURL(t *testing.T) {
-	_, err := GetPandaScoreMatches("://invalid-url", "key", 1)
+	_, err := GetPandaScoreMatches("://invalid-url", "key", 1, 0)
 	require.Error(t, err)
 }
 

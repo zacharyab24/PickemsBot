@@ -16,16 +16,21 @@ import (
 // (e.g. bad API key, unknown series ID). The poller should stop when it sees this.
 var ErrUnrecoverable = errors.New("unrecoverable api error")
 
-// GetPandaScoreMatches fetches all matches for a given series from the PandaScore API.
+// GetPandaScoreMatches fetches matches from the PandaScore API.
+// When tournamentID is non-zero it filters by tournament (single stage); otherwise filters by seriesID (all stages).
 // Returns the raw JSON response body as a string.
-func GetPandaScoreMatches(apiURL string, apiKey string, seriesID int) (string, error) {
+func GetPandaScoreMatches(apiURL string, apiKey string, seriesID int, tournamentID int) (string, error) {
 	parsedURL, err := url.Parse(apiURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid url: %w", err)
 	}
 
 	params := parsedURL.Query()
-	params.Set("filter[serie_id]", strconv.Itoa(seriesID))
+	if tournamentID != 0 {
+		params.Set("filter[tournament_id]", strconv.Itoa(tournamentID))
+	} else {
+		params.Set("filter[serie_id]", strconv.Itoa(seriesID))
+	}
 	params.Set("filter[status]", "finished,running,not_started")
 	params.Set("per_page", "50")
 	parsedURL.RawQuery = params.Encode()
