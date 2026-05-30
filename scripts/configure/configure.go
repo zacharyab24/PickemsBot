@@ -32,7 +32,8 @@ type tournamentConfig struct {
 	Format string // empty = auto-detect; set to "swiss" or "single-elimination" for multi-stage pages
 
 	// PandaScore only
-	SeriesID int
+	SeriesID     int
+	TournamentID int // optional; narrows to a single stage within the series
 }
 
 const (
@@ -235,7 +236,8 @@ func writeConfig(path string, c tournamentConfig) error {
 		psAPIURL = pandaScoreProdAPIURL
 	}
 	fmt.Fprintln(f, "[pandascore]")
-	fmt.Fprintf(f, "api_url   = %q\n", psAPIURL)
-	fmt.Fprintf(f, "series_id = %d\n", c.SeriesID)
+	fmt.Fprintf(f, "api_url       = %q\n", psAPIURL)
+	fmt.Fprintf(f, "series_id     = %d\n", c.SeriesID)
+	fmt.Fprintf(f, "tournament_id = %d\n", c.TournamentID)
 	return nil
 }

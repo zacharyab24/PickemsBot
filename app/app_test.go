@@ -383,9 +383,9 @@ func TestGetTeams_StoreError(t *testing.T) {
 
 // endregion
 
-// region normalizeForVRSLookup tests
+// region NormalizeTeamName tests
 
-func TestNormalizeForVRSLookup(t *testing.T) {
+func TestNormalizeTeamName(t *testing.T) {
 	cases := []struct {
 		input string
 		want  string
@@ -394,17 +394,20 @@ func TestNormalizeForVRSLookup(t *testing.T) {
 		{"BetBoom Team", "betboom"},
 		{"Sharks Esports", "sharks"},
 		{"Lynn Vision Gaming", "lynn vision"},
+		{"FaZe Clan", "faze"},
 		{"HEROIC", "heroic"},
 		{"The MongolZ", "the mongolz"},
 		{"FaZe", "faze"},
+		{"Na'Vi", "navi"},
+		{"OG.", "og"},
 		{"", ""},
 		{"team liquid", "liquid"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.input, func(t *testing.T) {
-			got := normalizeForVRSLookup(tc.input)
+			got := sources.NormalizeTeamName(tc.input)
 			if got != tc.want {
-				t.Errorf("normalizeForVRSLookup(%q) = %q, want %q", tc.input, got, tc.want)
+				t.Errorf("NormalizeTeamName(%q) = %q, want %q", tc.input, got, tc.want)
 			}
 		})
 	}

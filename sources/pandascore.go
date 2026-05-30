@@ -17,7 +17,9 @@ import (
 var ErrUnrecoverable = errors.New("unrecoverable api error")
 
 // GetPandaScoreMatches fetches matches from the PandaScore API.
-// When tournamentID is non-zero it filters by tournament (single stage); otherwise filters by seriesID (all stages).
+// When tournamentID is non-zero it is used as the server-side filter; the caller is also
+// responsible for client-side filtering since PandaScore's filter[tournament_id] is
+// unreliable for finished matches. Falls back to filter[serie_id] when tournamentID is zero.
 // Returns the raw JSON response body as a string.
 func GetPandaScoreMatches(apiURL string, apiKey string, seriesID int, tournamentID int) (string, error) {
 	parsedURL, err := url.Parse(apiURL)
@@ -66,15 +68,35 @@ func GetPandaScoreMatches(apiURL string, apiKey string, seriesID int, tournament
 	return string(body), nil
 }
 
+// filterByTournament removes raw match objects whose tournament_id does not match the given ID.
+// When tournamentID is 0 the slice is returned unchanged.
+func filterByTournament(raw []interface{}, tournamentID int) []interface{} {
+	if tournamentID == 0 {
+		return raw
+	}
+	var filtered []interface{}
+	for _, item := range raw {
+		match, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if tid, ok := match["tournament_id"].(float64); ok && int(tid) == tournamentID {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
 // ParsePandaScoreMatches parses a PandaScore matches JSON response into a slice of MatchNodes.
-func ParsePandaScoreMatches(matchData string) ([]MatchNode, error) {
+// When tournamentID is non-zero only matches belonging to that tournament are returned.
+func ParsePandaScoreMatches(matchData string, tournamentID int) ([]MatchNode, error) {
 	var raw []interface{}
 	if err := json.Unmarshal([]byte(matchData), &raw); err != nil {
 		return nil, fmt.Errorf("error parsing JSON: %w", err)
 	}
 
 	var matchNodes []MatchNode
-	for _, result := range raw {
+	for _, result := range filterByTournament(raw, tournamentID) {
 		node, err := parsePandaScoreMatch(result)
 		if err != nil {
 			return nil, err
@@ -161,14 +183,15 @@ func parsePandaScoreMatch(result interface{}) (*MatchNode, error) {
 }
 
 // ParsePandaScoreSchedule parses a PandaScore matches JSON response into a slice of ScheduledMatches.
-func ParsePandaScoreSchedule(matchData string) ([]ScheduledMatch, error) {
+// When tournamentID is non-zero only matches belonging to that tournament are returned.
+func ParsePandaScoreSchedule(matchData string, tournamentID int) ([]ScheduledMatch, error) {
 	var raw []interface{}
 	if err := json.Unmarshal([]byte(matchData), &raw); err != nil {
 		return nil, fmt.Errorf("error parsing JSON: %w", err)
 	}
 
 	var scheduledMatches []ScheduledMatch
-	for _, result := range raw {
+	for _, result := range filterByTournament(raw, tournamentID) {
 		match, err := parsePandaScoreScheduledMatch(result)
 		if err != nil {
 			return nil, err

@@ -85,7 +85,7 @@ func (f PandaScoreFetcher) FetchMatchData(round string) (tournament.MatchResult,
 		return nil, nil, err
 	}
 
-	matchNodes, err := sources.ParsePandaScoreMatches(matchData)
+	matchNodes, err := sources.ParsePandaScoreMatches(matchData, f.tournamentID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -117,7 +117,7 @@ func (f PandaScoreFetcher) FetchSchedule() ([]sources.ScheduledMatch, error) {
 	if err != nil {
 		return nil, err
 	}
-	return sources.ParsePandaScoreSchedule(matchData)
+	return sources.ParsePandaScoreSchedule(matchData, f.tournamentID)
 }
 
 // Compile time assertions to ensure interface impls have all methods defined

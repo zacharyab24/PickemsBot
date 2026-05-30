@@ -16,4 +16,5 @@ format  = ""
 
 [pandascore]
 api_url   = "http://localhost:8081/pandascore/csgo/matches"
-series_id = 99001
+series_id     = 99001
+tournament_id = 0

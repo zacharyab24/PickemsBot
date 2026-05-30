@@ -279,18 +279,6 @@ func (a *App) GetLeaderboard() ([]LeaderboardUser, error) {
 	return response, nil
 }
 
-// normalizeForVRSLookup strips common team name decorators so tournament names
-// (e.g. "Team Liquid", "Sharks Esports") match VRS names (e.g. "Liquid", "Sharks").
-// Used only for map key comparison — original names are never modified.
-func normalizeForVRSLookup(name string) string {
-	s := strings.ToLower(name)
-	s = strings.TrimPrefix(s, "team ")
-	s = strings.TrimSuffix(s, " team")
-	s = strings.TrimSuffix(s, " esports")
-	s = strings.TrimSuffix(s, " gaming")
-	return strings.TrimSpace(s)
-}
-
 // GetTeams gets a list of all valid team names.
 // The valid teams list must be initialized in db.
 // It returns a string slice containing all valid teams for this round.
@@ -311,14 +299,14 @@ func (a *App) GetTeams() ([]Team, error) {
 	vrsNorm := make(map[string]int, len(VRSEntries))
 	vrsNormKeys := make([]string, 0, len(VRSEntries))
 	for _, entry := range VRSEntries {
-		key := normalizeForVRSLookup(entry.TeamName)
+		key := sources.NormalizeTeamName(entry.TeamName)
 		vrsNorm[key] = entry.Standing
 		vrsNormKeys = append(vrsNormKeys, key)
 	}
 
 	var result []Team
 	for _, teamName := range validTeams {
-		norm := normalizeForVRSLookup(teamName)
+		norm := sources.NormalizeTeamName(teamName)
 		ranking, ok := vrsNorm[norm]
 		if !ok {
 			// Normalised exact match failed — spacing/punctuation difference; try fuzzy
@@ -346,9 +334,9 @@ func (a *App) GetTeam(teamName string) (store.VRSEntry, error) {
 		return store.VRSEntry{}, err
 	}
 
-	norm := normalizeForVRSLookup(teamName)
+	norm := sources.NormalizeTeamName(teamName)
 	for _, entry := range VRSEntries {
-		if normalizeForVRSLookup(entry.TeamName) == norm {
+		if sources.NormalizeTeamName(entry.TeamName) == norm {
 			return entry, nil
 		}
 	}
@@ -356,11 +344,11 @@ func (a *App) GetTeam(teamName string) (store.VRSEntry, error) {
 	// Exact normalised match failed — try fuzzy
 	keys := make([]string, len(VRSEntries))
 	for i, e := range VRSEntries {
-		keys[i] = normalizeForVRSLookup(e.TeamName)
+		keys[i] = sources.NormalizeTeamName(e.TeamName)
 	}
 	if matches := fuzzy.RankFind(norm, keys); len(matches) > 0 {
 		for _, entry := range VRSEntries {
-			if normalizeForVRSLookup(entry.TeamName) == matches[0].Target {
+			if sources.NormalizeTeamName(entry.TeamName) == matches[0].Target {
 				return entry, nil
 			}
 		}

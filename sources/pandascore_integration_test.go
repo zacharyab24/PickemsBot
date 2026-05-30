@@ -24,10 +24,10 @@ const (
 func TestPandaScore_GetMatches_Ongoing(t *testing.T) {
 	testhelpers.SetState(t, "pandascore", "ongoing")
 
-	raw, err := sources.GetPandaScoreMatches(psURL, psTestKey, psSeriesID)
+	raw, err := sources.GetPandaScoreMatches(psURL, psTestKey, psSeriesID, 0)
 	require.NoError(t, err)
 
-	nodes, err := sources.ParsePandaScoreMatches(raw)
+	nodes, err := sources.ParsePandaScoreMatches(raw, 0)
 	require.NoError(t, err)
 	assert.NotEmpty(t, nodes, "expected matches in ongoing state")
 
@@ -43,10 +43,10 @@ func TestPandaScore_GetMatches_Ongoing(t *testing.T) {
 func TestPandaScore_GetMatches_NotStarted(t *testing.T) {
 	testhelpers.SetState(t, "pandascore", "not_started")
 
-	raw, err := sources.GetPandaScoreMatches(psURL, psTestKey, psSeriesID)
+	raw, err := sources.GetPandaScoreMatches(psURL, psTestKey, psSeriesID, 0)
 	require.NoError(t, err)
 
-	nodes, err := sources.ParsePandaScoreMatches(raw)
+	nodes, err := sources.ParsePandaScoreMatches(raw, 0)
 	require.NoError(t, err)
 	assert.Empty(t, nodes, "expected empty match list in not_started state")
 }
@@ -56,7 +56,7 @@ func TestPandaScore_GetMatches_NotStarted(t *testing.T) {
 func TestPandaScore_GetMatches_WrongKey(t *testing.T) {
 	testhelpers.SetState(t, "pandascore", "ongoing")
 
-	_, err := sources.GetPandaScoreMatches(psURL, "wrong-key", psSeriesID)
+	_, err := sources.GetPandaScoreMatches(psURL, "wrong-key", psSeriesID, 0)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, sources.ErrUnrecoverable),
 		"expected ErrUnrecoverable for bad API key, got: %v", err)
@@ -67,7 +67,7 @@ func TestPandaScore_GetMatches_WrongKey(t *testing.T) {
 func TestPandaScore_GetMatches_NotFound(t *testing.T) {
 	// The test server returns 404 when filter[serie_id] is present but not "99001".
 	// Use any other value to trigger this.
-	_, err := sources.GetPandaScoreMatches(psURL, psTestKey, 12345)
+	_, err := sources.GetPandaScoreMatches(psURL, psTestKey, 12345, 0)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, sources.ErrUnrecoverable),
 		"expected ErrUnrecoverable for unknown series ID, got: %v", err)
@@ -77,15 +77,15 @@ func TestPandaScore_GetMatches_NotFound(t *testing.T) {
 // at least one more finished match than the ongoing state.
 func TestPandaScore_Complete_HasMoreFinished(t *testing.T) {
 	testhelpers.SetState(t, "pandascore", "ongoing")
-	rawOngoing, err := sources.GetPandaScoreMatches(psURL, psTestKey, psSeriesID)
+	rawOngoing, err := sources.GetPandaScoreMatches(psURL, psTestKey, psSeriesID, 0)
 	require.NoError(t, err)
-	ongoingNodes, err := sources.ParsePandaScoreMatches(rawOngoing)
+	ongoingNodes, err := sources.ParsePandaScoreMatches(rawOngoing, 0)
 	require.NoError(t, err)
 
 	testhelpers.SetState(t, "pandascore", "complete")
-	rawComplete, err := sources.GetPandaScoreMatches(psURL, psTestKey, psSeriesID)
+	rawComplete, err := sources.GetPandaScoreMatches(psURL, psTestKey, psSeriesID, 0)
 	require.NoError(t, err)
-	completeNodes, err := sources.ParsePandaScoreMatches(rawComplete)
+	completeNodes, err := sources.ParsePandaScoreMatches(rawComplete, 0)
 	require.NoError(t, err)
 
 	countFinished := func(nodes []sources.MatchNode) int {
