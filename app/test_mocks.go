@@ -44,9 +44,9 @@ type MockStore struct {
 	StoreLeaderboardError           error
 	FetchLeaderboardFromDBError     error
 	FetchVrsDataFromDBError         error
-	FetchAndStoreScheduleError       error
-	FetchMatchNodesFromDbError       error
-	PingError                        error
+	FetchAndStoreScheduleError      error
+	FetchMatchNodesFromDbError      error
+	PingError                       error
 
 	MatchNodes []sources.MatchNode
 	MatchKind  tournament.Kind
