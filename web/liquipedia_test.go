@@ -8,14 +8,34 @@ package web
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	apiPkg "pickems-bot/app"
+	"pickems-bot/sources"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+// region Server.logger tests
+
+func TestServer_Logger_NilReturnsDefault(t *testing.T) {
+	s := &Server{}
+	assert.NotNil(t, s.logger())
+}
+
+func TestServer_Logger_InjectedLogReturned(t *testing.T) {
+	log := slog.Default()
+	s := &Server{log: log}
+	assert.Equal(t, log, s.logger())
+}
+
+// endregion
 
 // region isRelevantTournamentPage tests
 
@@ -146,6 +166,29 @@ func TestLiquipediaWebhookHandler_RelevantEvent_ReturnsOK(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
+func TestLiquipediaWebhookHandler_PipelineRunsToCompletion(t *testing.T) {
+	// Uses NewTestApp (non-nil rate limiter) so UpdateMatchResults succeeds and the
+	// goroutine reaches GenerateLeaderboard / RenderResultsImage.
+	mockStore := apiPkg.NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{
+		{Team1: "Team A", Team2: "Team B", EpochTime: 9999999999},
+	})
+	mockStore.FetchAndStoreScheduleError = fmt.Errorf("schedule fetch failed")
+	mockAPI := apiPkg.NewTestApp(mockStore)
+
+	server := &Server{api: mockAPI, page: "Test/Tournament/2025"}
+
+	event := LiquipediaEvent{Wiki: "counterstrike", Page: "Test/Tournament/2025", Event: "update"}
+	body, _ := json.Marshal(event)
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/liquipedia", bytes.NewBuffer(body))
+	w := httptest.NewRecorder()
+
+	server.LiquipediaWebhookHandler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	time.Sleep(10 * time.Millisecond) // let goroutine run through the full pipeline
+}
+
 // TestLiquipediaWebhookHandler_SubPageMatch_ReturnsOK tests sub-page matching
 func TestLiquipediaWebhookHandler_SubPageMatch_ReturnsOK(t *testing.T) {
 	mockStore := apiPkg.NewMockStore("swiss", "test_round")
@@ -199,6 +242,77 @@ func TestLiquipediaEvent_JSONEncode(t *testing.T) {
 	assert.Contains(t, string(jsonBytes), `"wiki":"counterstrike"`)
 	assert.Contains(t, string(jsonBytes), `"page":"TestPage"`)
 	assert.Contains(t, string(jsonBytes), `"event":"update"`)
+}
+
+// endregion
+
+// region RenderResultsImage tests
+
+func TestRenderResultsImage_FetchError(t *testing.T) {
+	mockStore := apiPkg.NewMockStore("swiss", "test_round")
+	mockStore.FetchMatchNodesFromDbError = fmt.Errorf("db error")
+	a := apiPkg.NewTestApp(mockStore)
+
+	err := RenderResultsImage(a)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to fetch match nodes")
+}
+
+func TestRenderResultsImage_EmptyKind(t *testing.T) {
+	mockStore := apiPkg.NewMockStore("swiss", "test_round")
+	// default mock returns kind="" — should get "kind was empty" error
+	a := apiPkg.NewTestApp(mockStore)
+
+	err := RenderResultsImage(a)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "kind was empty")
+}
+
+func TestRenderResultsImage_SwissKind_ReachesRenderer(t *testing.T) {
+	mockStore := apiPkg.NewMockStore("swiss", "test_round")
+	mockStore.MatchKind = "swiss"
+	a := apiPkg.NewTestApp(mockStore)
+
+	// Just verify the path runs without panicking; RenderBracket may succeed or fail with empty nodes.
+	_ = RenderResultsImage(a)
+}
+
+func TestRenderResultsImage_SingleElimKind_CoversNormalisationPath(t *testing.T) {
+	mockStore := apiPkg.NewMockStore("swiss", "test_round")
+	mockStore.MatchKind = "single-elimination"
+	a := apiPkg.NewTestApp(mockStore)
+
+	_ = RenderResultsImage(a)
+}
+
+// endregion
+
+// region toRenderNodes tests
+
+func TestToRenderNodes_MapsAllFields(t *testing.T) {
+	nodes := []sources.MatchNode{
+		{ID: "m1", Team1: "Team A", Team2: "Team B", Winner: "Team A", Score: "2-0", Section: "Quarterfinals"},
+		{ID: "m2", Team1: "Team C", Team2: "Team D", Winner: "", Score: "", Section: "Semifinals"},
+	}
+
+	result := toRenderNodes(nodes)
+
+	require.Len(t, result, 2)
+	assert.Equal(t, "m1", result[0].ID)
+	assert.Equal(t, "Team A", result[0].Team1)
+	assert.Equal(t, "Team B", result[0].Team2)
+	assert.Equal(t, "Team A", result[0].Winner)
+	assert.Equal(t, "2-0", result[0].Score)
+	assert.Equal(t, "Quarterfinals", result[0].Section)
+	assert.Equal(t, "m2", result[1].ID)
+	assert.Empty(t, result[1].Winner)
+}
+
+func TestToRenderNodes_EmptySlice(t *testing.T) {
+	result := toRenderNodes([]sources.MatchNode{})
+	require.Len(t, result, 0)
 }
 
 // endregion

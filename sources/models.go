@@ -24,4 +24,5 @@ type ScheduledMatch struct {
 	BestOf    string
 	StreamURL string
 	Finished  bool
+	Live      bool
 }

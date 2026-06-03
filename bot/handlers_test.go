@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"pickems-bot/app"
 	"pickems-bot/models"
@@ -231,14 +232,70 @@ func TestUpcomingMatches_Success(t *testing.T) {
 	assert.NotEmpty(t, msg.Content)
 }
 
-func TestUpcomingMatches_NoMatches(t *testing.T) {
-	// Create bot with scheduled matches that exist but are empty
+func TestUpcomingMatches_LiveOnly_HasLiveNowHeader(t *testing.T) {
 	mockStore := app.NewMockStore("swiss", "test_round")
-	// Set at least one scheduled match so EnsureScheduledMatches passes
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{
-		{Team1: "TBD", Team2: "TBD", BestOf: "3", EpochTime: 1700000000},
+		{Team1: "Team A", Team2: "Team B", BestOf: "3", EpochTime: time.Now().Add(-1 * time.Hour).Unix(), Finished: false},
 	})
-	mockStore.SetSwissResults(map[string]string{"Team A": "3-0"})
+	bot := &Bot{BotToken: "test_token", APIPtr: &app.App{Store: mockStore}}
+	mockSession := NewMockDiscordSession()
+
+	bot.upcomingMatchesHandler(mockSession, createMockMessage("$upcoming", "user123", "TestUser", "channel123"))
+
+	require.Len(t, mockSession.SentEmbeds, 1)
+	fields := mockSession.GetLastEmbed().Embed.Fields
+	require.Len(t, fields, 2)
+	assert.Equal(t, "🔴  Live Now", fields[0].Name)
+	assert.Equal(t, "**Team A** vs **Team B** (Bo3)", fields[1].Name)
+	assert.Contains(t, fields[1].Value, "**LIVE**")
+}
+
+func TestUpcomingMatches_UpcomingOnly_NoSectionHeaders(t *testing.T) {
+	mockStore := app.NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{
+		{Team1: "Team A", Team2: "Team B", BestOf: "3", EpochTime: time.Now().Add(24 * time.Hour).Unix(), Finished: false},
+	})
+	bot := &Bot{BotToken: "test_token", APIPtr: &app.App{Store: mockStore}}
+	mockSession := NewMockDiscordSession()
+
+	bot.upcomingMatchesHandler(mockSession, createMockMessage("$upcoming", "user123", "TestUser", "channel123"))
+
+	require.Len(t, mockSession.SentEmbeds, 1)
+	fields := mockSession.GetLastEmbed().Embed.Fields
+	require.Len(t, fields, 1)
+	assert.Equal(t, "**Team A** vs **Team B** (Bo3)", fields[0].Name)
+}
+
+func TestUpcomingMatches_LiveAndUpcoming_BothSectionHeaders(t *testing.T) {
+	mockStore := app.NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{
+		{Team1: "Team A", Team2: "Team B", BestOf: "3", EpochTime: time.Now().Add(-1 * time.Hour).Unix(), Finished: false},
+		{Team1: "Team C", Team2: "Team D", BestOf: "3", EpochTime: time.Now().Add(24 * time.Hour).Unix(), Finished: false},
+	})
+	bot := &Bot{BotToken: "test_token", APIPtr: &app.App{Store: mockStore}}
+	mockSession := NewMockDiscordSession()
+
+	bot.upcomingMatchesHandler(mockSession, createMockMessage("$upcoming", "user123", "TestUser", "channel123"))
+
+	require.Len(t, mockSession.SentEmbeds, 1)
+	fields := mockSession.GetLastEmbed().Embed.Fields
+	// Expected order: Live Now header, live match, Upcoming header, upcoming match
+	require.Len(t, fields, 4)
+	assert.Equal(t, "🔴  Live Now", fields[0].Name)
+	assert.Equal(t, "**Team A** vs **Team B** (Bo3)", fields[1].Name)
+	assert.Contains(t, fields[1].Value, "**LIVE**")
+	assert.Equal(t, "Upcoming", fields[2].Name)
+	assert.Equal(t, "**Team C** vs **Team D** (Bo3)", fields[3].Name)
+}
+
+func TestUpcomingMatches_AllTBD_ShowsNoMatchesEmbed(t *testing.T) {
+	mockStore := app.NewMockStore("swiss", "test_round")
+	// EpochTime in the future so the match isn't filtered by GetUpcomingMatches,
+	// but both teams are TBD so the render loop skips it.
+	futureTime := time.Now().Add(24 * time.Hour).Unix()
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{
+		{Team1: "TBD", Team2: "TBD", BestOf: "3", EpochTime: futureTime},
+	})
 
 	bot := &Bot{
 		BotToken: "test_token",
@@ -250,11 +307,10 @@ func TestUpcomingMatches_NoMatches(t *testing.T) {
 
 	bot.upcomingMatchesHandler(mockSession, message)
 
-	require.Len(t, mockSession.SentMessages, 1)
-	msg := mockSession.GetLastMessage()
-	// Since all matches are TBD, they get filtered out and we get "Upcoming matches:" but no content
-	// or it could be "No upcoming matches" - either is acceptable
-	assert.NotEmpty(t, msg.Content)
+	require.Len(t, mockSession.SentEmbeds, 1)
+	embed := mockSession.GetLastEmbed()
+	assert.Equal(t, "Upcoming Matches", embed.Embed.Title)
+	assert.Equal(t, "No upcoming matches at this time.", embed.Embed.Description)
 }
 
 // endregion
