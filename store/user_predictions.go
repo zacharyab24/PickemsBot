@@ -73,6 +73,24 @@ func (s *Store) GetUserPrediction(userID string) (models.Prediction, error) {
 	return result, nil
 }
 
+// GetUserPredictionByUsername retrieves the stored prediction for the given username (case-insensitive) in the current round.
+func (s *Store) GetUserPredictionByUsername(username string) (models.Prediction, error) {
+	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
+	filter := bson.M{
+		"username": bson.M{"$regex": "^" + username + "$", "$options": "i"},
+		"round":    s.Round,
+	}
+	var result models.Prediction
+	err := s.Collections.Predictions.FindOne(context.TODO(), filter).Decode(&result)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return models.Prediction{}, err
+		}
+		return models.Prediction{}, fmt.Errorf("error fetching results from db: %w", err)
+	}
+	return result, nil
+}
+
 // GetAllUserPredictions returns all stored predictions for the current round.
 func (s *Store) GetAllUserPredictions() ([]models.Prediction, error) {
 	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
