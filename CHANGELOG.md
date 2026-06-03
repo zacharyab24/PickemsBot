@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.6
+Live match display and schedule refresh:
+- `$upcoming` now shows in-progress matches in a dedicated **🔴 Live Now** section above scheduled matches. PandaScore sets `Live` explicitly from the API's `running` status; Liquipedia falls back to clock-based inference (start time passed, not finished). When both live and upcoming matches are present an **Upcoming** section divider is added automatically.
+- Fixed `$upcoming` sending a blank embed (no title, no description) when all returned PandaScore matches are TBD — the "no upcoming matches" fallback now fires after the render loop, not before it.
+- Upcoming match schedules are now refreshed continuously rather than only at startup. Both the Liquipedia webhook pipeline and the PandaScore poller update the schedule on every relevant event.
+- PandaScore poller schedule refresh is diff-driven: each tick computes a fingerprint of team names and start times from the already-fetched raw response (no extra API call) and only writes to the database when something actually changed. This means reschedules and TBD slots being filled are picked up in real time without waiting for a match to finish.
+- `ScheduledMatch` gains a `Live bool` field; `StoreSchedule` and `UpdateMatchSchedule` added to `App` as thin wrappers around the existing store layer.
+
 ## 3.5
 VRS (Valve Regional Standings) integration:
 - Added VRS database support — bot now connects to a separate `VRS_RANKINGS` MongoDB database (populated externally by the [VRS-Tracker](https://github.com/zacharyab24/VRS-Tracker) project) and exposes world ranking data alongside tournament data.
