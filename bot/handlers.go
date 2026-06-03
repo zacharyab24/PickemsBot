@@ -156,16 +156,35 @@ func (b *Bot) setPredictionsHandler(session DiscordSession, message *discordgo.M
 
 // checkPredictionsHandler handles the $check command with a DiscordSession interface
 func (b *Bot) checkPredictionsHandler(session DiscordSession, message *discordgo.MessageCreate) {
-	user := models.User{UserID: message.Author.ID, Username: message.Author.Username}
-	report, err := b.APIPtr.CheckPrediction(user)
-	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			sendError(session, message.ChannelID, fmt.Sprintf("%s does not have any Pick'Ems stored. Use `$set` to set your predictions.", user.Username))
-		} else {
-			b.logger().Error("failed to check prediction", "user", user.Username, "error", fmt.Errorf("checkPredictionsHandler: %w", err))
-			sendError(session, message.ChannelID, fmt.Sprintf("An error occurred checking %s's Pick'Ems.", user.Username))
+	var user models.User
+	var report tournament.ScoreReport
+
+	target := strings.TrimSpace(strings.TrimPrefix(message.Content, "$check"))
+	if target == "" {
+		user = models.User{UserID: message.Author.ID, Username: message.Author.Username}
+		var err error
+		report, err = b.APIPtr.CheckPrediction(user)
+		if err != nil {
+			if errors.Is(err, mongo.ErrNoDocuments) {
+				sendError(session, message.ChannelID, fmt.Sprintf("%s does not have any Pick'Ems stored. Use `$set` to set your predictions.", user.Username))
+			} else {
+				b.logger().Error("failed to check prediction", "user", user.Username, "error", fmt.Errorf("checkPredictionsHandler: %w", err))
+				sendError(session, message.ChannelID, fmt.Sprintf("An error occurred checking %s's Pick'Ems.", user.Username))
+			}
+			return
 		}
-		return
+	} else {
+		var err error
+		user, report, err = b.APIPtr.CheckPredictionByUsername(target)
+		if err != nil {
+			if errors.Is(err, mongo.ErrNoDocuments) {
+				sendError(session, message.ChannelID, fmt.Sprintf("No Pick'Ems found for **%s**.", target))
+			} else {
+				b.logger().Error("failed to check prediction by username", "target", target, "error", fmt.Errorf("checkPredictionsHandler: %w", err))
+				sendError(session, message.ChannelID, fmt.Sprintf("An error occurred checking %s's Pick'Ems.", target))
+			}
+			return
+		}
 	}
 
 	score := report.GetScore()

@@ -20,6 +20,7 @@ type Interface interface {
 	GetValidTeams() ([]string, tournament.Kind, error)
 	StoreUserPrediction(userID string, prediction models.Prediction) error
 	GetUserPrediction(userID string) (models.Prediction, error)
+	GetUserPredictionByUsername(username string) (models.Prediction, error)
 	GetMatchResults() (tournament.MatchResult, error)
 	GetAllUserPredictions() ([]models.Prediction, error)
 	FetchMatchSchedule() ([]sources.ScheduledMatch, error)

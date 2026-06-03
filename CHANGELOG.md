@@ -1,12 +1,22 @@
 # Changelog
 
 ## 3.6
+`$check` lookup by username:
+- `$check <username>` now looks up another user's Pick'Ems without pinging them. The lookup is case-insensitive, so `$check pickemsbot` and `$check PickemsBot` both work. `$check` with no argument retains its existing behaviour (shows your own picks).
+- `store.GetUserPredictionByUsername` added — queries the predictions collection with a case-insensitive regex against the `username` field for the current round.
+- `app.CheckPredictionByUsername` added — resolves the canonical stored username from the matched document and returns it alongside the score report so the embed title reflects the exact stored name.
+- `store.Interface` and `MockStore` updated to include the new method.
+
 Live match display and schedule refresh:
 - `$upcoming` now shows in-progress matches in a dedicated **🔴 Live Now** section above scheduled matches. PandaScore sets `Live` explicitly from the API's `running` status; Liquipedia falls back to clock-based inference (start time passed, not finished). When both live and upcoming matches are present an **Upcoming** section divider is added automatically.
 - Fixed `$upcoming` sending a blank embed (no title, no description) when all returned PandaScore matches are TBD — the "no upcoming matches" fallback now fires after the render loop, not before it.
 - Upcoming match schedules are now refreshed continuously rather than only at startup. Both the Liquipedia webhook pipeline and the PandaScore poller update the schedule on every relevant event.
 - PandaScore poller schedule refresh is diff-driven: each tick computes a fingerprint of team names and start times from the already-fetched raw response (no extra API call) and only writes to the database when something actually changed. This means reschedules and TBD slots being filled are picked up in real time without waiting for a match to finish.
 - `ScheduledMatch` gains a `Live bool` field; `StoreSchedule` and `UpdateMatchSchedule` added to `App` as thin wrappers around the existing store layer.
+
+## 3.5.2
+- fix: fixed pandascore to use tournament_id as well as series_id to allow filtering between tournament stages
+- feat: centralized team name normalization and PandaScore tournament filtering
 
 ## 3.5
 VRS (Valve Regional Standings) integration:

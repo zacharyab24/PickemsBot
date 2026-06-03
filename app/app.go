@@ -188,6 +188,27 @@ func (a *App) CheckPrediction(user models.User) (tournament.ScoreReport, error) 
 	return report, nil
 }
 
+// CheckPredictionByUsername looks up picks by username (case-insensitive) and scores them.
+func (a *App) CheckPredictionByUsername(username string) (models.User, tournament.ScoreReport, error) {
+	err := a.Store.EnsureScheduledMatches()
+	if err != nil {
+		return models.User{}, nil, err
+	}
+	doc, err := a.Store.GetUserPredictionByUsername(username)
+	if err != nil {
+		return models.User{}, nil, err
+	}
+	results, err := a.Store.GetMatchResults()
+	if err != nil {
+		return models.User{}, nil, err
+	}
+	report, err := scoring.CalculateUserScore(doc, results)
+	if err != nil {
+		return models.User{}, nil, err
+	}
+	return models.User{UserID: doc.UserID, Username: doc.Username}, report, nil
+}
+
 // GenerateLeaderboard contains the logic required to generate a leaderboard.
 // Preconditions: Receives receiver pointer to api
 // Postconditions: Generates the leaderboard, updates it in the DB and returns nil, or returns an error if it occurs

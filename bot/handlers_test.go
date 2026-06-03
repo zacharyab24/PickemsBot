@@ -652,6 +652,54 @@ func TestDetails_APIError(t *testing.T) {
 	assert.Contains(t, strings.ToLower(msg.Content), "error")
 }
 
+func TestCheckPredictions_ByUsername_Found(t *testing.T) {
+	mockStore := app.NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{
+		{Team1: "Team A", Team2: "Team B"},
+	})
+	mockStore.SetSwissResults(map[string]string{
+		"Team A": "3-0",
+		"Team B": "3-1",
+	})
+	mockStore.StoreUserPrediction("user456", models.Prediction{
+		UserID:   "user456",
+		Username: "PickemsBot",
+		Format:   "swiss",
+		Round:    "test_round",
+		Win:      []string{"Team A", "Team B"},
+		Advance:  []string{"Team C", "Team D", "Team E", "Team F", "Team A", "Team B"},
+		Lose:     []string{"Team E", "Team F"},
+	})
+
+	bot := &Bot{
+		BotToken: "test_token",
+		APIPtr:   &app.App{Store: mockStore},
+	}
+
+	mockSession := NewMockDiscordSession()
+	message := createMockMessage("$check PickemsBot", "user123", "TestUser", "channel123")
+
+	bot.checkPredictionsHandler(mockSession, message)
+
+	require.Len(t, mockSession.SentMessages, 1)
+	embed := mockSession.GetLastEmbed()
+	require.NotNil(t, embed)
+	assert.Equal(t, "channel123", embed.ChannelID)
+	assert.Contains(t, embed.Embed.Title, "PickemsBot")
+}
+
+func TestCheckPredictions_ByUsername_NotFound(t *testing.T) {
+	bot := createTestBot("swiss")
+	mockSession := NewMockDiscordSession()
+	message := createMockMessage("$check ghost", "user123", "TestUser", "channel123")
+
+	bot.checkPredictionsHandler(mockSession, message)
+
+	require.Len(t, mockSession.SentMessages, 1)
+	msg := mockSession.GetLastMessage()
+	assert.Contains(t, strings.ToLower(msg.Content), "no pick'ems found")
+}
+
 func TestCheckPredictions_GenericError(t *testing.T) {
 	mockStore := app.NewMockStore("swiss", "test_round")
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{

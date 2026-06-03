@@ -246,6 +246,67 @@ func TestCheckPrediction_GetMatchResultsError(t *testing.T) {
 	}
 }
 
+// region CheckPredictionByUsername tests
+
+func TestCheckPredictionByUsername_Success(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	mockStore.SetSwissResults(map[string]string{
+		"Team A": "3-0",
+		"Team B": "3-0",
+		"Team I": "0-3",
+		"Team J": "0-3",
+	})
+	mockStore.Predictions["user1"] = models.Prediction{
+		UserID:   "user1",
+		Username: "PickemsBot",
+		Format:   "swiss",
+		Round:    "test_round",
+		Win:      []string{"Team A", "Team B"},
+		Advance:  []string{"Team C", "Team D", "Team E", "Team F", "Team G", "Team H"},
+		Lose:     []string{"Team I", "Team J"},
+	}
+
+	api := &App{Store: mockStore}
+
+	user, report, err := api.CheckPredictionByUsername("pickemsbot")
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if report == nil {
+		t.Error("Expected non-nil score report")
+	}
+	if user.Username != "PickemsBot" {
+		t.Errorf("Expected canonical username PickemsBot, got %s", user.Username)
+	}
+}
+
+func TestCheckPredictionByUsername_NotFound(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	mockStore.SetSwissResults(map[string]string{})
+
+	api := &App{Store: mockStore}
+
+	_, _, err := api.CheckPredictionByUsername("ghost")
+	if err == nil {
+		t.Error("Expected error when username not found, got nil")
+	}
+}
+
+func TestCheckPredictionByUsername_NoScheduledMatches(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+
+	api := &App{Store: mockStore}
+
+	_, _, err := api.CheckPredictionByUsername("PickemsBot")
+	if err == nil {
+		t.Error("Expected error when no scheduled matches, got nil")
+	}
+}
+
+// endregion
+
 func TestMockStore_SetScheduleError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.SetScheduleError(fmt.Errorf("test error"))

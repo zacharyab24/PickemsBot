@@ -8,6 +8,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"pickems-bot/models"
 	"pickems-bot/sources"
@@ -31,22 +32,23 @@ type MockStore struct {
 	VRSEntries []store.VRSEntry
 
 	// Error injection for testing error paths
-	EnsureScheduledMatchesError     error
-	GetValidTeamsError              error
-	StoreUserPredictionError        error
-	GetUserPredictionError          error
-	GetMatchResultsError            error
-	GetAllUserPredictionsError      error
-	FetchMatchScheduleError         error
-	StoreMatchScheduleError         error
-	StoreMatchScheduleCallCount     int
-	FetchAndUpdateMatchResultsError error
-	StoreLeaderboardError           error
-	FetchLeaderboardFromDBError     error
-	FetchVrsDataFromDBError         error
-	FetchAndStoreScheduleError      error
-	FetchMatchNodesFromDbError      error
-	PingError                       error
+	EnsureScheduledMatchesError      error
+	GetValidTeamsError               error
+	StoreUserPredictionError         error
+	GetUserPredictionError           error
+	GetUserPredictionByUsernameError error
+	GetMatchResultsError             error
+	GetAllUserPredictionsError       error
+	FetchMatchScheduleError          error
+	StoreMatchScheduleError          error
+	StoreMatchScheduleCallCount      int
+	FetchAndUpdateMatchResultsError  error
+	StoreLeaderboardError            error
+	FetchLeaderboardFromDBError      error
+	FetchVrsDataFromDBError          error
+	FetchAndStoreScheduleError       error
+	FetchMatchNodesFromDbError       error
+	PingError                        error
 
 	MatchNodes []sources.MatchNode
 	MatchKind  tournament.Kind
@@ -124,6 +126,20 @@ func (m *MockStore) GetUserPrediction(userID string) (models.Prediction, error) 
 		return models.Prediction{}, mongo.ErrNoDocuments
 	}
 	return pred, nil
+}
+
+// GetUserPredictionByUsername mock implementation — case-insensitive search over stored predictions
+func (m *MockStore) GetUserPredictionByUsername(username string) (models.Prediction, error) {
+	if m.GetUserPredictionByUsernameError != nil {
+		return models.Prediction{}, m.GetUserPredictionByUsernameError
+	}
+	lower := strings.ToLower(username)
+	for _, pred := range m.Predictions {
+		if strings.ToLower(pred.Username) == lower {
+			return pred, nil
+		}
+	}
+	return models.Prediction{}, mongo.ErrNoDocuments
 }
 
 // GetMatchResults mock implementation
