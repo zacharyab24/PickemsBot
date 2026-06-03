@@ -7,6 +7,7 @@ package web
 
 import (
 	"log/slog"
+	"pickems-bot/sources"
 	"testing"
 	"time"
 
@@ -114,6 +115,59 @@ func TestPoller_StatusTransition_NoTriggerForFirstSeen(t *testing.T) {
 	}
 
 	assert.False(t, finishedTransition)
+}
+
+// endregion
+
+// region scheduleKey tests
+
+func TestScheduleKey_SameMatchesSameKey(t *testing.T) {
+	matches := []sources.ScheduledMatch{
+		{Team1: "Team A", Team2: "Team B", EpochTime: 1000},
+		{Team1: "Team C", Team2: "Team D", EpochTime: 2000},
+	}
+	assert.Equal(t, scheduleKey(matches), scheduleKey(matches))
+}
+
+func TestScheduleKey_OrderIndependent(t *testing.T) {
+	a := []sources.ScheduledMatch{
+		{Team1: "Team A", Team2: "Team B", EpochTime: 1000},
+		{Team1: "Team C", Team2: "Team D", EpochTime: 2000},
+	}
+	b := []sources.ScheduledMatch{
+		{Team1: "Team C", Team2: "Team D", EpochTime: 2000},
+		{Team1: "Team A", Team2: "Team B", EpochTime: 1000},
+	}
+	assert.Equal(t, scheduleKey(a), scheduleKey(b))
+}
+
+func TestScheduleKey_DetectsTimeChange(t *testing.T) {
+	before := []sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B", EpochTime: 1000}}
+	after := []sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B", EpochTime: 9999}}
+	assert.NotEqual(t, scheduleKey(before), scheduleKey(after))
+}
+
+func TestScheduleKey_DetectsTeamChange(t *testing.T) {
+	before := []sources.ScheduledMatch{{Team1: "TBD", Team2: "Team B", EpochTime: 1000}}
+	after := []sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B", EpochTime: 1000}}
+	assert.NotEqual(t, scheduleKey(before), scheduleKey(after))
+}
+
+func TestScheduleKey_EmptySlice(t *testing.T) {
+	assert.Equal(t, scheduleKey(nil), scheduleKey([]sources.ScheduledMatch{}))
+}
+
+func TestScheduleKey_SameTeam1_SortsByTeam2(t *testing.T) {
+	// Exercises the team2 comparison branch in the sort comparator.
+	a := []sources.ScheduledMatch{
+		{Team1: "Team A", Team2: "Zeta", EpochTime: 1000},
+		{Team1: "Team A", Team2: "Alpha", EpochTime: 2000},
+	}
+	b := []sources.ScheduledMatch{
+		{Team1: "Team A", Team2: "Alpha", EpochTime: 2000},
+		{Team1: "Team A", Team2: "Zeta", EpochTime: 1000},
+	}
+	assert.Equal(t, scheduleKey(a), scheduleKey(b))
 }
 
 // endregion

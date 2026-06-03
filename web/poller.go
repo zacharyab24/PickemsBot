@@ -7,20 +7,23 @@ import (
 	"pickems-bot/app"
 	"pickems-bot/metrics"
 	"pickems-bot/sources"
+	"sort"
+	"strings"
 	"time"
 )
 
 // Poller represents the poller used for determining when to update when using PandaScore as a dataset
 // since PandaScore does not support callbacks
 type Poller struct {
-	app          *app.App
-	seriesID     int
-	tournamentID int
-	apiKey       string
-	apiURL       string
-	interval     time.Duration
-	knownStatus  map[string]string // matchID -> last known status
-	log          *slog.Logger
+	app              *app.App
+	seriesID         int
+	tournamentID     int
+	apiKey           string
+	apiURL           string
+	interval         time.Duration
+	knownStatus      map[string]string // matchID -> last known status
+	knownScheduleKey string            // fingerprint of last stored schedule
+	log              *slog.Logger
 }
 
 // logger returns the poller's logger, falling back to the global default when none was injected.
@@ -99,6 +102,18 @@ func (p *Poller) tick() bool {
 		p.knownStatus[matchNode.ID] = matchNode.Status
 	}
 
+	scheduledMatches, err := sources.ParsePandaScoreSchedule(raw, p.tournamentID)
+	if err != nil {
+		p.logger().Warn("failed to parse PandaScore schedule, skipping schedule update", "error", fmt.Errorf("poller.tick: %w", err))
+	} else if key := scheduleKey(scheduledMatches); key != p.knownScheduleKey {
+		if err := p.app.StoreSchedule(scheduledMatches); err != nil {
+			p.logger().Warn("failed to store match schedule", "error", fmt.Errorf("poller.tick: %w", err))
+		} else {
+			p.logger().Info("match schedule updated", "matches", len(scheduledMatches))
+			p.knownScheduleKey = key
+		}
+	}
+
 	p.logger().Debug("poller tick complete", "matches_checked", len(matchNodes), "finished_transition", finishedTransition)
 	metrics.PollerTicksTotal.Inc()
 
@@ -115,4 +130,29 @@ func (p *Poller) tick() bool {
 	}
 
 	return true
+}
+
+// scheduleKey returns a fingerprint of a scheduled match slice. Two slices with the
+// same teams and start times (regardless of order) produce the same key, so the
+// poller can detect real changes without writing to the DB every tick.
+func scheduleKey(matches []sources.ScheduledMatch) string {
+	type entry struct {
+		team1, team2 string
+		epoch        int64
+	}
+	entries := make([]entry, len(matches))
+	for i, m := range matches {
+		entries[i] = entry{m.Team1, m.Team2, m.EpochTime}
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].team1 != entries[j].team1 {
+			return entries[i].team1 < entries[j].team1
+		}
+		return entries[i].team2 < entries[j].team2
+	})
+	var b strings.Builder
+	for _, e := range entries {
+		fmt.Fprintf(&b, "%s|%s|%d;", e.team1, e.team2, e.epoch)
+	}
+	return b.String()
 }

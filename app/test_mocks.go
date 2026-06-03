@@ -39,12 +39,17 @@ type MockStore struct {
 	GetAllUserPredictionsError      error
 	FetchMatchScheduleError         error
 	StoreMatchScheduleError         error
+	StoreMatchScheduleCallCount     int
 	FetchAndUpdateMatchResultsError error
 	StoreLeaderboardError           error
 	FetchLeaderboardFromDBError     error
 	FetchVrsDataFromDBError         error
-	FetchAndStoreScheduleError      error
-	PingError                       error
+	FetchAndStoreScheduleError       error
+	FetchMatchNodesFromDbError       error
+	PingError                        error
+
+	MatchNodes []sources.MatchNode
+	MatchKind  tournament.Kind
 
 	// Leaderboard storage
 	Leaderboard []store.LeaderboardEntry
@@ -160,6 +165,7 @@ func (m *MockStore) FetchMatchSchedule() ([]sources.ScheduledMatch, error) {
 
 // StoreMatchSchedule mock implementation
 func (m *MockStore) StoreMatchSchedule(matches []sources.ScheduledMatch) error {
+	m.StoreMatchScheduleCallCount++
 	if m.StoreMatchScheduleError != nil {
 		return m.StoreMatchScheduleError
 	}
@@ -238,7 +244,10 @@ func (m *MockStore) FetchAndUpdateMatchResults() error {
 
 // FetchMatchNodesFromDb mock implementation
 func (m *MockStore) FetchMatchNodesFromDb() ([]sources.MatchNode, tournament.Kind, error) {
-	return nil, "", nil
+	if m.FetchMatchNodesFromDbError != nil {
+		return nil, "", m.FetchMatchNodesFromDbError
+	}
+	return m.MatchNodes, m.MatchKind, nil
 }
 
 // StoreLeaderboard mock implementation

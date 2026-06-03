@@ -369,13 +369,17 @@ func (a *App) GetUpcomingMatches() ([]sources.ScheduledMatch, error) {
 		return nil, err
 	}
 
+	now := time.Now().Unix()
 	var matches []sources.ScheduledMatch
 	for _, match := range scheduledMatches {
-		// upcomingMatches contains all matches for a round in tournament, not just future ones, however in this function
-		// we only care about the ones in the future, so if the start time is before now, don't add it to the response
-		// we can't rely on []sources.ScheduledMatch as this only gets the data whenever PopulateScheduledMatches is run
-		if match.EpochTime < time.Now().Unix() || match.Finished {
+		if match.Finished {
 			continue
+		}
+		// A match whose start time has passed but isn't finished is live.
+		// Sources that provide explicit status (e.g. PandaScore "running") set Live directly;
+		// for sources without a live flag we infer it from the clock.
+		if match.EpochTime < now {
+			match.Live = true
 		}
 		matches = append(matches, match)
 	}
@@ -427,6 +431,20 @@ func (a *App) PopulateMatches(scheduleOnly bool) error {
 		}
 	}
 	return nil
+}
+
+// UpdateMatchSchedule is a rate-limited wrapper around Store.FetchAndStoreSchedule.
+func (a *App) UpdateMatchSchedule() error {
+	if !a.Allow() {
+		return fmt.Errorf("rate limiter exceeded, skipping match schedule update")
+	}
+	return a.Store.FetchAndStoreSchedule()
+}
+
+// StoreSchedule persists a pre-fetched schedule slice. Used by the PandaScore poller
+// to reuse already-fetched data instead of making a second API call.
+func (a *App) StoreSchedule(matches []sources.ScheduledMatch) error {
+	return a.Store.StoreMatchSchedule(matches)
 }
 
 // UpdateMatchResults is a wrapper function for App.Store.FetchAndUpdateMatchResults() that enforces rate limiting

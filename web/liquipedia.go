@@ -61,6 +61,9 @@ func (s *Server) LiquipediaWebhookHandler(w http.ResponseWriter, r *http.Request
 
 	// Kick async pipeline – call into your existing packages (/api, /bot, etc)
 	go func(e LiquipediaEvent) {
+		if err := s.api.UpdateMatchSchedule(); err != nil {
+			s.logger().Warn("update match schedule failed", "error", fmt.Errorf("webhook pipeline: %w", err))
+		}
 		if err := s.api.UpdateMatchResults(); err != nil {
 			s.logger().Error("update match results failed", "error", fmt.Errorf("webhook pipeline: %w", err))
 			return

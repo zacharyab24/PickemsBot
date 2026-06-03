@@ -212,6 +212,7 @@ func parsePandaScoreScheduledMatch(result interface{}) (*ScheduledMatch, error) 
 		return nil, fmt.Errorf("error mapping status")
 	}
 	isFinished := status == "finished"
+	isLive := status == "running"
 
 	scheduledAt, ok := match["scheduled_at"].(string)
 	if !ok {
@@ -276,5 +277,6 @@ func parsePandaScoreScheduledMatch(result interface{}) (*ScheduledMatch, error) 
 		BestOf:    strconv.FormatFloat(bestOfFloat, 'f', -1, 64),
 		StreamURL: streamURL,
 		Finished:  isFinished,
+		Live:      isLive,
 	}, nil
 }

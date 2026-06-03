@@ -354,19 +354,51 @@ func (b *Bot) upcomingMatchesHandler(session DiscordSession, message *discordgo.
 		return
 	}
 
-	var fields []*discordgo.MessageEmbedField
+	var liveFields, upcomingFields []*discordgo.MessageEmbedField
 	for _, match := range matches {
 		if match.Team1 == "TBD" || match.Team2 == "TBD" {
 			continue
 		}
-		value := fmt.Sprintf("<t:%d:F> — <t:%d:R>", match.EpochTime, match.EpochTime)
+		name := fmt.Sprintf("**%s** vs **%s** (Bo%s)", match.Team1, match.Team2, match.BestOf)
+		var value string
+		if match.Live {
+			value = "**LIVE**"
+		} else {
+			value = fmt.Sprintf("<t:%d:F> — <t:%d:R>", match.EpochTime, match.EpochTime)
+		}
 		if match.StreamURL != "" {
 			value += fmt.Sprintf("\n📺 [Watch live](%s)", match.StreamURL)
 		}
-		fields = append(fields, &discordgo.MessageEmbedField{
-			Name:  fmt.Sprintf("**%s** vs **%s** (Bo%s)", match.Team1, match.Team2, match.BestOf),
-			Value: value,
-		})
+		field := &discordgo.MessageEmbedField{Name: name, Value: value}
+		if match.Live {
+			liveFields = append(liveFields, field)
+		} else {
+			upcomingFields = append(upcomingFields, field)
+		}
+	}
+
+	var fields []*discordgo.MessageEmbedField
+	if len(liveFields) > 0 {
+		fields = append(fields, &discordgo.MessageEmbedField{Name: "🔴  Live Now", Value: "\u200b"})
+		fields = append(fields, liveFields...)
+	}
+	if len(upcomingFields) > 0 {
+		if len(liveFields) > 0 {
+			fields = append(fields, &discordgo.MessageEmbedField{Name: "Upcoming", Value: "\u200b"})
+		}
+		fields = append(fields, upcomingFields...)
+	}
+
+	if len(fields) == 0 {
+		embed := &discordgo.MessageEmbed{
+			Title:       "Upcoming Matches",
+			Description: "No upcoming matches at this time.",
+			Color:       green,
+		}
+		if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
+			b.logger().Error("failed to send upcoming-matches embed", "error", fmt.Errorf("upcomingMatchesHandler: %w", err))
+		}
+		return
 	}
 
 	embed := &discordgo.MessageEmbed{

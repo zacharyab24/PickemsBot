@@ -5,6 +5,7 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,6 +18,19 @@ import (
 
 // notStartedMatchJSON is a minimal valid PandaScore response with no finished matches.
 const notStartedMatchJSON = `[{"id": 1, "name": "Round 1", "status": "not_started", "opponents": [], "winner": null, "results": []}]`
+
+// scheduledMatchJSON is a minimal PandaScore response with a valid schedule (includes scheduled_at).
+const scheduledMatchJSON = `[{
+  "id": 1, "name": "Round 1", "status": "not_started",
+  "scheduled_at": "2099-01-01T12:00:00Z",
+  "number_of_games": 3,
+  "opponents": [
+    {"opponent": {"name": "Alpha", "id": 1}},
+    {"opponent": {"name": "Beta",  "id": 2}}
+  ],
+  "winner": null, "results": [], "streams_list": [],
+  "tournament_id": 0
+}]`
 
 // finishedMatchJSON is a minimal PandaScore response where match 1 is finished.
 const finishedMatchJSON = `[{"id": 1, "name": "Round 1", "status": "finished",
@@ -138,6 +152,63 @@ func TestTick_FinishedTransition_TriggersUpdateAndReturnsTrue(t *testing.T) {
 	result := p.tick()
 	assert.True(t, result, "tick() must return true after processing a finished transition")
 	assert.Equal(t, "finished", p.knownStatus["1"])
+}
+
+func TestTick_ScheduleChanged_StoresSchedule(t *testing.T) {
+	// On first tick with valid schedule data the key is empty → schedule is stored.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(scheduledMatchJSON))
+	}))
+	defer srv.Close()
+
+	mockStore := app.NewMockStore("swiss", "test_round")
+	a := app.NewTestApp(mockStore)
+	p := newMockPoller(a, srv.URL)
+
+	result := p.tick()
+
+	assert.True(t, result)
+	assert.NotEmpty(t, p.knownScheduleKey)
+}
+
+func TestTick_ScheduleUnchanged_DoesNotStoreAgain(t *testing.T) {
+	// Second tick with identical data should not write to the store again.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(scheduledMatchJSON))
+	}))
+	defer srv.Close()
+
+	mockStore := app.NewMockStore("swiss", "test_round")
+	a := app.NewTestApp(mockStore)
+	p := newMockPoller(a, srv.URL)
+
+	p.tick() // first tick — stores schedule
+	writeCountAfterFirst := mockStore.StoreMatchScheduleCallCount
+
+	p.tick() // second tick — key unchanged, should not store again
+	assert.Equal(t, writeCountAfterFirst, mockStore.StoreMatchScheduleCallCount)
+}
+
+func TestTick_ScheduleStoreError_KeyNotUpdated(t *testing.T) {
+	// When StoreSchedule fails the knownScheduleKey must not advance —
+	// so the next tick retries the write.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(scheduledMatchJSON))
+	}))
+	defer srv.Close()
+
+	mockStore := app.NewMockStore("swiss", "test_round")
+	mockStore.StoreMatchScheduleError = fmt.Errorf("db error")
+	a := app.NewTestApp(mockStore)
+	p := newMockPoller(a, srv.URL)
+
+	result := p.tick()
+
+	assert.True(t, result)
+	assert.Empty(t, p.knownScheduleKey)
 }
 
 // endregion

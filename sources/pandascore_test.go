@@ -285,7 +285,28 @@ func TestParsePandaScoreSchedule_FinishedMatch(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, matches, 1)
 	assert.True(t, matches[0].Finished)
+	assert.False(t, matches[0].Live)
 	assert.Equal(t, "1", matches[0].BestOf)
+}
+
+func TestParsePandaScoreSchedule_RunningMatch(t *testing.T) {
+	json := `[{
+		"status": "running",
+		"scheduled_at": "2025-11-10T12:00:00Z",
+		"number_of_games": 3,
+		"opponents": [
+			{"opponent": {"name": "Team X"}},
+			{"opponent": {"name": "Team Y"}}
+		],
+		"streams_list": []
+	}]`
+
+	matches, err := ParsePandaScoreSchedule(json, 0)
+
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+	assert.False(t, matches[0].Finished)
+	assert.True(t, matches[0].Live)
 }
 
 // endregion

@@ -170,6 +170,11 @@ func TestResolveStage_MultiStagePicked(t *testing.T) {
 	assert.Equal(t, "Foo/Bar/Playoffs", page)
 }
 
+func TestResolveStage_MultiStage_InvalidInput_ReturnsError(t *testing.T) {
+	_, _, err := resolveStage("", []string{"Stage_1", "Stage_2"}, "Foo/Bar", strings.NewReader("abc\n"), &bytes.Buffer{})
+	assert.Error(t, err)
+}
+
 // endregion
 
 // region pickStage

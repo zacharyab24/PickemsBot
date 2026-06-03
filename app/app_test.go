@@ -231,6 +231,38 @@ func TestCheckPrediction_NoScheduledMatches(t *testing.T) {
 	}
 }
 
+func TestCheckPrediction_GetMatchResultsError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	mockStore.GetMatchResultsError = fmt.Errorf("results error")
+	mockStore.Predictions["user1"] = models.Prediction{UserID: "user1", Format: "swiss", Round: "test_round"}
+
+	api := &App{Store: mockStore}
+	user := models.User{UserID: "user1", Username: "testuser"}
+
+	_, err := api.CheckPrediction(user)
+	if err == nil || !strings.Contains(err.Error(), "results error") {
+		t.Errorf("Expected match results error, got: %v", err)
+	}
+}
+
+func TestMockStore_SetScheduleError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetScheduleError(fmt.Errorf("test error"))
+	if mockStore.FetchMatchScheduleError == nil {
+		t.Error("Expected FetchMatchScheduleError to be set")
+	}
+}
+
+func TestMockStore_SetEliminationResults(t *testing.T) {
+	mockStore := NewMockStore("single-elimination", "test_round")
+	results := map[string]models.TeamProgress{"Team A": {Round: "final", Status: "advanced"}}
+	mockStore.SetEliminationResults(results)
+	if mockStore.MatchResults == nil {
+		t.Error("Expected MatchResults to be set")
+	}
+}
+
 // endregion
 
 // region GenerateLeaderboard tests
@@ -305,6 +337,27 @@ func TestGenerateLeaderboard_NoScheduledMatches(t *testing.T) {
 	err := api.GenerateLeaderboard()
 	if err == nil {
 		t.Error("Expected error when no scheduled matches, got nil")
+	}
+}
+
+func TestGenerateLeaderboard_GetMatchResultsError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	mockStore.GetMatchResultsError = fmt.Errorf("results fetch failed")
+
+	api := &App{Store: mockStore}
+
+	err := api.GenerateLeaderboard()
+	if err == nil || !strings.Contains(err.Error(), "results fetch failed") {
+		t.Errorf("Expected match results error, got: %v", err)
+	}
+}
+
+func TestNewTestApp_HasRateLimiter(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	a := NewTestApp(mockStore)
+	if !a.Allow() {
+		t.Error("Expected NewTestApp to return an App with a working rate limiter")
 	}
 }
 
@@ -597,7 +650,7 @@ func TestGetUpcomingMatches_Success(t *testing.T) {
 	}
 }
 
-func TestGetUpcomingMatches_FiltersPastMatches(t *testing.T) {
+func TestGetUpcomingMatches_LiveMatchIncluded(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 
 	pastTime := time.Now().Add(-24 * time.Hour).Unix()
@@ -629,12 +682,28 @@ func TestGetUpcomingMatches_FiltersPastMatches(t *testing.T) {
 		t.Errorf("Expected no error, got: %s", err.Error())
 	}
 
-	if len(matches) != 1 {
-		t.Errorf("Expected 1 upcoming match, got %d", len(matches))
+	if len(matches) != 2 {
+		t.Errorf("Expected 2 matches (1 live + 1 upcoming), got %d", len(matches))
 	}
 
-	if matches[0].Team1 != "Team C" && matches[0].Team2 != "Team C" {
-		t.Error("Expected only future match to be returned")
+	if !matches[0].Live {
+		t.Error("Expected past unfinished match to be marked as live")
+	}
+	if matches[1].Live {
+		t.Error("Expected future match to not be marked as live")
+	}
+}
+
+func TestGetUpcomingMatches_FetchScheduleError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	mockStore.FetchMatchScheduleError = fmt.Errorf("fetch failed")
+
+	api := &App{Store: mockStore}
+
+	_, err := api.GetUpcomingMatches()
+	if err == nil || !strings.Contains(err.Error(), "fetch failed") {
+		t.Errorf("Expected fetch error, got: %v", err)
 	}
 }
 
@@ -764,6 +833,73 @@ func TestPopulateMatches_ResultsError(t *testing.T) {
 	err := api.PopulateMatches(false)
 	if err == nil {
 		t.Error("expected error when results fetch fails, got nil")
+	}
+}
+
+// endregion
+
+// region UpdateMatchSchedule tests
+
+func TestUpdateMatchSchedule_Success(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	api := &App{
+		Store:       mockStore,
+		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10),
+	}
+	if err := api.UpdateMatchSchedule(); err != nil {
+		t.Errorf("Expected no error, got: %s", err.Error())
+	}
+}
+
+func TestUpdateMatchSchedule_RateLimitExceeded(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	limiter := rate.NewLimiter(rate.Every(time.Hour), 1)
+	limiter.Allow()
+	api := &App{Store: mockStore, rateLimiter: limiter}
+
+	err := api.UpdateMatchSchedule()
+	if err == nil || !strings.Contains(err.Error(), "rate limiter exceeded") {
+		t.Errorf("Expected rate limiter error, got: %v", err)
+	}
+}
+
+func TestUpdateMatchSchedule_StoreError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.FetchAndStoreScheduleError = fmt.Errorf("schedule fetch failed")
+	api := &App{
+		Store:       mockStore,
+		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10),
+	}
+
+	err := api.UpdateMatchSchedule()
+	if err == nil || !strings.Contains(err.Error(), "schedule fetch failed") {
+		t.Errorf("Expected store error, got: %v", err)
+	}
+}
+
+// endregion
+
+// region StoreSchedule tests
+
+func TestStoreSchedule_Success(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	api := &App{Store: mockStore}
+	matches := []sources.ScheduledMatch{
+		{Team1: "Team A", Team2: "Team B", EpochTime: 1000, BestOf: "3"},
+	}
+	if err := api.StoreSchedule(matches); err != nil {
+		t.Errorf("Expected no error, got: %s", err.Error())
+	}
+}
+
+func TestStoreSchedule_StoreError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.StoreMatchScheduleError = fmt.Errorf("db write failed")
+	api := &App{Store: mockStore}
+
+	err := api.StoreSchedule([]sources.ScheduledMatch{{Team1: "A", Team2: "B", EpochTime: 1000, BestOf: "3"}})
+	if err == nil || !strings.Contains(err.Error(), "db write failed") {
+		t.Errorf("Expected store error, got: %v", err)
 	}
 }
 
