@@ -7,6 +7,7 @@
 package app
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -18,6 +19,7 @@ import (
 	"pickems-bot/sources"
 	"pickems-bot/store"
 	"pickems-bot/tournament"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -93,6 +95,7 @@ func (a *App) Allow() bool {
 // It receives a user struct that contains userID and userName, and a list of teams the user wishes to set,
 // and strings containing dbName, collName and round.
 // It updates the user's predictions in the database, or returns an error if it occurs.
+// As a side effect, a successful set also triggers the leaderboard being updated
 func (a *App) SetUserPrediction(user models.User, inputTeams []string, round string) error {
 	err := a.Store.EnsureScheduledMatches()
 	if err != nil {
@@ -156,6 +159,13 @@ func (a *App) SetUserPrediction(user models.User, inputTeams []string, round str
 	if err != nil {
 		return err
 	}
+
+	// Update the leaderboard with the new user's prediction
+	go func() {
+		if err := a.GenerateLeaderboard(); err != nil {
+			a.logger().Error("leaderboard regen after set failed", "error", err)
+		}
+	}()
 
 	return nil
 }
@@ -404,6 +414,11 @@ func (a *App) GetUpcomingMatches() ([]sources.ScheduledMatch, error) {
 		}
 		matches = append(matches, match)
 	}
+
+	slices.SortFunc(matches, func(a, b sources.ScheduledMatch) int {
+		return cmp.Compare(a.EpochTime, b.EpochTime)
+	})
+
 	return matches, nil
 }
 

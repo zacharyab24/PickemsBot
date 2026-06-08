@@ -54,7 +54,8 @@ type MockStore struct {
 	MatchKind  tournament.Kind
 
 	// Leaderboard storage
-	Leaderboard []store.LeaderboardEntry
+	Leaderboard       []store.LeaderboardEntry
+	LeaderboardStored chan struct{}
 
 	// Database and Round info
 	DatabaseName string
@@ -272,6 +273,12 @@ func (m *MockStore) StoreLeaderboard(leaderboard store.Leaderboard) error {
 		return m.StoreLeaderboardError
 	}
 	m.Leaderboard = leaderboard.Entries
+	if m.LeaderboardStored != nil {
+		select {
+		case m.LeaderboardStored <- struct{}{}:
+		default:
+		}
+	}
 	return nil
 }
 

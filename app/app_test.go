@@ -459,6 +459,37 @@ func TestGetLeaderboard_NoLeaderboard(t *testing.T) {
 	}
 }
 
+func TestSetUserPrediction_TriggersLeaderboardRegen(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	mockStore.LeaderboardStored = make(chan struct{}, 1)
+
+	// Seed a prediction so GenerateLeaderboard has something to work with
+	mockStore.Predictions["user1"] = models.Prediction{
+		UserID: "user1", Username: "player1",
+		Format: "swiss", Round: "test_round",
+		Win:     []string{"Team A", "Team B"},
+		Advance: []string{"Team C", "Team D", "Team E", "Team F", "Team G", "Team H"},
+		Lose:    []string{"Team I", "Team J"},
+	}
+
+	api := &App{Store: mockStore}
+	user := models.User{UserID: "user1", Username: "player1"}
+	teams := []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
+
+	err := api.SetUserPrediction(user, teams, "test_round")
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	select {
+	case <-mockStore.LeaderboardStored:
+		// leaderboard was regenerated
+	case <-time.After(time.Second):
+		t.Fatal("leaderboard was not regenerated after successful set")
+	}
+}
+
 // endregion
 
 // region GetTeams tests
@@ -794,6 +825,48 @@ func TestGetUpcomingMatches_FiltersFinishedMatches(t *testing.T) {
 	if len(matches) != 0 {
 		t.Error("Expected no matches when all are finished")
 	}
+}
+
+func TestGetUpcomingMatches_DisplaysInChronologicalOrder(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+
+	time1 := time.Now().Add(24 * time.Hour).Unix()
+	match1 := sources.ScheduledMatch{
+		Team1:     "Team A",
+		Team2:     "Team B",
+		BestOf:    "3",
+		EpochTime: time1,
+		StreamURL: "BLAST",
+		Finished:  false,
+	}
+
+	time2 := time.Now().Add(25 * time.Hour).Unix()
+	match2 := sources.ScheduledMatch{
+		Team1:     "Team C",
+		Team2:     "Team D",
+		BestOf:    "3",
+		EpochTime: time2,
+		StreamURL: "BLAST",
+		Finished:  false,
+	}
+
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{match1, match2})
+
+	api := &App{Store: mockStore}
+
+	matches, err := api.GetUpcomingMatches()
+	if err != nil {
+		t.Errorf("Expected no error, got: %s", err.Error())
+	}
+
+	if len(matches) != 2 {
+		t.Error("Expected exactly 2 matches to be seeded")
+	}
+
+	if matches[0].EpochTime > matches[1].EpochTime {
+		t.Error("Expected matches to be sorted chronologically")
+	}
+
 }
 
 // endregion
