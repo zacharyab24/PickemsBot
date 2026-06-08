@@ -459,6 +459,37 @@ func TestGetLeaderboard_NoLeaderboard(t *testing.T) {
 	}
 }
 
+func TestSetUserPrediction_TriggersLeaderboardRegen(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	mockStore.LeaderboardStored = make(chan struct{}, 1)
+
+	// Seed a prediction so GenerateLeaderboard has something to work with
+	mockStore.Predictions["user1"] = models.Prediction{
+		UserID: "user1", Username: "player1",
+		Format: "swiss", Round: "test_round",
+		Win:     []string{"Team A", "Team B"},
+		Advance: []string{"Team C", "Team D", "Team E", "Team F", "Team G", "Team H"},
+		Lose:    []string{"Team I", "Team J"},
+	}
+
+	api := &App{Store: mockStore}
+	user := models.User{UserID: "user1", Username: "player1"}
+	teams := []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
+
+	err := api.SetUserPrediction(user, teams, "test_round")
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	select {
+	case <-mockStore.LeaderboardStored:
+		// leaderboard was regenerated
+	case <-time.After(time.Second):
+		t.Fatal("leaderboard was not regenerated after successful set")
+	}
+}
+
 // endregion
 
 // region GetTeams tests
