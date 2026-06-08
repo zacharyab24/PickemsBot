@@ -7,6 +7,7 @@
 package app
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -18,6 +19,7 @@ import (
 	"pickems-bot/sources"
 	"pickems-bot/store"
 	"pickems-bot/tournament"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -404,6 +406,11 @@ func (a *App) GetUpcomingMatches() ([]sources.ScheduledMatch, error) {
 		}
 		matches = append(matches, match)
 	}
+
+	slices.SortFunc(matches, func(a, b sources.ScheduledMatch) int {
+		return cmp.Compare(a.EpochTime, b.EpochTime)
+	})
+
 	return matches, nil
 }
 

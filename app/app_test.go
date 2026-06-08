@@ -796,6 +796,48 @@ func TestGetUpcomingMatches_FiltersFinishedMatches(t *testing.T) {
 	}
 }
 
+func TestGetUpcomingMatches_DisplaysInChronologicalOrder(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+
+	time1 := time.Now().Add(24 * time.Hour).Unix()
+	match1 := sources.ScheduledMatch{
+		Team1:     "Team A",
+		Team2:     "Team B",
+		BestOf:    "3",
+		EpochTime: time1,
+		StreamURL: "BLAST",
+		Finished:  false,
+	}
+
+	time2 := time.Now().Add(25 * time.Hour).Unix()
+	match2 := sources.ScheduledMatch{
+		Team1:     "Team C",
+		Team2:     "Team D",
+		BestOf:    "3",
+		EpochTime: time2,
+		StreamURL: "BLAST",
+		Finished:  false,
+	}
+
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{match1, match2})
+
+	api := &App{Store: mockStore}
+
+	matches, err := api.GetUpcomingMatches()
+	if err != nil {
+		t.Errorf("Expected no error, got: %s", err.Error())
+	}
+
+	if len(matches) != 2 {
+		t.Error("Expected exactly 2 matches to be seeded")
+	}
+
+	if matches[0].EpochTime > matches[1].EpochTime {
+		t.Error("Expected matches to be sorted chronologically")
+	}
+
+}
+
 // endregion
 
 // region GetTournamentInfo tests
