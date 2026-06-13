@@ -336,19 +336,40 @@ func TestLeaderboard_Success(t *testing.T) {
 func TestSetPredictions_Swiss_Success(t *testing.T) {
 	bot := createTestBot("swiss")
 	mockSession := NewMockDiscordSession()
-	// Swiss format requires 10 teams: 2 3-0, 6 advance, 2 0-3
+	// 10 unique valid teams: positions 0-1 → 3-0, 2-7 → Advance, 8-9 → 0-3
 	message := createMockMessage(
-		"$set \"Team A\" \"Team B\" \"Team C\" \"Team D\" \"Team E\" \"Team F\" \"Team A\" \"Team B\" \"Team C\" \"Team D\"",
+		"$set \"Team A\" \"Team B\" \"Team C\" \"Team D\" \"Team E\" \"Team F\" \"Team G\" \"Team H\" \"Team I\" \"Team J\"",
 		"user123", "TestUser", "channel123",
 	)
 
 	bot.setPredictionsHandler(mockSession, message)
 
-	require.Len(t, mockSession.SentMessages, 1)
-	msg := mockSession.GetLastMessage()
-	assert.Equal(t, "channel123", msg.ChannelID)
-	// Should either succeed or give meaningful error
-	assert.NotEmpty(t, msg.Content)
+	require.Len(t, mockSession.SentEmbeds, 1)
+	embed := mockSession.GetLastEmbed().Embed
+	assert.Equal(t, "channel123", mockSession.GetLastEmbed().ChannelID)
+	assert.Equal(t, "Pick'Ems Updated", embed.Title)
+	assert.Contains(t, embed.Description, "TestUser")
+}
+
+func TestSetPredictions_Swiss_EmbedFieldsMatchPrediction(t *testing.T) {
+	bot := createTestBot("swiss")
+	mockSession := NewMockDiscordSession()
+	message := createMockMessage(
+		"$set \"Team A\" \"Team B\" \"Team C\" \"Team D\" \"Team E\" \"Team F\" \"Team G\" \"Team H\" \"Team I\" \"Team J\"",
+		"user123", "TestUser", "channel123",
+	)
+
+	bot.setPredictionsHandler(mockSession, message)
+
+	require.Len(t, mockSession.SentEmbeds, 1)
+	fields := mockSession.GetLastEmbed().Embed.Fields
+	require.Len(t, fields, 3)
+	assert.Equal(t, "3-0", fields[0].Name)
+	assert.Equal(t, "Team A, Team B", fields[0].Value)
+	assert.Equal(t, "Advance", fields[1].Name)
+	assert.Equal(t, "Team C, Team D, Team E, Team F, Team G, Team H", fields[1].Value)
+	assert.Equal(t, "0-3", fields[2].Name)
+	assert.Equal(t, "Team I, Team J", fields[2].Value)
 }
 
 func TestSetPredictions_InvalidInput(t *testing.T) {
