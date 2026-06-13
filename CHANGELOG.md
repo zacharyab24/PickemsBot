@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.7
+- fix: sort upcoming matches chronologically in `$upcoming`
+- fix: leaderboard now updates immediately when `$set` is called
+- feat: `$set` now displays team names when confirming a pick, making it easier to verify fuzzy-matched selections
+- fix: fuzzy match conflict errors are now more transparent, surfacing the ambiguous candidates to the user
+- fix: correct Swiss bracket rendering for ongoing tournaments (in-progress matches no longer break the bracket layout)
+- chore: updated pickems-renderer dependency to latest
+
 ## 3.6
 `$check` lookup by username:
 - `$check <username>` now looks up another user's Pick'Ems without pinging them. The lookup is case-insensitive, so `$check pickemsbot` and `$check PickemsBot` both work. `$check` with no argument retains its existing behaviour (shows your own picks).
