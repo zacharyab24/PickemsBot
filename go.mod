@@ -10,7 +10,7 @@ require (
 	github.com/lithammer/fuzzysearch v1.1.8
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
-	github.com/zacharyab24/pickems-renderer v0.0.0-20260517084507-0fbb66986caf
+	github.com/zacharyab24/pickems-renderer v0.0.0-20260613043422-418e960e18a3
 	go.mongodb.org/mongo-driver v1.17.3
 	golang.org/x/time v0.14.0
 )

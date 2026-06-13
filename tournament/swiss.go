@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 
 	"pickems-bot/models"
 	"pickems-bot/sources"
@@ -290,6 +291,46 @@ func calculateSwissScores(matchNodes []sources.MatchNode) (map[string]string, er
 	}
 
 	return scores, nil
+}
+
+// NormalizeSwissSections rewrites the Section field on each node to a canonical
+// "Round N" label so the DB representation is identical regardless of data source.
+//
+// Supported input formats:
+//   - "Round N"                  → "Round N"  (already canonical)
+//   - "Round N: Team vs Team"    → "Round N"  (PandaScore per-match labels)
+//   - "W:L" record format        → "Round N"  where N = W+L+1  (Liquipedia)
+func NormalizeSwissSections(nodes []sources.MatchNode) []sources.MatchNode {
+	out := make([]sources.MatchNode, len(nodes))
+	for i, n := range nodes {
+		n.Section = canonicalSwissSection(n.Section)
+		out[i] = n
+	}
+	return out
+}
+
+func canonicalSwissSection(section string) string {
+	// "Round N" or "Round N: ..." — keep just "Round N"
+	if strings.HasPrefix(section, "Round ") {
+		after := strings.TrimPrefix(section, "Round ")
+		numStr := after
+		if idx := strings.IndexByte(after, ':'); idx >= 0 {
+			numStr = strings.TrimSpace(after[:idx])
+		}
+		if n, err := strconv.Atoi(numStr); err == nil && n > 0 {
+			return fmt.Sprintf("Round %d", n)
+		}
+	}
+	// "W:L" record format: N = W + L + 1
+	parts := strings.SplitN(section, ":", 2)
+	if len(parts) == 2 {
+		w, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+		l, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err1 == nil && err2 == nil {
+			return fmt.Sprintf("Round %d", w+l+1)
+		}
+	}
+	return section
 }
 
 // setSwissPredictions splits a flat prediction list into the three Swiss
