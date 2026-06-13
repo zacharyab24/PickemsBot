@@ -140,12 +140,15 @@ func (a *App) SetUserPrediction(user models.User, inputTeams []string, round str
 	}
 
 	// Check for unique team names
-	seen := make(map[string]bool)
-	for _, team := range teams {
-		if seen[team] {
-			return models.Prediction{}, fmt.Errorf("'%s' entered multiple times, stored prediction was not updated", team)
+	seen := make(map[string]string)
+	for i, team := range teams {
+		if original, exists := seen[team]; exists {
+			if original == inputTeams[i] {
+				return models.Prediction{}, fmt.Errorf("'%s' entered multiple times, stored prediction was not updated", team)
+			}
+			return models.Prediction{}, fmt.Errorf("'%s' and '%s' both resolved to '%s'. Please enter a more specific name for one of them", original, inputTeams[i], team)
 		}
-		seen[team] = true
+		seen[team] = inputTeams[i]
 	}
 
 	// Generate prediction struct

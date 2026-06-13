@@ -132,6 +132,26 @@ func TestSetUserPrediction_DuplicateTeams(t *testing.T) {
 	}
 }
 
+func TestSetUserPrediction_FuzzyCollision(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+
+	api := &App{Store: mockStore}
+
+	user := models.User{UserID: "user1", Username: "testuser"}
+	// "Team A" and "team a" are different inputs that both fuzzy-resolve to "Team A"
+	teams := []string{"Team A", "team a", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
+
+	_, err := api.SetUserPrediction(user, teams, "test_round")
+	if err == nil {
+		t.Error("Expected error for fuzzy collision, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "both resolved to") {
+		t.Errorf("Expected error about fuzzy collision, got: %s", err.Error())
+	}
+}
+
 func TestSetUserPrediction_NoScheduledMatches(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	// Don't set scheduled matches
