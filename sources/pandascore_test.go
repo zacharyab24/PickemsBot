@@ -60,6 +60,47 @@ func TestParsePandaScoreMatch_FinishedStatus(t *testing.T) {
 	assert.Equal(t, "2-0", node.Score)
 }
 
+// TestParsePandaScoreMatch_BO1GamesScore verifies that when games[0].results is
+// present it is preferred over match.results so BO1 CS matches show round counts
+// (e.g. 13-5) instead of series wins (1-0).
+func TestParsePandaScoreMatch_BO1GamesScore(t *testing.T) {
+	match := map[string]interface{}{
+		"id":     float64(99001),
+		"name":   "Round 1: 9z vs FLY",
+		"status": "finished",
+		"opponents": []interface{}{
+			map[string]interface{}{
+				"opponent": map[string]interface{}{"name": "9z Team", "id": float64(10)},
+			},
+			map[string]interface{}{
+				"opponent": map[string]interface{}{"name": "FlyQuest", "id": float64(11)},
+			},
+		},
+		"winner": map[string]interface{}{"name": "9z Team"},
+		// match-level: series wins (1-0) — should be ignored when games is present
+		"results": []interface{}{
+			map[string]interface{}{"team_id": float64(10), "score": float64(1)},
+			map[string]interface{}{"team_id": float64(11), "score": float64(0)},
+		},
+		// game-level: round counts from the map
+		"games": []interface{}{
+			map[string]interface{}{
+				"results": []interface{}{
+					map[string]interface{}{"team_id": float64(10), "score": float64(13)},
+					map[string]interface{}{"team_id": float64(11), "score": float64(9)},
+				},
+			},
+		},
+	}
+
+	node, err := parsePandaScoreMatch(match)
+
+	require.NoError(t, err)
+	assert.Equal(t, "9z Team", node.Winner)
+	assert.Equal(t, "13-9", node.Score)
+	assert.Equal(t, "Round 1: 9z vs FLY", node.Section)
+}
+
 func TestParsePandaScoreMatch_NotStartedStatus(t *testing.T) {
 	match := map[string]interface{}{
 		"id":     float64(12346),

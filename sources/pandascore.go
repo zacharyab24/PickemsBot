@@ -153,16 +153,35 @@ func parsePandaScoreMatch(result interface{}) (*MatchNode, error) {
 		}
 	}
 
-	// Cross-reference results by team_id to get score in Team1-Team2 order
+	// Build score string in Team1-Team2 order.
+	// For CS BO1 matches, match.results contains series wins (1-0), not round
+	// counts. The per-map round scores live in games[0].results instead.
 	score := ""
 	if isFinished {
 		scores := map[float64]int{}
-		if results, ok := match["results"].([]interface{}); ok {
-			for _, r := range results {
-				if entry, ok := r.(map[string]interface{}); ok {
-					tid, _ := entry["team_id"].(float64)
-					s, _ := entry["score"].(float64)
-					scores[tid] = int(s)
+		// Try games[0].results first (round-level scores for the first map).
+		if games, ok := match["games"].([]interface{}); ok && len(games) > 0 {
+			if game, ok := games[0].(map[string]interface{}); ok {
+				if results, ok := game["results"].([]interface{}); ok {
+					for _, r := range results {
+						if entry, ok := r.(map[string]interface{}); ok {
+							tid, _ := entry["team_id"].(float64)
+							s, _ := entry["score"].(float64)
+							scores[tid] = int(s)
+						}
+					}
+				}
+			}
+		}
+		// Fall back to match-level results if games data unavailable.
+		if len(scores) != 2 {
+			if results, ok := match["results"].([]interface{}); ok {
+				for _, r := range results {
+					if entry, ok := r.(map[string]interface{}); ok {
+						tid, _ := entry["team_id"].(float64)
+						s, _ := entry["score"].(float64)
+						scores[tid] = int(s)
+					}
 				}
 			}
 		}

@@ -285,3 +285,34 @@ func TestCalculateSwissScores_InvalidWinner(t *testing.T) {
 }
 
 // endregion
+
+// region NormalizeSwissSections
+
+func TestNormalizeSwissSections(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		// Already canonical
+		{"Round 1", "Round 1"},
+		{"Round 5", "Round 5"},
+		// PandaScore "Round N: Team vs Team" format
+		{"Round 1: 9z vs FLY", "Round 1"},
+		{"Round 3: AST vs TYLOO", "Round 3"},
+		// Liquipedia "W:L" format — N = W+L+1
+		{"0:0", "Round 1"},
+		{"1:0", "Round 2"},
+		{"0:1", "Round 2"},
+		{"2:1", "Round 4"},
+		{"2:2", "Round 5"},
+		// Unknown format passes through unchanged
+		{"Quarterfinals", "Quarterfinals"},
+	}
+	for _, c := range cases {
+		nodes := []sources.MatchNode{{Section: c.input}}
+		got := NormalizeSwissSections(nodes)
+		assert.Equal(t, c.want, got[0].Section, "input: %q", c.input)
+	}
+}
+
+// endregion

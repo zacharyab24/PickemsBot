@@ -113,6 +113,9 @@ func (s *Store) FetchAndUpdateMatchResults() error {
 	if err := s.StoreMatchResults(result); err != nil {
 		return err
 	}
+	if result.GetType() == tournament.Swiss {
+		nodes = tournament.NormalizeSwissSections(nodes)
+	}
 	if err := s.StoreMatchNodes(nodes, result.GetType()); err != nil {
 		s.logger().Warn("failed to store match nodes", "error", fmt.Errorf("FetchAndUpdateMatchResults: %w", err))
 	}
