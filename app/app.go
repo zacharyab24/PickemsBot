@@ -96,21 +96,21 @@ func (a *App) Allow() bool {
 // and strings containing dbName, collName and round.
 // It updates the user's predictions in the database, or returns an error if it occurs.
 // As a side effect, a successful set also triggers the leaderboard being updated
-func (a *App) SetUserPrediction(user models.User, inputTeams []string, round string) error {
+func (a *App) SetUserPrediction(user models.User, inputTeams []string, round string) (models.Prediction, error) {
 	err := a.Store.EnsureScheduledMatches()
 	if err != nil {
-		return err
+		return models.Prediction{}, err
 	}
 
 	// Get valid team names
 	validTeams, formatName, err := a.Store.GetValidTeams()
 	if err != nil {
-		return err
+		return models.Prediction{}, err
 	}
 
 	f, err := tournament.Get(formatName)
 	if err != nil {
-		return fmt.Errorf("unknown tournament format: %s", formatName)
+		return models.Prediction{}, fmt.Errorf("unknown tournament format: %s", formatName)
 	}
 
 	// Get number of required teams
@@ -118,7 +118,7 @@ func (a *App) SetUserPrediction(user models.User, inputTeams []string, round str
 
 	// Check num required teams is correct
 	if len(inputTeams) != requiredPredictions {
-		return fmt.Errorf("incorrect number of teams arguments, expected %d but got %d", requiredPredictions, len(inputTeams))
+		return models.Prediction{}, fmt.Errorf("incorrect number of teams arguments, expected %d but got %d", requiredPredictions, len(inputTeams))
 	}
 
 	// Fix formatting on input teams
@@ -136,28 +136,31 @@ func (a *App) SetUserPrediction(user models.User, inputTeams []string, round str
 		for i := range invalidTeams {
 			str.WriteString(fmt.Sprintf(" '%s'", invalidTeams[i]))
 		}
-		return errors.New(str.String())
+		return models.Prediction{}, errors.New(str.String())
 	}
 
 	// Check for unique team names
-	seen := make(map[string]bool)
-	for _, team := range teams {
-		if seen[team] {
-			return fmt.Errorf("'%s' entered multiple times, stored prediction was not updated", team)
+	seen := make(map[string]string)
+	for i, team := range teams {
+		if original, exists := seen[team]; exists {
+			if original == inputTeams[i] {
+				return models.Prediction{}, fmt.Errorf("'%s' entered multiple times, stored prediction was not updated", team)
+			}
+			return models.Prediction{}, fmt.Errorf("'%s' and '%s' both resolved to '%s'. Please enter a more specific name for one of them", original, inputTeams[i], team)
 		}
-		seen[team] = true
+		seen[team] = inputTeams[i]
 	}
 
 	// Generate prediction struct
 	prediction, err := f.GeneratePrediction(user, round, teams)
 	if err != nil {
-		return err
+		return models.Prediction{}, err
 	}
 
 	// Insert prediction to db
 	err = a.Store.StoreUserPrediction(user.UserID, prediction)
 	if err != nil {
-		return err
+		return models.Prediction{}, err
 	}
 
 	// Update the leaderboard with the new user's prediction
@@ -167,7 +170,7 @@ func (a *App) SetUserPrediction(user models.User, inputTeams []string, round str
 		}
 	}()
 
-	return nil
+	return prediction, nil
 }
 
 // CheckPrediction contains the logic required to check a prediction.

@@ -43,7 +43,7 @@ func TestSetUserPrediction_SwissFormat_Success(t *testing.T) {
 	user := models.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
 
-	err := api.SetUserPrediction(user, teams, "test_round")
+	_, err := api.SetUserPrediction(user, teams, "test_round")
 	if err != nil {
 		t.Errorf("Expected no error, got: %s", err.Error())
 	}
@@ -69,7 +69,7 @@ func TestSetUserPrediction_SingleEliminationFormat_Success(t *testing.T) {
 	user := models.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Team A", "Team B", "Team C", "Team D"} // 4 teams for 8-team bracket
 
-	err := api.SetUserPrediction(user, teams, "test_round")
+	_, err := api.SetUserPrediction(user, teams, "test_round")
 	if err != nil {
 		t.Errorf("Expected no error, got: %s", err.Error())
 	}
@@ -84,7 +84,7 @@ func TestSetUserPrediction_WrongNumberOfTeams(t *testing.T) {
 	user := models.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Team A", "Team B"} // Only 2 teams, need 10 for Swiss
 
-	err := api.SetUserPrediction(user, teams, "test_round")
+	_, err := api.SetUserPrediction(user, teams, "test_round")
 	if err == nil {
 		t.Error("Expected error for wrong number of teams, got nil")
 	}
@@ -103,7 +103,7 @@ func TestSetUserPrediction_InvalidTeamNames(t *testing.T) {
 	user := models.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Invalid1", "Invalid2", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
 
-	err := api.SetUserPrediction(user, teams, "test_round")
+	_, err := api.SetUserPrediction(user, teams, "test_round")
 	if err == nil {
 		t.Error("Expected error for invalid team names, got nil")
 	}
@@ -122,13 +122,33 @@ func TestSetUserPrediction_DuplicateTeams(t *testing.T) {
 	user := models.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Team A", "Team A", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
 
-	err := api.SetUserPrediction(user, teams, "test_round")
+	_, err := api.SetUserPrediction(user, teams, "test_round")
 	if err == nil {
 		t.Error("Expected error for duplicate teams, got nil")
 	}
 
 	if !strings.Contains(err.Error(), "multiple times") {
 		t.Errorf("Expected error about duplicate teams, got: %s", err.Error())
+	}
+}
+
+func TestSetUserPrediction_FuzzyCollision(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+
+	api := &App{Store: mockStore}
+
+	user := models.User{UserID: "user1", Username: "testuser"}
+	// "Team A" and "team a" are different inputs that both fuzzy-resolve to "Team A"
+	teams := []string{"Team A", "team a", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
+
+	_, err := api.SetUserPrediction(user, teams, "test_round")
+	if err == nil {
+		t.Error("Expected error for fuzzy collision, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "both resolved to") {
+		t.Errorf("Expected error about fuzzy collision, got: %s", err.Error())
 	}
 }
 
@@ -141,7 +161,7 @@ func TestSetUserPrediction_NoScheduledMatches(t *testing.T) {
 	user := models.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
 
-	err := api.SetUserPrediction(user, teams, "test_round")
+	_, err := api.SetUserPrediction(user, teams, "test_round")
 	if err == nil {
 		t.Error("Expected error when no scheduled matches exist, got nil")
 	}
@@ -157,7 +177,7 @@ func TestSetUserPrediction_StoreError(t *testing.T) {
 	user := models.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
 
-	err := api.SetUserPrediction(user, teams, "test_round")
+	_, err := api.SetUserPrediction(user, teams, "test_round")
 	if err == nil {
 		t.Error("Expected error from store, got nil")
 	}
@@ -477,7 +497,7 @@ func TestSetUserPrediction_TriggersLeaderboardRegen(t *testing.T) {
 	user := models.User{UserID: "user1", Username: "player1"}
 	teams := []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
 
-	err := api.SetUserPrediction(user, teams, "test_round")
+	_, err := api.SetUserPrediction(user, teams, "test_round")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
