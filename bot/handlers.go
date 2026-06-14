@@ -74,6 +74,7 @@ func (b *Bot) helpMessageHandler(session DiscordSession, message *discordgo.Mess
 				Name: "`$results`",
 				Value: cleanIndent(`Generate a visual bracket image for Swiss or Single Elimination stages.
 			*Note: Third-place matches are hidden in Single Elim brackets.*`),
+
 				Inline: false,
 			},
 		},
@@ -251,7 +252,7 @@ func (b *Bot) leaderboardHandler(session DiscordSession, message *discordgo.Mess
 		Description: sb.String(),
 		Color:       green,
 		Footer: &discordgo.MessageEmbedFooter{
-			Text: "Sorted by total successful picks • No tiebreakers applied",
+			Text: "Calculated using (Successes * 3) + (Pending * 1) + (Failed * 0) • No tiebreakers applied",
 		},
 	}
 
