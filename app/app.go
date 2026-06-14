@@ -268,7 +268,7 @@ func (a *App) GenerateLeaderboard() error {
 
 		leaderboardEntry.UserID = pred.UserID
 		leaderboardEntry.Username = pred.Username
-		leaderboardEntry.Score = scores.Successes + scores.Pending - scores.Failed
+		leaderboardEntry.Score = (scores.Successes * 3) + (scores.Pending * 1) + (scores.Failed * 0) // Example scoring: 3 points per success, 1 per pending, 0 per failure
 		leaderboardEntry.ScoreResult.Successes = scores.Successes
 		leaderboardEntry.ScoreResult.Pending = scores.Pending
 		leaderboardEntry.ScoreResult.Failed = scores.Failed
