@@ -11,6 +11,7 @@ import (
 	"pickems-bot/sources"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSingleElimCalculateScore_AllSucceeded tests a fully-correct prediction.
@@ -388,6 +389,50 @@ func TestGetEliminationResults_EmptyTeamNames(t *testing.T) {
 	assert.Equal(t, "Grand Final", results["TeamB"].Round)
 	assert.Equal(t, "advanced", results["TeamB"].Status)
 }
+
+// region PredictionFields
+
+// TestSingleElim_PredictionFields_HappyPath checks correct grouping for an 8-team bracket.
+// Input order is worst→best, so "Team H" (last) becomes champion.
+func TestSingleElim_PredictionFields_HappyPath(t *testing.T) {
+	// GeneratePrediction produces the Progression map from ordered input.
+	p, err := singleElimFormat{}.GeneratePrediction(
+		models.User{UserID: "u1", Username: "tester"}, "Playoffs",
+		[]string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H"},
+	)
+	require.NoError(t, err)
+
+	fields, err := singleElimFormat{}.PredictionFields(p)
+	assert.NoError(t, err)
+	require.GreaterOrEqual(t, len(fields), 3)
+	assert.Equal(t, "Champion", fields[0].Name)
+	assert.Equal(t, "Team H", fields[0].Value)
+	// Grand Final eliminated (runner-up)
+	assert.Equal(t, "Grand Final", fields[1].Name)
+	assert.Equal(t, "Team G", fields[1].Value)
+	// Semi Final
+	assert.Equal(t, "Semi Final", fields[2].Name)
+	assert.Contains(t, fields[2].Value, "Team E")
+	assert.Contains(t, fields[2].Value, "Team F")
+}
+
+func TestSingleElim_PredictionFields_EmptyProgression(t *testing.T) {
+	_, err := singleElimFormat{}.PredictionFields(models.Prediction{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no progression data")
+}
+
+func TestSingleElim_PredictionFields_MalformedHasSwissData(t *testing.T) {
+	p := models.Prediction{
+		Win:         []string{"Team A"},
+		Progression: map[string]models.TeamProgress{"Team B": {Round: "Grand Final", Status: "advanced"}},
+	}
+	_, err := singleElimFormat{}.PredictionFields(p)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected swiss data")
+}
+
+// endregion
 
 // endregion
 

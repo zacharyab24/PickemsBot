@@ -145,19 +145,37 @@ func (b *Bot) setPredictionsHandler(session DiscordSession, message *discordgo.M
 		return
 	}
 
+	fields, err := predictionFields(prediction)
+	if err != nil {
+		b.logger().Error("failed to build prediction fields", "user", user.Username, "error", fmt.Errorf("setPredictionsHandler: %w", err))
+		sendError(session, message.ChannelID, "An error occurred displaying your Pick'Ems.")
+		return
+	}
 	embed := &discordgo.MessageEmbed{
 		Title:       "Pick'Ems Updated",
 		Description: fmt.Sprintf("%s's Pick'Ems have been saved.", user.Username),
 		Color:       green,
-		Fields: []*discordgo.MessageEmbedField{
-			{Name: "3-0", Value: strings.Join(prediction.Win, ", "), Inline: false},
-			{Name: "Advance", Value: strings.Join(prediction.Advance, ", "), Inline: false},
-			{Name: "0-3", Value: strings.Join(prediction.Lose, ", "), Inline: false},
-		},
+		Fields:      fields,
 	}
 	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
 		b.logger().Error("failed to send set-predictions embed", "error", fmt.Errorf("setPredictionsHandler: %w", err))
 	}
+}
+
+func predictionFields(p models.Prediction) ([]*discordgo.MessageEmbedField, error) {
+	f, err := tournament.Get(tournament.Kind(p.Format))
+	if err != nil {
+		return nil, fmt.Errorf("unknown prediction format %q", p.Format)
+	}
+	pFields, err := f.PredictionFields(p)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*discordgo.MessageEmbedField, len(pFields))
+	for i, pf := range pFields {
+		out[i] = &discordgo.MessageEmbedField{Name: pf.Name, Value: pf.Value}
+	}
+	return out, nil
 }
 
 // checkPredictionsHandler handles the $check command with a DiscordSession interface

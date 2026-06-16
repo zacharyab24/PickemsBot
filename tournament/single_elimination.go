@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 
 	"pickems-bot/models"
 	"pickems-bot/sources"
@@ -68,6 +69,36 @@ func (singleElimFormat) Name() Kind { return SingleElim }
 // RequiredPredictions returns teamCount / 2 — one pick per first-round
 // matchup, predicting which team advances.
 func (singleElimFormat) RequiredPredictions(teamCount int) int { return teamCount / 2 }
+
+func (singleElimFormat) PredictionFields(p models.Prediction) ([]models.PredictionField, error) {
+	if len(p.Win) > 0 || len(p.Advance) > 0 || len(p.Lose) > 0 {
+		return nil, fmt.Errorf("single-elimination prediction contains unexpected swiss data")
+	}
+	if len(p.Progression) == 0 {
+		return nil, fmt.Errorf("single-elimination prediction has no progression data")
+	}
+	roundOrder := []string{"Grand Final", "Semi Final", "Quarter Final", "Best of 16", "Best of 32"}
+	roundTeams := make(map[string][]string)
+	champion := ""
+	for team, prog := range p.Progression {
+		if prog.Status == "advanced" {
+			champion = team
+		} else {
+			roundTeams[prog.Round] = append(roundTeams[prog.Round], team)
+		}
+	}
+	var fields []models.PredictionField
+	if champion != "" {
+		fields = append(fields, models.PredictionField{Name: "Champion", Value: champion})
+	}
+	for _, round := range roundOrder {
+		if teams, ok := roundTeams[round]; ok {
+			slices.Sort(teams)
+			fields = append(fields, models.PredictionField{Name: round, Value: strings.Join(teams, ", ")})
+		}
+	}
+	return fields, nil
+}
 
 func (singleElimFormat) GeneratePrediction(user models.User, round string, teams []string) (models.Prediction, error) {
 	// Set generic attributes for Prediction struct

@@ -372,6 +372,75 @@ func TestSetPredictions_Swiss_EmbedFieldsMatchPrediction(t *testing.T) {
 	assert.Equal(t, "Team I, Team J", fields[2].Value)
 }
 
+func TestSetPredictions_SingleElim_EmbedFieldsMatchPrediction(t *testing.T) {
+	// 8-team playoff store: ValidTeams must contain all 8 teams so
+	// RequiredPredictions(8) = 4 passes the count check.
+	mockStore := app.NewMockStore(tournament.SingleElim, "Playoffs")
+	mockStore.SetEliminationResults(map[string]models.TeamProgress{
+		"Team A": {Round: "Quarter Final", Status: "eliminated"},
+		"Team B": {Round: "Quarter Final", Status: "eliminated"},
+		"Team C": {Round: "Quarter Final", Status: "eliminated"},
+		"Team D": {Round: "Quarter Final", Status: "eliminated"},
+		"Team E": {Round: "Semi Final", Status: "eliminated"},
+		"Team F": {Round: "Semi Final", Status: "eliminated"},
+		"Team G": {Round: "Grand Final", Status: "eliminated"},
+		"Team H": {Round: "Grand Final", Status: "advanced"},
+	})
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{
+		{Team1: "Team A", Team2: "Team B", BestOf: "3", EpochTime: 1700000000},
+	})
+	bot := &Bot{BotToken: "test_token", APIPtr: &app.App{Store: mockStore}}
+	mockSession := NewMockDiscordSession()
+	// 4 picks required (8 valid teams / 2); worst→best order so "Team D" becomes champion
+	message := createMockMessage(
+		"$set \"Team A\" \"Team B\" \"Team C\" \"Team D\"",
+		"user123", "TestUser", "channel123",
+	)
+
+	bot.setPredictionsHandler(mockSession, message)
+
+	require.Len(t, mockSession.SentEmbeds, 1)
+	fields := mockSession.GetLastEmbed().Embed.Fields
+	require.GreaterOrEqual(t, len(fields), 3)
+	assert.Equal(t, "Champion", fields[0].Name)
+	assert.Equal(t, "Team D", fields[0].Value)
+	assert.Equal(t, "Grand Final", fields[1].Name)
+	assert.Equal(t, "Team C", fields[1].Value)
+	assert.Equal(t, "Semi Final", fields[2].Name)
+	assert.Contains(t, fields[2].Value, "Team A")
+	assert.Contains(t, fields[2].Value, "Team B")
+}
+
+func TestPredictionFields_UnknownFormat(t *testing.T) {
+	_, err := predictionFields(models.Prediction{Format: "unknown-format"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown prediction format")
+}
+
+func TestPredictionFields_SwissMalformed(t *testing.T) {
+	_, err := predictionFields(models.Prediction{
+		Format: string(tournament.Swiss),
+		Win:    []string{"Team A"},
+		Progression: map[string]models.TeamProgress{
+			"Team B": {Round: "Grand Final", Status: "advanced"},
+		},
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected progression data")
+}
+
+func TestPredictionFields_SingleElimMalformed(t *testing.T) {
+	_, err := predictionFields(models.Prediction{
+		Format: string(tournament.SingleElim),
+		Win:    []string{"Team A"},
+		Progression: map[string]models.TeamProgress{
+			"Team B": {Round: "Grand Final", Status: "advanced"},
+		},
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected swiss data")
+}
+
 func TestSetPredictions_InvalidInput(t *testing.T) {
 	bot := createTestBot("swiss")
 	mockSession := NewMockDiscordSession()
