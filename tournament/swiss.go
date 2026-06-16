@@ -106,6 +106,17 @@ func (swissFormat) Name() Kind { return Swiss }
 // the real bracket exactly.
 func (swissFormat) RequiredPredictions(teamCount int) int { return 5 * teamCount / 8 }
 
+func (swissFormat) PredictionFields(p models.Prediction) ([]models.PredictionField, error) {
+	if len(p.Progression) > 0 {
+		return nil, fmt.Errorf("swiss prediction contains unexpected progression data")
+	}
+	return []models.PredictionField{
+		{Name: "3-0", Value: strings.Join(p.Win, ", ")},
+		{Name: "Advance", Value: strings.Join(p.Advance, ", ")},
+		{Name: "0-3", Value: strings.Join(p.Lose, ", ")},
+	}, nil
+}
+
 func (swissFormat) GeneratePrediction(user models.User, round string, teams []string) (models.Prediction, error) {
 	// Set generic attributes for Prediction struct
 	prediction := models.Prediction{

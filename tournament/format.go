@@ -61,6 +61,11 @@ type Format interface {
 	// Scoring
 	CalculateScore(p models.Prediction, r MatchResult) (ScoreReport, error)
 
+	// PredictionFields returns a format-specific summary of p suitable for
+	// display (e.g. Discord embed fields). Returns an error if the prediction
+	// is malformed for this format (e.g. wrong field set populated).
+	PredictionFields(p models.Prediction) ([]models.PredictionField, error)
+
 	// DB Interaction
 	DecodeBSON(bytes []byte) (MatchResult, error)
 

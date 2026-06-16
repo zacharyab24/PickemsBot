@@ -39,6 +39,13 @@ type Prediction struct {
 	Progression map[string]TeamProgress `bson:"progression,omitempty"`
 }
 
+// PredictionField is a format-agnostic name/value pair used to display a
+// prediction summary (e.g. in a Discord embed).
+type PredictionField struct {
+	Name  string
+	Value string
+}
+
 // ScoreResult represents the result of scoring a user's predictions.
 type ScoreResult struct {
 	Successes int `bson:"successes"`

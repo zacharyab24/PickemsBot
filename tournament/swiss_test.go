@@ -14,6 +14,7 @@ import (
 	"pickems-bot/sources"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // region setSwissPredictions
@@ -313,6 +314,37 @@ func TestNormalizeSwissSections(t *testing.T) {
 		got := NormalizeSwissSections(nodes)
 		assert.Equal(t, c.want, got[0].Section, "input: %q", c.input)
 	}
+}
+
+// endregion
+
+// region PredictionFields
+
+func TestSwiss_PredictionFields_HappyPath(t *testing.T) {
+	p := models.Prediction{
+		Win:     []string{"Team A"},
+		Advance: []string{"Team B", "Team C", "Team D"},
+		Lose:    []string{"Team E"},
+	}
+	fields, err := swissFormat{}.PredictionFields(p)
+	assert.NoError(t, err)
+	require.Len(t, fields, 3)
+	assert.Equal(t, "3-0", fields[0].Name)
+	assert.Equal(t, "Team A", fields[0].Value)
+	assert.Equal(t, "Advance", fields[1].Name)
+	assert.Equal(t, "Team B, Team C, Team D", fields[1].Value)
+	assert.Equal(t, "0-3", fields[2].Name)
+	assert.Equal(t, "Team E", fields[2].Value)
+}
+
+func TestSwiss_PredictionFields_MalformedHasProgression(t *testing.T) {
+	p := models.Prediction{
+		Win:         []string{"Team A"},
+		Progression: map[string]models.TeamProgress{"Team B": {Round: "Grand Final", Status: "advanced"}},
+	}
+	_, err := swissFormat{}.PredictionFields(p)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected progression data")
 }
 
 // endregion
