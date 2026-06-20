@@ -1,90 +1,95 @@
+//go:build integration
+
 package store
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo/integration/mtest"
 )
 
-func TestFetchVrsDataFromDB_Success(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
+func TestListVRSRankings_Empty(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
 
-	mt.Run("returns VRS entries from database", func(mt *mtest.T) {
-		store := &Store{
-			Collections: Collections{
-				VRS: mt.Coll,
-			},
-		}
-
-		first := mtest.CreateCursorResponse(1, "test.vrs", mtest.FirstBatch,
-			bson.D{
-				{Key: "standing", Value: 3},
-				{Key: "points", Value: 1800},
-				{Key: "team_name", Value: "Team Spirit"},
-				{Key: "roster", Value: bson.A{"chopper", "donk", "magixx", "zont1x", "Perfecto"}},
-				{Key: "standings_date", Value: "2026_05_01"},
-				{Key: "synced_at", Value: time.Now()},
-			},
-		)
-		second := mtest.CreateCursorResponse(1, "test.vrs", mtest.NextBatch,
-			bson.D{
-				{Key: "standing", Value: 7},
-				{Key: "points", Value: 1650},
-				{Key: "team_name", Value: "The MongolZ"},
-				{Key: "roster", Value: bson.A{"910", "bLitz", "mzinho", "Techno", "cobrazera"}},
-				{Key: "standings_date", Value: "2026_05_01"},
-				{Key: "synced_at", Value: time.Now()},
-			},
-		)
-		killCursor := mtest.CreateCursorResponse(0, "test.vrs", mtest.NextBatch)
-		mt.AddMockResponses(first, second, killCursor)
-
-		entries, err := store.FetchVrsDataFromDB()
-		require.NoError(t, err)
-		require.Len(t, entries, 2)
-		assert.Equal(t, "Team Spirit", entries[0].TeamName)
-		assert.Equal(t, 3, entries[0].Standing)
-		assert.Equal(t, 1800, entries[0].Points)
-		assert.Equal(t, "The MongolZ", entries[1].TeamName)
-		assert.Equal(t, 7, entries[1].Standing)
-	})
+	entries, err := s.ListVRSRankings(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, entries)
 }
 
-func TestFetchVrsDataFromDB_Empty(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
+func TestListVRSRankings_ReturnsLatestPerTeam(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
 
-	mt.Run("returns empty slice when no documents", func(mt *mtest.T) {
-		store := &Store{
-			Collections: Collections{VRS: mt.Coll},
-		}
+	teamID := seedTeam(t, "Cloud9", "vrs", "c9")
 
-		mt.AddMockResponses(mtest.CreateCursorResponse(0, "test.vrs", mtest.FirstBatch))
+	olderDate := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	newerDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	syncedAt := time.Now().UTC()
 
-		entries, err := store.FetchVrsDataFromDB()
-		require.NoError(t, err)
-		assert.Empty(t, entries)
-	})
+	_, err := testPool.Exec(ctx, `
+		INSERT INTO team_rankings (team_id, standing, points, roster, standings_date, synced_at)
+		VALUES ($1, 5, 800, ARRAY['PlayerA', 'PlayerB'], $2, $3)
+	`, teamID, olderDate, syncedAt)
+	require.NoError(t, err)
+
+	_, err = testPool.Exec(ctx, `
+		INSERT INTO team_rankings (team_id, standing, points, roster, standings_date, synced_at)
+		VALUES ($1, 3, 1200, ARRAY['PlayerC', 'PlayerD'], $2, $3)
+	`, teamID, newerDate, syncedAt)
+	require.NoError(t, err)
+
+	entries, err := s.ListVRSRankings(ctx)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "Cloud9", entries[0].TeamName)
+	assert.Equal(t, 3, entries[0].Standing)
+	assert.Equal(t, 1200, entries[0].Points)
 }
 
-func TestFetchVrsDataFromDB_DatabaseError(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
+func TestListVRSRankings_OrderedByStanding(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
 
-	mt.Run("returns error on database failure", func(mt *mtest.T) {
-		store := &Store{
-			Collections: Collections{VRS: mt.Coll},
-		}
+	teamNaVi := seedTeam(t, "NaVi", "vrs", "navi")
+	teamFaze := seedTeam(t, "FaZe", "vrs", "faze")
+	teamVitality := seedTeam(t, "Vitality", "vrs", "vitality")
 
-		mt.AddMockResponses(mtest.CreateCommandErrorResponse(mtest.CommandError{
-			Code:    11000,
-			Message: "database error",
-		}))
+	standingsDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	syncedAt := time.Now().UTC()
 
-		entries, err := store.FetchVrsDataFromDB()
-		assert.Error(t, err)
-		assert.Nil(t, entries)
-	})
+	_, err := testPool.Exec(ctx, `
+		INSERT INTO team_rankings (team_id, standing, points, roster, standings_date, synced_at)
+		VALUES ($1, 2, 1100, ARRAY['p1'], $2, $3)
+	`, teamNaVi, standingsDate, syncedAt)
+	require.NoError(t, err)
+
+	_, err = testPool.Exec(ctx, `
+		INSERT INTO team_rankings (team_id, standing, points, roster, standings_date, synced_at)
+		VALUES ($1, 1, 1500, ARRAY['p2'], $2, $3)
+	`, teamFaze, standingsDate, syncedAt)
+	require.NoError(t, err)
+
+	_, err = testPool.Exec(ctx, `
+		INSERT INTO team_rankings (team_id, standing, points, roster, standings_date, synced_at)
+		VALUES ($1, 3, 900, ARRAY['p3'], $2, $3)
+	`, teamVitality, standingsDate, syncedAt)
+	require.NoError(t, err)
+
+	entries, err := s.ListVRSRankings(ctx)
+	require.NoError(t, err)
+	require.Len(t, entries, 3)
+
+	assert.Equal(t, 1, entries[0].Standing)
+	assert.Equal(t, "FaZe", entries[0].TeamName)
+	assert.Equal(t, 2, entries[1].Standing)
+	assert.Equal(t, "NaVi", entries[1].TeamName)
+	assert.Equal(t, 3, entries[2].Standing)
+	assert.Equal(t, "Vitality", entries[2].TeamName)
 }

@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"time"
 
 	"pickems-bot/app"
@@ -53,42 +54,12 @@ func main() {
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
 
-	apiInstance, err := app.NewApp(cfg, os.Getenv("MONGO_PROD_URI"), logger)
+	apiInstance, err := app.NewApp(cfg, os.Getenv("POSTGRES_URI"), logger)
 	if err != nil {
 		logger.Error("failed to initialize app", "error", err)
 		os.Exit(1)
 	}
-	defer func() {
-		if err = apiInstance.Store.GetClient().Disconnect(context.TODO()); err != nil {
-			panic(err)
-		}
-	}()
-
-	logger.Debug("populating matches from data source", "source", cfg.DataSource, "schedule_only", cfg.UpcomingOnly)
-	if err := apiInstance.PopulateMatches(cfg.UpcomingOnly); err != nil {
-		logger.Error("failed to populate matches", "error", err)
-		os.Exit(1)
-	}
-	logger.Debug("match data populated")
-
-	if err := apiInstance.GenerateLeaderboard(); err != nil {
-		logger.Error("failed to generate leaderboard", "error", err)
-		os.Exit(1)
-	}
-	logger.Debug("leaderboard generated")
-
-	// Regenerate the result image on startup so it always reflects the current
-	// tournament/bracket. The image on disk can be stale if the bot was previously
-	// run against a different tournament and the file was not cleared between restarts.
-	// Fatal in full mode — $results will be broken if this fails. In upcoming_only
-	// mode there are no match results yet so this is expected to fail; skip it.
-	if !cfg.UpcomingOnly {
-		if err := web.RenderResultsImage(apiInstance); err != nil {
-			logger.Error("could not render results image on startup", "error", err)
-			os.Exit(1)
-		}
-		logger.Debug("results image rendered")
-	}
+	defer apiInstance.Store.Close()
 
 	var discordToken string
 	if cfg.Test {
@@ -117,17 +88,31 @@ func main() {
 
 	switch cfg.DataSource {
 	case "pandascore":
-		poller := web.NewPoller(apiInstance, cfg.PandaScore.SeriesID, cfg.PandaScore.TournamentID, os.Getenv("PANDASCORE_API_KEY"), cfg.PandaScore.APIURL, logger)
+		externalID := strconv.Itoa(cfg.PandaScore.TournamentID)
+		dbTournamentID, err := apiInstance.Store.EnsureTournament(context.Background(), externalID, "pandascore", cfg.TournamentName, cfg.PandaScore.SeriesID)
+		if err != nil {
+			logger.Error("failed to ensure tournament in database", "error", err)
+			os.Exit(1)
+		}
+		if err := apiInstance.PopulateMatches(context.Background(), dbTournamentID, cfg.Round, false); err != nil {
+			logger.Warn("startup populate failed, bot will retry on next poller tick", "error", err)
+		}
+		poller := web.NewPoller(apiInstance, cfg.PandaScore.SeriesID, cfg.PandaScore.TournamentID, dbTournamentID, cfg.Round, os.Getenv("PANDASCORE_API_KEY"), cfg.PandaScore.APIURL, logger)
 		go poller.Start()
-		logger.Info("PandaScore poller started")
+		logger.Info("PandaScore poller started", "db_tournament_id", dbTournamentID)
 	case "liquipedia":
+		dbTournamentID, err := apiInstance.Store.EnsureTournament(context.Background(), cfg.Liquipedia.Page, "liquipedia", cfg.TournamentName, 0)
+		if err != nil {
+			logger.Error("failed to ensure tournament in database", "error", err)
+			os.Exit(1)
+		}
 		go func() {
-			if err := web.Start(web.Config{Addr: ":8080", API: apiInstance, Page: cfg.Liquipedia.Page, Logger: logger}); err != nil {
+			if err := web.Start(web.Config{Addr: ":8080", API: apiInstance, Page: cfg.Liquipedia.Page, TournamentID: dbTournamentID, Round: cfg.Round, Logger: logger}); err != nil {
 				logger.Error("web server exited", "error", err)
 				os.Exit(1)
 			}
 		}()
-		logger.Info("Liquipedia webhook server starting", "addr", ":8080")
+		logger.Info("Liquipedia webhook server starting", "addr", ":8080", "db_tournament_id", dbTournamentID)
 	default:
 		logger.Error("unknown data_source in config.toml", "data_source", cfg.DataSource)
 		os.Exit(1)

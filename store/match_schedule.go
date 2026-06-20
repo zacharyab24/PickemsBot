@@ -1,114 +1,130 @@
-/* match_schedule.go
- * Contains the methods for interacting with the match_schedule collection
- * Authors: Zachary Bower
- */
-
 package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"pickems-bot/metrics"
-	"pickems-bot/sources"
 	"sort"
+	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"pickems-bot/sources"
 )
 
-// UpcomingMatchDoc represents upcoming match data stored in the database
-type UpcomingMatchDoc struct {
-	Round            string                   `bson:"round,omitempty"`
-	ScheduledMatches []sources.ScheduledMatch `bson:"scheduled_matches,omitempty"`
-}
-
-// FetchMatchSchedule returns the scheduled matches for the current round from the database.
-func (s *Store) FetchMatchSchedule() ([]sources.ScheduledMatch, error) {
-	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
-	opts := options.FindOne()
-
-	// Get UpcomingMatchDoc result from db
-	var res UpcomingMatchDoc
-	err := s.Collections.MatchSchedule.FindOne(context.TODO(), bson.D{{Key: "round", Value: s.Round}}, opts).Decode(&res)
-	if err != nil {
-		return nil, fmt.Errorf("error fetching results from db: %w", err)
-	}
-	return res.ScheduledMatches, nil
-}
-
-// StoreMatchSchedule persists a slice of scheduled matches for the current round, inserting a new document or replacing an existing one.
-func (s *Store) StoreMatchSchedule(scheduledMatches []sources.ScheduledMatch) error {
-	metrics.MongoOpsTotal.WithLabelValues("write").Inc()
-	if len(scheduledMatches) == 0 {
-		return fmt.Errorf("scheduled matches input has length 0, requires at least 1")
-	}
-
-	// Attempt to find an existing document
-	var raw bson.M
-	err := s.Collections.MatchSchedule.FindOne(context.TODO(), bson.M{"round": s.Round}).Decode(&raw)
-	notFound := errors.Is(err, mongo.ErrNoDocuments)
-
-	if err != nil && !notFound {
-		return fmt.Errorf("lookup for existing record failed: %w", err)
-	}
-
-	// Create bson UpcomingMatchDoc
-	filter := bson.M{"round": s.Round}
-	upcomingMatchDoc := UpcomingMatchDoc{
-		Round:            s.Round,
-		ScheduledMatches: scheduledMatches,
-	}
-	update := bson.M{"$set": upcomingMatchDoc}
-
-	s.logger().Info("updating match schedule in db", "round", s.Round)
-
-	// Perform insert or update
-	if notFound {
-		_, err := s.Collections.MatchSchedule.InsertOne(context.TODO(), upcomingMatchDoc)
-		if err != nil {
-			return fmt.Errorf("failed to insert upcoming matches: %w", err)
-		}
-		return nil
-	}
-	_, err = s.Collections.MatchSchedule.UpdateOne(context.TODO(), filter, update)
-	if err != nil {
-		return fmt.Errorf("failed to update upcoming matches: %w", err)
-	}
-
-	return nil
-}
-
-// EnsureScheduledMatches verifies that at least one scheduled match exists in the database for the current round.
+// EnsureScheduledMatches verifies that at least one pending match exists in the database for the given tournament.
 // Prediction operations depend on this data being present, so callers should use this as a precondition check.
-func (s *Store) EnsureScheduledMatches() error {
-	var result struct {
-		ScheduledMatches []sources.ScheduledMatch `bson:"scheduled_matches"`
-	}
-	filter := bson.M{"round": s.Round}
-	err := s.Collections.MatchSchedule.FindOne(context.TODO(), filter).Decode(&result)
+func (s *PostgresStore) EnsureScheduledMatches(ctx context.Context, tournamentID int) error {
+	var count int
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM matches
+		WHERE tournament_id = $1 AND status = 'pending'
+	`, tournamentID).Scan(&count)
 	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return fmt.Errorf("no scheduled matches entry found for round %s", s.Round)
-		}
-		return fmt.Errorf("error checking scheduled matches: %w", err)
+		return fmt.Errorf("EnsureScheduledMatches: %w", err)
 	}
-
-	if len(result.ScheduledMatches) == 0 {
-		return fmt.Errorf("scheduled match collection found but its results were empty for round %s", s.Round)
+	if count == 0 {
+		return fmt.Errorf("no scheduled matches found for tournament %d", tournamentID)
 	}
 	return nil
 }
 
-// FetchAndStoreSchedule fetches upcoming matches from the configured data source and persists them to the database.
-func (s *Store) FetchAndStoreSchedule() error {
-	matches, err := s.Fetcher.FetchSchedule()
+// GetMatchSchedule returns all pending matches for the given tournament, ordered by scheduled time.
+func (s *PostgresStore) GetMatchSchedule(ctx context.Context, tournamentID int) ([]sources.ScheduledMatch, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT team1_name, team2_name, scheduled_at, best_of, stream_url, is_live,
+		       (status = 'completed') AS finished
+		FROM matches
+		WHERE tournament_id = $1 AND status != 'completed'
+		ORDER BY scheduled_at ASC
+	`, tournamentID)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("GetMatchSchedule: %w", err)
+	}
+	defer rows.Close()
+
+	var matches []sources.ScheduledMatch
+	for rows.Next() {
+		var m sources.ScheduledMatch
+		var scheduledAt *time.Time
+		var bestOf, streamURL *string
+		if err := rows.Scan(&m.Team1, &m.Team2, &scheduledAt, &bestOf, &streamURL, &m.Live, &m.Finished); err != nil {
+			return nil, fmt.Errorf("GetMatchSchedule: scan: %w", err)
+		}
+		if scheduledAt != nil {
+			m.EpochTime = scheduledAt.Unix()
+		}
+		if bestOf != nil {
+			m.BestOf = *bestOf
+		}
+		if streamURL != nil {
+			m.StreamURL = *streamURL
+		}
+		matches = append(matches, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("GetMatchSchedule: rows: %w", err)
+	}
+	return matches, nil
+}
+
+// UpsertMatchSchedule replaces all pending non-live matches for the tournament with the provided list.
+// Completed and in-progress matches are preserved.
+func (s *PostgresStore) UpsertMatchSchedule(ctx context.Context, tournamentID int, matches []sources.ScheduledMatch) error {
+	if len(matches) == 0 {
+		return fmt.Errorf("UpsertMatchSchedule: matches list is empty")
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("UpsertMatchSchedule: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, `
+		DELETE FROM matches
+		WHERE tournament_id = $1 AND status = 'pending' AND is_live = FALSE
+	`, tournamentID)
+	if err != nil {
+		return fmt.Errorf("UpsertMatchSchedule: clear pending: %w", err)
+	}
+
+	for _, m := range matches {
+		scheduledAt := time.Unix(m.EpochTime, 0).UTC()
+		status := "pending"
+		if m.Finished {
+			status = "completed"
+		} else if m.Live {
+			status = "in_progress"
+		}
+		_, err = tx.Exec(ctx, `
+			INSERT INTO matches (tournament_id, round, team1_name, team2_name, scheduled_at, best_of, stream_url, is_live, status)
+			VALUES ($1, '', $2, $3, $4, $5, $6, $7, $8)
+		`, tournamentID, m.Team1, m.Team2, scheduledAt, nullString(m.BestOf), nullString(m.StreamURL), m.Live, status)
+		if err != nil {
+			return fmt.Errorf("UpsertMatchSchedule: insert: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("UpsertMatchSchedule: commit: %w", err)
+	}
+	return nil
+}
+
+// FetchAndSaveSchedule fetches upcoming matches from the configured data source and persists them for the given tournament.
+func (s *PostgresStore) FetchAndSaveSchedule(ctx context.Context, tournamentID int) error {
+	matches, err := s.fetcher.FetchSchedule()
+	if err != nil {
+		return fmt.Errorf("FetchAndSaveSchedule: %w", err)
 	}
 	sort.Slice(matches, func(i, j int) bool {
 		return matches[i].EpochTime < matches[j].EpochTime
 	})
-	return s.StoreMatchSchedule(matches)
+	return s.UpsertMatchSchedule(ctx, tournamentID, matches)
+}
+
+// nullString converts an empty string to nil for nullable TEXT columns.
+func nullString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

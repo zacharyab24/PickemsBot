@@ -1,61 +1,90 @@
-/* api_test.go
- * Contains unit tests for api.go - testing all public App methods
+/* app_test.go
+ * Unit tests for App public methods.
  * Authors: Zachary Bower
  */
 
 package app
 
 import (
+	"context"
 	"fmt"
-	"pickems-bot/config"
-	"pickems-bot/models"
-	"pickems-bot/sources"
-	"pickems-bot/store"
 	"strings"
 	"testing"
 	"time"
 
+	"pickems-bot/models"
+	"pickems-bot/sources"
+	"pickems-bot/store"
+
 	"golang.org/x/time/rate"
 )
 
-// region NewApp tests
+const (
+	testGuildID   = "test_guild"
+	testChannelID = ""
+)
 
-func TestNewApp_UnsupportedDataSource(t *testing.T) {
-	_, err := NewApp(config.Config{DataSource: "unknown", TournamentName: "db", Round: "r1"}, "mongodb://localhost", nil)
-	if err == nil {
-		t.Error("Expected error for unsupported data source, got nil")
+// bg is shorthand for context.Background() in tests.
+func bg() context.Context { return context.Background() }
+
+// region resolveConfig
+
+func TestResolveConfig_NoGuildConfig(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.GetGuildConfigError = fmt.Errorf("not found")
+	api := NewTestApp(mockStore)
+
+	_, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "u1"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "no configuration found") {
+		t.Errorf("expected 'no configuration found' error, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "unsupported data source") {
-		t.Errorf("Expected 'unsupported data source' error, got: %s", err.Error())
+}
+
+func TestResolveConfig_NilTournamentID(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.GuildConfig.TournamentID = nil
+	api := NewTestApp(mockStore)
+
+	_, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "u1"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "tournament not configured") {
+		t.Errorf("expected 'tournament not configured' error, got: %v", err)
+	}
+}
+
+func TestResolveConfig_NilRound(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.GuildConfig.Round = nil
+	api := NewTestApp(mockStore)
+
+	_, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "u1"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "tournament not configured") {
+		t.Errorf("expected 'tournament not configured' error, got: %v", err)
 	}
 }
 
 // endregion
 
-// region SetUserPrediction tests
+// region SetUserPrediction
 
 func TestSetUserPrediction_SwissFormat_Success(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-
-	api := &App{Store: mockStore}
+	api := NewTestApp(mockStore)
 
 	user := models.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
 
-	_, err := api.SetUserPrediction(user, teams, "test_round")
+	_, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, user, teams)
 	if err != nil {
-		t.Errorf("Expected no error, got: %s", err.Error())
+		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	// Verify prediction was stored
 	pred, ok := mockStore.Predictions[user.UserID]
 	if !ok {
-		t.Error("Prediction was not stored")
+		t.Fatal("prediction was not stored")
 	}
-
 	if pred.Username != user.Username {
-		t.Errorf("Expected username %s, got %s", user.Username, pred.Username)
+		t.Errorf("expected username %s, got %s", user.Username, pred.Username)
 	}
 }
 
@@ -63,165 +92,113 @@ func TestSetUserPrediction_SingleEliminationFormat_Success(t *testing.T) {
 	mockStore := NewMockStore("single-elimination", "test_round")
 	mockStore.ValidTeams = []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H"}
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-
-	api := &App{Store: mockStore}
+	api := NewTestApp(mockStore)
 
 	user := models.User{UserID: "user1", Username: "testuser"}
-	teams := []string{"Team A", "Team B", "Team C", "Team D"} // 4 teams for 8-team bracket
+	teams := []string{"Team A", "Team B", "Team C", "Team D"}
 
-	_, err := api.SetUserPrediction(user, teams, "test_round")
+	_, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, user, teams)
 	if err != nil {
-		t.Errorf("Expected no error, got: %s", err.Error())
+		t.Errorf("expected no error, got: %v", err)
 	}
 }
 
 func TestSetUserPrediction_WrongNumberOfTeams(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-
-	user := models.User{UserID: "user1", Username: "testuser"}
-	teams := []string{"Team A", "Team B"} // Only 2 teams, need 10 for Swiss
-
-	_, err := api.SetUserPrediction(user, teams, "test_round")
-	if err == nil {
-		t.Error("Expected error for wrong number of teams, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "incorrect number of teams") {
-		t.Errorf("Expected error about incorrect number of teams, got: %s", err.Error())
+	_, err := api.SetUserPrediction(bg(), testGuildID, testChannelID,
+		models.User{UserID: "u1"}, []string{"Team A", "Team B"})
+	if err == nil || !strings.Contains(err.Error(), "incorrect number of teams") {
+		t.Errorf("expected 'incorrect number of teams' error, got: %v", err)
 	}
 }
 
 func TestSetUserPrediction_InvalidTeamNames(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-
-	user := models.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Invalid1", "Invalid2", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
-
-	_, err := api.SetUserPrediction(user, teams, "test_round")
-	if err == nil {
-		t.Error("Expected error for invalid team names, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "invalid") {
-		t.Errorf("Expected error about invalid teams, got: %s", err.Error())
+	_, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "u1"}, teams)
+	if err == nil || !strings.Contains(err.Error(), "invalid") {
+		t.Errorf("expected 'invalid' error, got: %v", err)
 	}
 }
 
 func TestSetUserPrediction_DuplicateTeams(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-
-	user := models.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Team A", "Team A", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
-
-	_, err := api.SetUserPrediction(user, teams, "test_round")
-	if err == nil {
-		t.Error("Expected error for duplicate teams, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "multiple times") {
-		t.Errorf("Expected error about duplicate teams, got: %s", err.Error())
+	_, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "u1"}, teams)
+	if err == nil || !strings.Contains(err.Error(), "multiple times") {
+		t.Errorf("expected 'multiple times' error, got: %v", err)
 	}
 }
 
 func TestSetUserPrediction_FuzzyCollision(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-
-	user := models.User{UserID: "user1", Username: "testuser"}
-	// "Team A" and "team a" are different inputs that both fuzzy-resolve to "Team A"
+	// "Team A" and "team a" both fuzzy-resolve to "Team A"
 	teams := []string{"Team A", "team a", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
-
-	_, err := api.SetUserPrediction(user, teams, "test_round")
-	if err == nil {
-		t.Error("Expected error for fuzzy collision, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "both resolved to") {
-		t.Errorf("Expected error about fuzzy collision, got: %s", err.Error())
+	_, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "u1"}, teams)
+	if err == nil || !strings.Contains(err.Error(), "both resolved to") {
+		t.Errorf("expected 'both resolved to' error, got: %v", err)
 	}
 }
 
 func TestSetUserPrediction_NoScheduledMatches(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	// Don't set scheduled matches
+	// no matches set — EnsureScheduledMatches returns error
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-
-	user := models.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
-
-	_, err := api.SetUserPrediction(user, teams, "test_round")
+	_, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "u1"}, teams)
 	if err == nil {
-		t.Error("Expected error when no scheduled matches exist, got nil")
+		t.Error("expected error when no scheduled matches exist, got nil")
 	}
 }
 
 func TestSetUserPrediction_StoreError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-	mockStore.StoreUserPredictionError = fmt.Errorf("database error")
+	mockStore.UpsertPredictionError = fmt.Errorf("database error")
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-
-	user := models.User{UserID: "user1", Username: "testuser"}
 	teams := []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
-
-	_, err := api.SetUserPrediction(user, teams, "test_round")
+	_, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "u1"}, teams)
 	if err == nil {
-		t.Error("Expected error from store, got nil")
+		t.Error("expected error from store, got nil")
 	}
 }
 
 // endregion
 
-// region CheckPrediction tests
+// region CheckPrediction
 
 func TestCheckPrediction_Success(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-
-	// Set up a prediction
-	pred := models.Prediction{
-		UserID:   "user1",
-		Username: "testuser",
-		Format:   "swiss",
-		Round:    "test_round",
-		Win:      []string{"Team A", "Team B"},
-		Advance:  []string{"Team C", "Team D", "Team E", "Team F", "Team G", "Team H"},
-		Lose:     []string{"Team I", "Team J"},
+	mockStore.Predictions["user1"] = models.Prediction{
+		UserID: "user1", Username: "testuser", Format: "swiss", Round: "test_round",
+		Win:     []string{"Team A", "Team B"},
+		Advance: []string{"Team C", "Team D", "Team E", "Team F", "Team G", "Team H"},
+		Lose:    []string{"Team I", "Team J"},
 	}
-	mockStore.Predictions["user1"] = pred
+	mockStore.SetSwissResults(map[string]string{"Team A": "3-0", "Team B": "3-0", "Team I": "0-3", "Team J": "0-3"})
+	api := NewTestApp(mockStore)
 
-	// Set up match results
-	mockStore.SetSwissResults(map[string]string{
-		"Team A": "3-0",
-		"Team B": "3-0",
-		"Team C": "3-1",
-		"Team I": "0-3",
-		"Team J": "0-3",
-	})
-
-	api := &App{Store: mockStore}
-	user := models.User{UserID: "user1", Username: "testuser"}
-
-	result, err := api.CheckPrediction(user)
+	result, err := api.CheckPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "user1"})
 	if err != nil {
-		t.Errorf("Expected no error, got: %s", err.Error())
+		t.Fatalf("expected no error, got: %v", err)
 	}
-
 	if result == nil {
-		t.Error("Expected non-nil score report")
+		t.Error("expected non-nil score report")
 	}
 }
 
@@ -229,75 +206,73 @@ func TestCheckPrediction_NoPredictionFound(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
 	mockStore.SetSwissResults(map[string]string{})
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-	user := models.User{UserID: "nonexistent", Username: "testuser"}
-
-	_, err := api.CheckPrediction(user)
+	_, err := api.CheckPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "nonexistent"})
 	if err == nil {
-		t.Error("Expected error when no prediction found, got nil")
+		t.Error("expected error when no prediction found, got nil")
 	}
 }
 
 func TestCheckPrediction_NoScheduledMatches(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-	user := models.User{UserID: "user1", Username: "testuser"}
-
-	_, err := api.CheckPrediction(user)
+	_, err := api.CheckPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "user1"})
 	if err == nil {
-		t.Error("Expected error when no scheduled matches, got nil")
+		t.Error("expected error when no scheduled matches, got nil")
 	}
 }
 
 func TestCheckPrediction_GetMatchResultsError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-	mockStore.GetMatchResultsError = fmt.Errorf("results error")
 	mockStore.Predictions["user1"] = models.Prediction{UserID: "user1", Format: "swiss", Round: "test_round"}
+	mockStore.GetMatchResultsError = fmt.Errorf("results error")
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-	user := models.User{UserID: "user1", Username: "testuser"}
-
-	_, err := api.CheckPrediction(user)
+	_, err := api.CheckPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "user1"})
 	if err == nil || !strings.Contains(err.Error(), "results error") {
-		t.Errorf("Expected match results error, got: %v", err)
+		t.Errorf("expected match results error, got: %v", err)
 	}
 }
 
-// region CheckPredictionByUsername tests
+func TestCheckPrediction_NoGuildConfig(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.GetGuildConfigError = fmt.Errorf("not found")
+	api := NewTestApp(mockStore)
+
+	_, err := api.CheckPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "user1"})
+	if err == nil {
+		t.Error("expected error when no guild config, got nil")
+	}
+}
+
+// endregion
+
+// region CheckPredictionByUsername
 
 func TestCheckPredictionByUsername_Success(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-	mockStore.SetSwissResults(map[string]string{
-		"Team A": "3-0",
-		"Team B": "3-0",
-		"Team I": "0-3",
-		"Team J": "0-3",
-	})
+	mockStore.SetSwissResults(map[string]string{"Team A": "3-0", "Team B": "3-0", "Team I": "0-3", "Team J": "0-3"})
 	mockStore.Predictions["user1"] = models.Prediction{
-		UserID:   "user1",
-		Username: "PickemsBot",
-		Format:   "swiss",
-		Round:    "test_round",
-		Win:      []string{"Team A", "Team B"},
-		Advance:  []string{"Team C", "Team D", "Team E", "Team F", "Team G", "Team H"},
-		Lose:     []string{"Team I", "Team J"},
+		UserID: "user1", Username: "PickemsBot", Format: "swiss", Round: "test_round",
+		Win:     []string{"Team A", "Team B"},
+		Advance: []string{"Team C", "Team D", "Team E", "Team F", "Team G", "Team H"},
+		Lose:    []string{"Team I", "Team J"},
 	}
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-
-	user, report, err := api.CheckPredictionByUsername("pickemsbot")
+	user, report, err := api.CheckPredictionByUsername(bg(), testGuildID, testChannelID, "pickemsbot")
 	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
+		t.Fatalf("expected no error, got: %v", err)
 	}
 	if report == nil {
-		t.Error("Expected non-nil score report")
+		t.Error("expected non-nil score report")
 	}
 	if user.Username != "PickemsBot" {
-		t.Errorf("Expected canonical username PickemsBot, got %s", user.Username)
+		t.Errorf("expected canonical username PickemsBot, got %s", user.Username)
 	}
 }
 
@@ -305,157 +280,50 @@ func TestCheckPredictionByUsername_NotFound(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
 	mockStore.SetSwissResults(map[string]string{})
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-
-	_, _, err := api.CheckPredictionByUsername("ghost")
+	_, _, err := api.CheckPredictionByUsername(bg(), testGuildID, testChannelID, "ghost")
 	if err == nil {
-		t.Error("Expected error when username not found, got nil")
+		t.Error("expected error when username not found, got nil")
 	}
 }
 
 func TestCheckPredictionByUsername_NoScheduledMatches(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-
-	_, _, err := api.CheckPredictionByUsername("PickemsBot")
+	_, _, err := api.CheckPredictionByUsername(bg(), testGuildID, testChannelID, "PickemsBot")
 	if err == nil {
-		t.Error("Expected error when no scheduled matches, got nil")
+		t.Error("expected error when no scheduled matches, got nil")
+	}
+}
+
+func TestCheckPredictionByUsername_NoGuildConfig(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.GetGuildConfigError = fmt.Errorf("not found")
+	api := NewTestApp(mockStore)
+
+	_, _, err := api.CheckPredictionByUsername(bg(), testGuildID, testChannelID, "PickemsBot")
+	if err == nil {
+		t.Error("expected error when no guild config, got nil")
 	}
 }
 
 // endregion
 
-func TestMockStore_SetScheduleError(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.SetScheduleError(fmt.Errorf("test error"))
-	if mockStore.FetchMatchScheduleError == nil {
-		t.Error("Expected FetchMatchScheduleError to be set")
-	}
-}
-
-func TestMockStore_SetEliminationResults(t *testing.T) {
-	mockStore := NewMockStore("single-elimination", "test_round")
-	results := map[string]models.TeamProgress{"Team A": {Round: "final", Status: "advanced"}}
-	mockStore.SetEliminationResults(results)
-	if mockStore.MatchResults == nil {
-		t.Error("Expected MatchResults to be set")
-	}
-}
-
-// endregion
-
-// region GenerateLeaderboard tests
-
-func TestGenerateLeaderboard_Success(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-
-	// Set up multiple predictions
-	pred1 := models.Prediction{
-		UserID:   "user1",
-		Username: "player1",
-		Format:   "swiss",
-		Round:    "test_round",
-		Win:      []string{"Team A", "Team B"},
-		Advance:  []string{"Team C", "Team D", "Team E", "Team F", "Team G", "Team H"},
-		Lose:     []string{"Team I", "Team J"},
-	}
-	pred2 := models.Prediction{
-		UserID:   "user2",
-		Username: "player2",
-		Format:   "swiss",
-		Round:    "test_round",
-		Win:      []string{"Team A", "Team B"},
-		Advance:  []string{"Team C", "Team D", "Team E", "Team F", "Team G", "Team H"},
-		Lose:     []string{"Team I", "Team J"},
-	}
-
-	mockStore.Predictions["user1"] = pred1
-	mockStore.Predictions["user2"] = pred2
-
-	// Set up match results
-	mockStore.SetSwissResults(map[string]string{
-		"Team A": "3-0",
-		"Team B": "3-0",
-		"Team I": "0-3",
-		"Team J": "0-3",
-	})
-
-	api := &App{Store: mockStore}
-
-	err := api.GenerateLeaderboard()
-	if err != nil {
-		t.Errorf("Expected no error, got: %s", err.Error())
-	}
-
-	// Verify leaderboard was stored
-	if len(mockStore.Leaderboard) != 2 {
-		t.Errorf("Expected 2 leaderboard entries, got %d", len(mockStore.Leaderboard))
-	}
-}
-
-func TestGenerateLeaderboard_NoPredictions(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-	mockStore.SetSwissResults(map[string]string{})
-
-	api := &App{Store: mockStore}
-
-	err := api.GenerateLeaderboard()
-	// When there are no predictions, GetAllUserPredictions returns mongo.ErrNoDocuments
-	if err == nil {
-		t.Error("Expected error when no predictions exist, got nil")
-	}
-}
-
-func TestGenerateLeaderboard_NoScheduledMatches(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-
-	api := &App{Store: mockStore}
-
-	err := api.GenerateLeaderboard()
-	if err == nil {
-		t.Error("Expected error when no scheduled matches, got nil")
-	}
-}
-
-func TestGenerateLeaderboard_GetMatchResultsError(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-	mockStore.GetMatchResultsError = fmt.Errorf("results fetch failed")
-
-	api := &App{Store: mockStore}
-
-	err := api.GenerateLeaderboard()
-	if err == nil || !strings.Contains(err.Error(), "results fetch failed") {
-		t.Errorf("Expected match results error, got: %v", err)
-	}
-}
-
-func TestNewTestApp_HasRateLimiter(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-	a := NewTestApp(mockStore)
-	if !a.Allow() {
-		t.Error("Expected NewTestApp to return an App with a working rate limiter")
-	}
-}
+// region GetLeaderboard
 
 func TestGetLeaderboard_Success(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-
-	// Pre-populate the leaderboard
 	mockStore.Leaderboard = []store.LeaderboardEntry{
-		{UserID: "user1", Username: "player1", Score: 5, ScoreResult: models.ScoreResult{Successes: 5, Pending: 0, Failed: 0}},
-		{UserID: "user2", Username: "player2", Score: 3, ScoreResult: models.ScoreResult{Successes: 3, Pending: 0, Failed: 0}},
+		{UserID: "user1", Username: "player1", Successes: 5},
+		{UserID: "user2", Username: "player2", Successes: 3},
 	}
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-
-	result, err := api.GetLeaderboard()
+	result, err := api.GetLeaderboard(bg(), testGuildID, testChannelID)
 	if err != nil {
-		t.Errorf("Expected no error, got: %s", err.Error())
+		t.Fatalf("expected no error, got: %v", err)
 	}
 
 	found := make(map[string]bool)
@@ -463,211 +331,55 @@ func TestGetLeaderboard_Success(t *testing.T) {
 		found[u.Username] = true
 	}
 	if !found["player1"] || !found["player2"] {
-		t.Error("Expected leaderboard to contain both players")
+		t.Error("expected leaderboard to contain both players")
 	}
 }
 
-func TestGetLeaderboard_NoLeaderboard(t *testing.T) {
+func TestGetLeaderboard_SortedBySuccesses(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.FetchLeaderboardFromDBError = fmt.Errorf("no leaderboard found")
-
-	api := &App{Store: mockStore}
-
-	_, err := api.GetLeaderboard()
-	if err == nil {
-		t.Error("Expected error when no leaderboard exists, got nil")
+	mockStore.Leaderboard = []store.LeaderboardEntry{
+		{UserID: "u2", Username: "player2", Successes: 3},
+		{UserID: "u1", Username: "player1", Successes: 7},
 	}
-}
+	api := NewTestApp(mockStore)
 
-func TestSetUserPrediction_TriggersLeaderboardRegen(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-	mockStore.LeaderboardStored = make(chan struct{}, 1)
-
-	// Seed a prediction so GenerateLeaderboard has something to work with
-	mockStore.Predictions["user1"] = models.Prediction{
-		UserID: "user1", Username: "player1",
-		Format: "swiss", Round: "test_round",
-		Win:     []string{"Team A", "Team B"},
-		Advance: []string{"Team C", "Team D", "Team E", "Team F", "Team G", "Team H"},
-		Lose:    []string{"Team I", "Team J"},
-	}
-
-	api := &App{Store: mockStore}
-	user := models.User{UserID: "user1", Username: "player1"}
-	teams := []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
-
-	_, err := api.SetUserPrediction(user, teams, "test_round")
-	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
-	}
-
-	select {
-	case <-mockStore.LeaderboardStored:
-		// leaderboard was regenerated
-	case <-time.After(time.Second):
-		t.Fatal("leaderboard was not regenerated after successful set")
-	}
-}
-
-// endregion
-
-// region GetTeams tests
-
-func TestGetTeams_Success(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-	mockStore.SetSwissResults(map[string]string{
-		"Team A": "3-0",
-		"Team B": "3-1",
-	})
-
-	api := &App{Store: mockStore}
-
-	teams, err := api.GetTeams()
-	if err != nil {
-		t.Errorf("Expected no error, got: %s", err.Error())
-	}
-
-	if len(teams) == 0 {
-		t.Error("Expected non-empty teams list")
-	}
-}
-
-func TestGetTeams_StoreError(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.GetValidTeamsError = fmt.Errorf("database error")
-
-	api := &App{Store: mockStore}
-
-	_, err := api.GetTeams()
-	if err == nil {
-		t.Error("Expected error when store returns an error, got nil")
-	}
-}
-
-// endregion
-
-// region NormalizeTeamName tests
-
-func TestNormalizeTeamName(t *testing.T) {
-	cases := []struct {
-		input string
-		want  string
-	}{
-		{"Team Liquid", "liquid"},
-		{"BetBoom Team", "betboom"},
-		{"Sharks Esports", "sharks"},
-		{"Lynn Vision Gaming", "lynn vision"},
-		{"FaZe Clan", "faze"},
-		{"HEROIC", "heroic"},
-		{"The MongolZ", "the mongolz"},
-		{"FaZe", "faze"},
-		{"Na'Vi", "navi"},
-		{"OG.", "og"},
-		{"", ""},
-		{"team liquid", "liquid"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.input, func(t *testing.T) {
-			got := sources.NormalizeTeamName(tc.input)
-			if got != tc.want {
-				t.Errorf("NormalizeTeamName(%q) = %q, want %q", tc.input, got, tc.want)
-			}
-		})
-	}
-}
-
-// endregion
-
-// region GetTeam tests
-
-func TestGetTeam_Success(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.SetVRSEntries([]store.VRSEntry{
-		{TeamName: "FaZe", Standing: 5, Points: 1750, Roster: []string{"karrigan", "broky", "rain"}},
-	})
-	api := &App{Store: mockStore}
-
-	entry, err := api.GetTeam("FaZe")
+	result, err := api.GetLeaderboard(bg(), testGuildID, testChannelID)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
-	if entry.Standing != 5 {
-		t.Errorf("expected standing 5, got %d", entry.Standing)
+	if result[0].Username != "player1" {
+		t.Errorf("expected player1 first (7 successes), got %s", result[0].Username)
+	}
+	if result[0].Rank != 1 || result[1].Rank != 2 {
+		t.Errorf("expected ranks 1,2 got %d,%d", result[0].Rank, result[1].Rank)
 	}
 }
 
-func TestGetTeam_NormalisationMatch(t *testing.T) {
+func TestGetLeaderboard_StoreError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.SetVRSEntries([]store.VRSEntry{
-		{TeamName: "Liquid", Standing: 47, Points: 1164},
-	})
-	api := &App{Store: mockStore}
+	mockStore.GetLeaderboardError = fmt.Errorf("no leaderboard found")
+	api := NewTestApp(mockStore)
 
-	entry, err := api.GetTeam("Team Liquid")
-	if err != nil {
-		t.Fatalf("expected no error for normalised match, got: %v", err)
-	}
-	if entry.Standing != 47 {
-		t.Errorf("expected standing 47, got %d", entry.Standing)
-	}
-}
-
-func TestGetTeam_EmptyName(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-	api := &App{Store: mockStore}
-
-	_, err := api.GetTeam("")
+	_, err := api.GetLeaderboard(bg(), testGuildID, testChannelID)
 	if err == nil {
-		t.Error("expected error for empty team name, got nil")
+		t.Error("expected error when store returns an error, got nil")
 	}
 }
 
-func TestGetTeam_NotFound(t *testing.T) {
+func TestGetLeaderboard_NoGuildConfig(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.SetVRSEntries([]store.VRSEntry{
-		{TeamName: "FaZe", Standing: 5},
-	})
-	api := &App{Store: mockStore}
+	mockStore.GetGuildConfigError = fmt.Errorf("not found")
+	api := NewTestApp(mockStore)
 
-	_, err := api.GetTeam("Unknown Team")
+	_, err := api.GetLeaderboard(bg(), testGuildID, testChannelID)
 	if err == nil {
-		t.Error("expected error for unknown team, got nil")
-	}
-}
-
-func TestGetTeam_FuzzyMatch(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.SetVRSEntries([]store.VRSEntry{
-		{TeamName: "THUNDER dOWNUNDER", Standing: 22},
-	})
-	api := &App{Store: mockStore}
-
-	// "THUNDERdOWNUNDER" vs "THUNDER dOWNUNDER" — spacing difference, should fuzzy match
-	entry, err := api.GetTeam("THUNDERdOWNUNDER")
-	if err != nil {
-		t.Fatalf("expected fuzzy match to succeed, got: %v", err)
-	}
-	if entry.Standing != 22 {
-		t.Errorf("expected standing 22, got %d", entry.Standing)
-	}
-}
-
-func TestGetTeam_FetchError(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.FetchVrsDataFromDBError = fmt.Errorf("db connection failed")
-	api := &App{Store: mockStore}
-
-	_, err := api.GetTeam("FaZe")
-	if err == nil {
-		t.Error("expected error when VRS fetch fails, got nil")
+		t.Error("expected error when no guild config, got nil")
 	}
 }
 
 // endregion
 
-// region GetTeams VRS tests
+// region GetTeams
 
 func TestGetTeams_WithVRSData(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
@@ -676,9 +388,9 @@ func TestGetTeams_WithVRSData(t *testing.T) {
 		{TeamName: "Liquid", Standing: 47},
 		{TeamName: "FaZe", Standing: 5},
 	})
-	api := &App{Store: mockStore}
+	api := NewTestApp(mockStore)
 
-	teams, err := api.GetTeams()
+	teams, err := api.GetTeams(bg(), testGuildID, testChannelID)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -698,12 +410,10 @@ func TestGetTeams_WithVRSData(t *testing.T) {
 func TestGetTeams_UnmatchedTeamGetsZero(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.ValidTeams = []string{"CompletelyUnknownOrg"}
-	mockStore.SetVRSEntries([]store.VRSEntry{
-		{TeamName: "FaZe", Standing: 5},
-	})
-	api := &App{Store: mockStore}
+	mockStore.SetVRSEntries([]store.VRSEntry{{TeamName: "FaZe", Standing: 5}})
+	api := NewTestApp(mockStore)
 
-	teams, err := api.GetTeams()
+	teams, err := api.GetTeams(bg(), testGuildID, testChannelID)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -715,13 +425,114 @@ func TestGetTeams_UnmatchedTeamGetsZero(t *testing.T) {
 	}
 }
 
+func TestGetTeams_ListValidTeamsError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.ListValidTeamsError = fmt.Errorf("database error")
+	api := NewTestApp(mockStore)
+
+	_, err := api.GetTeams(bg(), testGuildID, testChannelID)
+	if err == nil {
+		t.Error("expected error when ListValidTeams fails, got nil")
+	}
+}
+
 func TestGetTeams_VRSFetchError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.SetSwissResults(map[string]string{"Team A": "1-0"})
-	mockStore.FetchVrsDataFromDBError = fmt.Errorf("db error")
-	api := &App{Store: mockStore}
+	mockStore.ListVRSRankingsError = fmt.Errorf("db error")
+	api := NewTestApp(mockStore)
 
-	_, err := api.GetTeams()
+	_, err := api.GetTeams(bg(), testGuildID, testChannelID)
+	if err == nil {
+		t.Error("expected error when VRS fetch fails, got nil")
+	}
+}
+
+func TestGetTeams_NoGuildConfig(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.GetGuildConfigError = fmt.Errorf("not found")
+	api := NewTestApp(mockStore)
+
+	_, err := api.GetTeams(bg(), testGuildID, testChannelID)
+	if err == nil {
+		t.Error("expected error when no guild config, got nil")
+	}
+}
+
+// endregion
+
+// region GetTeam
+
+func TestGetTeam_Success(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetVRSEntries([]store.VRSEntry{
+		{TeamName: "FaZe", Standing: 5, Points: 1750, Roster: []string{"karrigan", "broky", "rain"}},
+	})
+	api := NewTestApp(mockStore)
+
+	entry, err := api.GetTeam(bg(), "FaZe")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if entry.Standing != 5 {
+		t.Errorf("expected standing 5, got %d", entry.Standing)
+	}
+}
+
+func TestGetTeam_NormalisationMatch(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetVRSEntries([]store.VRSEntry{{TeamName: "Liquid", Standing: 47, Points: 1164}})
+	api := NewTestApp(mockStore)
+
+	entry, err := api.GetTeam(bg(), "Team Liquid")
+	if err != nil {
+		t.Fatalf("expected normalised match to succeed, got: %v", err)
+	}
+	if entry.Standing != 47 {
+		t.Errorf("expected standing 47, got %d", entry.Standing)
+	}
+}
+
+func TestGetTeam_EmptyName(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	api := NewTestApp(mockStore)
+
+	_, err := api.GetTeam(bg(), "")
+	if err == nil {
+		t.Error("expected error for empty team name, got nil")
+	}
+}
+
+func TestGetTeam_NotFound(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetVRSEntries([]store.VRSEntry{{TeamName: "FaZe", Standing: 5}})
+	api := NewTestApp(mockStore)
+
+	_, err := api.GetTeam(bg(), "Unknown Team")
+	if err == nil {
+		t.Error("expected error for unknown team, got nil")
+	}
+}
+
+func TestGetTeam_FuzzyMatch(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetVRSEntries([]store.VRSEntry{{TeamName: "THUNDER dOWNUNDER", Standing: 22}})
+	api := NewTestApp(mockStore)
+
+	entry, err := api.GetTeam(bg(), "THUNDERdOWNUNDER")
+	if err != nil {
+		t.Fatalf("expected fuzzy match to succeed, got: %v", err)
+	}
+	if entry.Standing != 22 {
+		t.Errorf("expected standing 22, got %d", entry.Standing)
+	}
+}
+
+func TestGetTeam_FetchError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.ListVRSRankingsError = fmt.Errorf("db connection failed")
+	api := NewTestApp(mockStore)
+
+	_, err := api.GetTeam(bg(), "FaZe")
 	if err == nil {
 		t.Error("expected error when VRS fetch fails, got nil")
 	}
@@ -729,187 +540,127 @@ func TestGetTeams_VRSFetchError(t *testing.T) {
 
 // endregion
 
-// region GetUpcomingMatches tests
+// region GetUpcomingMatches
 
 func TestGetUpcomingMatches_Success(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-
-	futureTime := time.Now().Add(24 * time.Hour).Unix()
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{
-		{
-			Team1:     "Team A",
-			Team2:     "Team B",
-			BestOf:    "3",
-			EpochTime: futureTime,
-			StreamURL: "BLAST",
-			Finished:  false,
-		},
+		{Team1: "Team A", Team2: "Team B", BestOf: "3", EpochTime: time.Now().Add(24 * time.Hour).Unix(), Finished: false},
 	})
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-
-	matches, err := api.GetUpcomingMatches()
+	matches, err := api.GetUpcomingMatches(bg(), testGuildID, testChannelID)
 	if err != nil {
-		t.Errorf("Expected no error, got: %s", err.Error())
+		t.Fatalf("expected no error, got: %v", err)
 	}
-
 	if len(matches) == 0 {
-		t.Error("Expected at least one upcoming match")
+		t.Error("expected at least one upcoming match")
 	}
-
 	if matches[0].Team1 != "Team A" || matches[0].Team2 != "Team B" {
-		t.Error("Expected match to contain team names")
+		t.Error("unexpected match teams")
 	}
 }
 
 func TestGetUpcomingMatches_LiveMatchIncluded(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-
-	pastTime := time.Now().Add(-24 * time.Hour).Unix()
-	futureTime := time.Now().Add(24 * time.Hour).Unix()
-
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{
-		{
-			Team1:     "Team A",
-			Team2:     "Team B",
-			BestOf:    "3",
-			EpochTime: pastTime,
-			StreamURL: "BLAST",
-			Finished:  false,
-		},
-		{
-			Team1:     "Team C",
-			Team2:     "Team D",
-			BestOf:    "3",
-			EpochTime: futureTime,
-			StreamURL: "BLAST",
-			Finished:  false,
-		},
+		{Team1: "Team A", Team2: "Team B", EpochTime: time.Now().Add(-24 * time.Hour).Unix(), Finished: false},
+		{Team1: "Team C", Team2: "Team D", EpochTime: time.Now().Add(24 * time.Hour).Unix(), Finished: false},
 	})
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-
-	matches, err := api.GetUpcomingMatches()
+	matches, err := api.GetUpcomingMatches(bg(), testGuildID, testChannelID)
 	if err != nil {
-		t.Errorf("Expected no error, got: %s", err.Error())
+		t.Fatalf("expected no error, got: %v", err)
 	}
-
 	if len(matches) != 2 {
-		t.Errorf("Expected 2 matches (1 live + 1 upcoming), got %d", len(matches))
+		t.Fatalf("expected 2 matches (1 live + 1 upcoming), got %d", len(matches))
 	}
-
 	if !matches[0].Live {
-		t.Error("Expected past unfinished match to be marked as live")
+		t.Error("expected past unfinished match to be marked as live")
 	}
 	if matches[1].Live {
-		t.Error("Expected future match to not be marked as live")
-	}
-}
-
-func TestGetUpcomingMatches_FetchScheduleError(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-	mockStore.FetchMatchScheduleError = fmt.Errorf("fetch failed")
-
-	api := &App{Store: mockStore}
-
-	_, err := api.GetUpcomingMatches()
-	if err == nil || !strings.Contains(err.Error(), "fetch failed") {
-		t.Errorf("Expected fetch error, got: %v", err)
+		t.Error("expected future match to not be marked as live")
 	}
 }
 
 func TestGetUpcomingMatches_FiltersFinishedMatches(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-
-	futureTime := time.Now().Add(24 * time.Hour).Unix()
-
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{
-		{
-			Team1:     "Team A",
-			Team2:     "Team B",
-			BestOf:    "3",
-			EpochTime: futureTime,
-			StreamURL: "BLAST",
-			Finished:  true, // This match is finished
-		},
+		{Team1: "Team A", Team2: "Team B", EpochTime: time.Now().Add(24 * time.Hour).Unix(), Finished: true},
 	})
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-
-	matches, err := api.GetUpcomingMatches()
+	matches, err := api.GetUpcomingMatches(bg(), testGuildID, testChannelID)
 	if err != nil {
-		t.Errorf("Expected no error, got: %s", err.Error())
+		t.Fatalf("expected no error, got: %v", err)
 	}
-
 	if len(matches) != 0 {
-		t.Error("Expected no matches when all are finished")
+		t.Errorf("expected no matches when all are finished, got %d", len(matches))
 	}
 }
 
 func TestGetUpcomingMatches_DisplaysInChronologicalOrder(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{
+		{Team1: "Team C", Team2: "Team D", EpochTime: time.Now().Add(25 * time.Hour).Unix(), Finished: false},
+		{Team1: "Team A", Team2: "Team B", EpochTime: time.Now().Add(24 * time.Hour).Unix(), Finished: false},
+	})
+	api := NewTestApp(mockStore)
 
-	time1 := time.Now().Add(24 * time.Hour).Unix()
-	match1 := sources.ScheduledMatch{
-		Team1:     "Team A",
-		Team2:     "Team B",
-		BestOf:    "3",
-		EpochTime: time1,
-		StreamURL: "BLAST",
-		Finished:  false,
-	}
-
-	time2 := time.Now().Add(25 * time.Hour).Unix()
-	match2 := sources.ScheduledMatch{
-		Team1:     "Team C",
-		Team2:     "Team D",
-		BestOf:    "3",
-		EpochTime: time2,
-		StreamURL: "BLAST",
-		Finished:  false,
-	}
-
-	mockStore.SetScheduledMatches([]sources.ScheduledMatch{match1, match2})
-
-	api := &App{Store: mockStore}
-
-	matches, err := api.GetUpcomingMatches()
+	matches, err := api.GetUpcomingMatches(bg(), testGuildID, testChannelID)
 	if err != nil {
-		t.Errorf("Expected no error, got: %s", err.Error())
+		t.Fatalf("expected no error, got: %v", err)
 	}
-
 	if len(matches) != 2 {
-		t.Error("Expected exactly 2 matches to be seeded")
+		t.Fatalf("expected 2 matches, got %d", len(matches))
 	}
-
 	if matches[0].EpochTime > matches[1].EpochTime {
-		t.Error("Expected matches to be sorted chronologically")
+		t.Error("expected matches to be sorted chronologically")
 	}
+}
 
+func TestGetUpcomingMatches_GetScheduleError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	mockStore.GetMatchScheduleError = fmt.Errorf("fetch failed")
+	api := NewTestApp(mockStore)
+
+	_, err := api.GetUpcomingMatches(bg(), testGuildID, testChannelID)
+	if err == nil || !strings.Contains(err.Error(), "fetch failed") {
+		t.Errorf("expected fetch error, got: %v", err)
+	}
+}
+
+func TestGetUpcomingMatches_NoGuildConfig(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.GetGuildConfigError = fmt.Errorf("not found")
+	api := NewTestApp(mockStore)
+
+	_, err := api.GetUpcomingMatches(bg(), testGuildID, testChannelID)
+	if err == nil {
+		t.Error("expected error when no guild config, got nil")
+	}
 }
 
 // endregion
 
-// region GetTournamentInfo tests
+// region GetTournamentInfo
 
 func TestGetTournamentInfo_Swiss(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-	mockStore.SetSwissResults(map[string]string{})
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-
-	info, err := api.GetTournamentInfo()
+	info, err := api.GetTournamentInfo(bg(), testGuildID, testChannelID)
 	if err != nil {
-		t.Errorf("Expected no error, got: %s", err.Error())
+		t.Fatalf("expected no error, got: %v", err)
 	}
-
 	if info.Format != "swiss" {
-		t.Errorf("Expected format 'swiss', got %q", info.Format)
+		t.Errorf("expected format 'swiss', got %q", info.Format)
 	}
 	if info.NumTeams != 10 {
-		t.Errorf("Expected 10 required teams, got %d", info.NumTeams)
+		t.Errorf("expected 10 required teams, got %d", info.NumTeams)
 	}
 }
 
@@ -917,91 +668,125 @@ func TestGetTournamentInfo_SingleElimination(t *testing.T) {
 	mockStore := NewMockStore("single-elimination", "test_round")
 	mockStore.ValidTeams = []string{"T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8"}
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "T1", Team2: "T2"}})
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-
-	info, err := api.GetTournamentInfo()
+	info, err := api.GetTournamentInfo(bg(), testGuildID, testChannelID)
 	if err != nil {
-		t.Errorf("Expected no error, got: %s", err.Error())
+		t.Fatalf("expected no error, got: %v", err)
 	}
-
-	// For 8 teams, should require 4 predictions
 	if info.NumTeams != 4 {
-		t.Errorf("Expected 4 required teams for 8-team elimination, got %d", info.NumTeams)
+		t.Errorf("expected 4 required teams for 8-team bracket, got %d", info.NumTeams)
 	}
 }
 
-func TestGetTournamentInfo_GetValidTeamsError(t *testing.T) {
+func TestGetTournamentInfo_ListValidTeamsError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-	mockStore.GetValidTeamsError = fmt.Errorf("db error")
+	mockStore.ListValidTeamsError = fmt.Errorf("db error")
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-
-	_, err := api.GetTournamentInfo()
+	_, err := api.GetTournamentInfo(bg(), testGuildID, testChannelID)
 	if err == nil {
-		t.Error("expected error when GetValidTeams fails, got nil")
+		t.Error("expected error when ListValidTeams fails, got nil")
 	}
 }
 
 func TestGetTournamentInfo_UnknownFormat(t *testing.T) {
 	mockStore := NewMockStore("unknown-format", "test_round")
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	api := NewTestApp(mockStore)
 
-	api := &App{Store: mockStore}
-
-	_, err := api.GetTournamentInfo()
+	_, err := api.GetTournamentInfo(bg(), testGuildID, testChannelID)
 	if err == nil {
 		t.Error("expected error for unknown tournament format, got nil")
 	}
 }
 
+func TestGetTournamentInfo_NoGuildConfig(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.GetGuildConfigError = fmt.Errorf("not found")
+	api := NewTestApp(mockStore)
+
+	_, err := api.GetTournamentInfo(bg(), testGuildID, testChannelID)
+	if err == nil {
+		t.Error("expected error when no guild config, got nil")
+	}
+}
+
 // endregion
 
-// region PopulateMatches tests
+// region PopulateMatches
+
+func TestPopulateMatches_ScheduleOnly_Success(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	api := &App{Store: mockStore, rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
+
+	if err := api.PopulateMatches(bg(), 1, "test_round", true); err != nil {
+		t.Errorf("expected no error for scheduleOnly=true, got: %v", err)
+	}
+}
+
+func TestPopulateMatches_FullUpdate_Success(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	api := &App{Store: mockStore, rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
+
+	if err := api.PopulateMatches(bg(), 1, "test_round", false); err != nil {
+		t.Errorf("expected no error for scheduleOnly=false, got: %v", err)
+	}
+}
 
 func TestPopulateMatches_ScheduleError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.FetchAndStoreScheduleError = fmt.Errorf("schedule fetch failed")
+	mockStore.FetchAndSaveScheduleError = fmt.Errorf("schedule fetch failed")
+	api := &App{Store: mockStore, rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
 
-	api := &App{
-		Store:       mockStore,
-		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10),
-	}
-
-	err := api.PopulateMatches(true)
-	if err == nil {
+	if err := api.PopulateMatches(bg(), 1, "test_round", true); err == nil {
 		t.Error("expected error when schedule fetch fails, got nil")
 	}
 }
 
 func TestPopulateMatches_ResultsError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.FetchAndUpdateMatchResultsError = fmt.Errorf("results fetch failed")
+	mockStore.FetchAndSaveMatchResultsError = fmt.Errorf("results fetch failed")
+	api := &App{Store: mockStore, rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
 
-	api := &App{
-		Store:       mockStore,
-		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10),
-	}
-
-	err := api.PopulateMatches(false)
-	if err == nil {
+	if err := api.PopulateMatches(bg(), 1, "test_round", false); err == nil {
 		t.Error("expected error when results fetch fails, got nil")
+	}
+}
+
+func TestPopulateMatches_RateLimiterNil(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	api := &App{Store: mockStore, rateLimiter: nil}
+
+	err := api.PopulateMatches(bg(), 1, "test_round", true)
+	if err == nil || !strings.Contains(err.Error(), "rate limiter") {
+		t.Errorf("expected rate limiter error, got: %v", err)
+	}
+}
+
+func TestPopulateMatches_RateLimitExceeded(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	limiter := rate.NewLimiter(rate.Every(time.Hour), 1)
+	limiter.Allow()
+	api := &App{Store: mockStore, rateLimiter: limiter}
+
+	err := api.PopulateMatches(bg(), 1, "test_round", true)
+	if err == nil || !strings.Contains(err.Error(), "rate limiter limit reached") {
+		t.Errorf("expected rate limiter error, got: %v", err)
 	}
 }
 
 // endregion
 
-// region UpdateMatchSchedule tests
+// region UpdateMatchSchedule
 
 func TestUpdateMatchSchedule_Success(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	api := &App{
-		Store:       mockStore,
-		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10),
-	}
-	if err := api.UpdateMatchSchedule(); err != nil {
-		t.Errorf("Expected no error, got: %s", err.Error())
+	api := &App{Store: mockStore, rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
+
+	if err := api.UpdateMatchSchedule(bg(), 1); err != nil {
+		t.Errorf("expected no error, got: %v", err)
 	}
 }
 
@@ -1011,216 +796,117 @@ func TestUpdateMatchSchedule_RateLimitExceeded(t *testing.T) {
 	limiter.Allow()
 	api := &App{Store: mockStore, rateLimiter: limiter}
 
-	err := api.UpdateMatchSchedule()
+	err := api.UpdateMatchSchedule(bg(), 1)
 	if err == nil || !strings.Contains(err.Error(), "rate limiter exceeded") {
-		t.Errorf("Expected rate limiter error, got: %v", err)
+		t.Errorf("expected rate limiter error, got: %v", err)
 	}
 }
 
 func TestUpdateMatchSchedule_StoreError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.FetchAndStoreScheduleError = fmt.Errorf("schedule fetch failed")
-	api := &App{
-		Store:       mockStore,
-		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10),
-	}
+	mockStore.FetchAndSaveScheduleError = fmt.Errorf("schedule fetch failed")
+	api := &App{Store: mockStore, rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
 
-	err := api.UpdateMatchSchedule()
+	err := api.UpdateMatchSchedule(bg(), 1)
 	if err == nil || !strings.Contains(err.Error(), "schedule fetch failed") {
-		t.Errorf("Expected store error, got: %v", err)
+		t.Errorf("expected store error, got: %v", err)
 	}
 }
 
 // endregion
 
-// region StoreSchedule tests
+// region StoreSchedule
 
 func TestStoreSchedule_Success(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	api := &App{Store: mockStore}
-	matches := []sources.ScheduledMatch{
-		{Team1: "Team A", Team2: "Team B", EpochTime: 1000, BestOf: "3"},
-	}
-	if err := api.StoreSchedule(matches); err != nil {
-		t.Errorf("Expected no error, got: %s", err.Error())
+	api := NewTestApp(mockStore)
+
+	matches := []sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B", EpochTime: 1000, BestOf: "3"}}
+	if err := api.StoreSchedule(bg(), 1, matches); err != nil {
+		t.Errorf("expected no error, got: %v", err)
 	}
 }
 
 func TestStoreSchedule_StoreError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.StoreMatchScheduleError = fmt.Errorf("db write failed")
-	api := &App{Store: mockStore}
+	mockStore.UpsertMatchScheduleError = fmt.Errorf("db write failed")
+	api := NewTestApp(mockStore)
 
-	err := api.StoreSchedule([]sources.ScheduledMatch{{Team1: "A", Team2: "B", EpochTime: 1000, BestOf: "3"}})
+	err := api.StoreSchedule(bg(), 1, []sources.ScheduledMatch{{Team1: "A", Team2: "B", EpochTime: 1000}})
 	if err == nil || !strings.Contains(err.Error(), "db write failed") {
-		t.Errorf("Expected store error, got: %v", err)
+		t.Errorf("expected store error, got: %v", err)
 	}
 }
 
 // endregion
 
-// region UpdateMatchResults tests
+// region UpdateMatchResults
 
 func TestUpdateMatchResults_Success(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	api := &App{Store: mockStore, rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
 
-	api := &App{
-		Store:       mockStore,
-		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10),
-	}
-
-	err := api.UpdateMatchResults()
-	if err != nil {
-		t.Errorf("Expected no error, got: %s", err.Error())
+	if err := api.UpdateMatchResults(bg(), 1, "test_round"); err != nil {
+		t.Errorf("expected no error, got: %v", err)
 	}
 }
 
 func TestUpdateMatchResults_RateLimiterNil(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
+	api := &App{Store: mockStore, rateLimiter: nil}
 
-	api := &App{
-		Store:       mockStore,
-		rateLimiter: nil,
-	}
-
-	err := api.UpdateMatchResults()
-	if err == nil {
-		t.Error("Expected error when rate limiter is nil, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "rate limiter") {
-		t.Errorf("Expected rate limiter error, got: %s", err.Error())
+	err := api.UpdateMatchResults(bg(), 1, "test_round")
+	if err == nil || !strings.Contains(err.Error(), "rate limiter") {
+		t.Errorf("expected rate limiter error, got: %v", err)
 	}
 }
 
 func TestUpdateMatchResults_RateLimitExceeded(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-
-	// Create a rate limiter that's already exhausted
 	limiter := rate.NewLimiter(rate.Every(time.Hour), 1)
-	limiter.Allow() // exhaust the single token
+	limiter.Allow()
+	api := &App{Store: mockStore, rateLimiter: limiter}
 
-	api := &App{
-		Store:       mockStore,
-		rateLimiter: limiter,
-	}
-
-	err := api.UpdateMatchResults()
-	if err == nil {
-		t.Error("Expected error when rate limit exceeded, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "rate limiter exceeded") {
-		t.Errorf("Expected rate limit error, got: %s", err.Error())
+	err := api.UpdateMatchResults(bg(), 1, "test_round")
+	if err == nil || !strings.Contains(err.Error(), "rate limiter exceeded") {
+		t.Errorf("expected rate limiter error, got: %v", err)
 	}
 }
 
 func TestUpdateMatchResults_StoreError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	mockStore.FetchAndUpdateMatchResultsError = fmt.Errorf("store error")
+	mockStore.FetchAndSaveMatchResultsError = fmt.Errorf("store error")
+	api := &App{Store: mockStore, rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
 
-	api := &App{
-		Store:       mockStore,
-		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10),
-	}
-
-	err := api.UpdateMatchResults()
-	if err == nil {
-		t.Error("Expected error from store, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "store error") {
-		t.Errorf("Expected store error, got: %s", err.Error())
+	err := api.UpdateMatchResults(bg(), 1, "test_round")
+	if err == nil || !strings.Contains(err.Error(), "store error") {
+		t.Errorf("expected store error, got: %v", err)
 	}
 }
 
 // endregion
 
-// region logger tests
+// region misc
+
+func TestNewTestApp_HasRateLimiter(t *testing.T) {
+	a := NewTestApp(NewMockStore("swiss", "test_round"))
+	if !a.Allow() {
+		t.Error("expected NewTestApp to return an App with a working rate limiter")
+	}
+}
 
 func TestApp_Logger_NilLogger_ReturnsDefault(t *testing.T) {
 	a := &App{}
-	// logger() must not panic and must return slog.Default()
-	l := a.logger()
-	if l == nil {
-		t.Error("Expected non-nil logger when no logger injected")
+	if a.logger() == nil {
+		t.Error("expected non-nil logger when no logger injected")
 	}
 }
 
-// endregion
-
-// region PopulateMatches success paths
-
-func TestPopulateMatches_ScheduleOnly_Success(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-
-	api := &App{
-		Store:       mockStore,
-		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10),
-	}
-
-	err := api.PopulateMatches(true)
-	if err != nil {
-		t.Errorf("Expected no error for scheduleOnly=true, got: %s", err.Error())
-	}
-}
-
-func TestPopulateMatches_FullUpdate_Success(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-
-	api := &App{
-		Store:       mockStore,
-		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10),
-	}
-
-	err := api.PopulateMatches(false)
-	if err != nil {
-		t.Errorf("Expected no error for scheduleOnly=false, got: %s", err.Error())
-	}
-}
-
-// endregion
-
-// region PopulateMatches rate limiter tests
-
-func TestPopulateMatches_RateLimiterNil(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-
-	api := &App{
-		Store:       mockStore,
-		rateLimiter: nil,
-	}
-
-	err := api.PopulateMatches(true)
-	if err == nil {
-		t.Error("Expected error when rate limiter is nil, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "rate limiter") {
-		t.Errorf("Expected rate limiter error, got: %s", err.Error())
-	}
-}
-
-func TestPopulateMatches_RateLimitExceeded(t *testing.T) {
-	mockStore := NewMockStore("swiss", "test_round")
-
-	// Create a rate limiter that's already exhausted
-	limiter := rate.NewLimiter(rate.Every(time.Hour), 1)
-	limiter.Allow() // exhaust the single token
-
-	api := &App{
-		Store:       mockStore,
-		rateLimiter: limiter,
-	}
-
-	err := api.PopulateMatches(true)
-	if err == nil {
-		t.Error("Expected error when rate limit exceeded, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "rate limiter limit reached") {
-		t.Errorf("Expected rate limit error, got: %s", err.Error())
+func TestMockStore_SetEliminationResults(t *testing.T) {
+	mockStore := NewMockStore("single-elimination", "test_round")
+	mockStore.SetEliminationResults(map[string]models.TeamProgress{"Team A": {Round: "final", Status: "advanced"}})
+	if mockStore.MatchResults == nil {
+		t.Error("expected MatchResults to be set")
 	}
 }
 

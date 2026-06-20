@@ -1,65 +1,52 @@
-/* match_nodes.go
- * Contains the methods for interacting with the match_nodes collection
- * Authors: Zachary Bower
- */
-
 package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"pickems-bot/sources"
 	"pickems-bot/tournament"
-
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// StoreMatchNodes persists the raw []MatchNode slice for a round so it can be
-// used later for results display and bracket rendering.
-func (s *Store) StoreMatchNodes(nodes []sources.MatchNode, kind tournament.Kind) error {
-	filter := bson.M{"round": s.Round}
-
-	doc := bson.M{
-		"round":  s.Round,
-		"format": string(kind),
-		"nodes":  nodes,
-	}
-
-	var existing bson.M
-	err := s.Collections.MatchNodes.FindOne(context.TODO(), filter).Decode(&existing)
-	notFound := errors.Is(err, mongo.ErrNoDocuments)
-	if err != nil && !notFound {
-		return fmt.Errorf("lookup for existing match nodes record failed: %w", err)
-	}
-
-	if notFound {
-		if _, err := s.Collections.MatchNodes.InsertOne(context.TODO(), doc); err != nil {
-			return fmt.Errorf("failed to insert match nodes: %w", err)
-		}
-		return nil
-	}
-	if _, err := s.Collections.MatchNodes.UpdateOne(context.TODO(), filter, bson.M{"$set": doc}); err != nil {
-		return fmt.Errorf("failed to update match nodes: %w", err)
-	}
-	return nil
-}
-
-// FetchMatchNodesFromDb retrieves the raw []MatchNode slice for the configured round, and the tournament.Kind of the round
-// tournament.Kind could potentially be an empty string if legacy data is fetched, so callers should check that
-func (s *Store) FetchMatchNodesFromDb() ([]sources.MatchNode, tournament.Kind, error) {
-	var doc struct {
-		Nodes  []sources.MatchNode `bson:"nodes"`
-		Format tournament.Kind     `bson:"format"`
-	}
-	err := s.Collections.MatchNodes.FindOne(context.TODO(), bson.M{"round": s.Round}).Decode(&doc)
+// GetMatchNodes retrieves the raw match nodes for a tournament round, used for results display and score calculation.
+// Nodes are written to the matches table as part of FetchAndSaveMatchResults.
+func (s *PostgresStore) GetMatchNodes(ctx context.Context, tournamentID int, round string) ([]sources.MatchNode, tournament.Kind, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT m.external_id, m.team1_name, m.team2_name,
+		       COALESCE(tw.canonical_name, ''),
+		       COALESCE(m.score, ''),
+		       m.round,
+		       m.status,
+		       COALESCE(t.format, '')
+		FROM matches m
+		JOIN tournaments t ON t.id = m.tournament_id
+		LEFT JOIN teams tw ON tw.id = m.winner_id
+		WHERE m.tournament_id = $1 AND m.round = $2
+		ORDER BY m.id ASC
+	`, tournamentID, round)
 	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, "", err
-		}
-		return nil, "", fmt.Errorf("error fetching match nodes from db: %w", err)
+		return nil, "", fmt.Errorf("GetMatchNodes: %w", err)
 	}
-	return doc.Nodes, doc.Format, nil
+	defer rows.Close()
+
+	var nodes []sources.MatchNode
+	var kind tournament.Kind
+	for rows.Next() {
+		var n sources.MatchNode
+		var externalID *string
+		if err := rows.Scan(&externalID, &n.Team1, &n.Team2, &n.Winner, &n.Score, &n.Section, &n.Status, &kind); err != nil {
+			return nil, "", fmt.Errorf("GetMatchNodes: scan: %w", err)
+		}
+		if externalID != nil {
+			n.ID = *externalID
+		}
+		nodes = append(nodes, n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", fmt.Errorf("GetMatchNodes: rows: %w", err)
+	}
+	if len(nodes) == 0 {
+		return nil, "", fmt.Errorf("no match nodes found for tournament %d round %q", tournamentID, round)
+	}
+	return nodes, kind, nil
 }

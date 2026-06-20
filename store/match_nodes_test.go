@@ -1,224 +1,100 @@
-/* match_nodes_test.go
- * Contains unit and integration tests for match_nodes.go functions
- * Authors: Zachary Bower
- */
+//go:build integration
 
 package store
 
 import (
 	"context"
-	"os"
 	"testing"
-
-	"pickems-bot/sources"
-	"pickems-bot/tournament"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/integration/mtest"
 )
 
-// region StoreMatchNodes tests
+func TestGetMatchNodes_ReturnsNodes(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
 
-func TestStoreMatchNodes_Insert(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
+	tournamentID := seedTournament(t, "test-nodes", "swiss")
+	seedMatch(t, tournamentID, "Stage 1", "TeamA", "TeamB", "pending")
+	seedMatch(t, tournamentID, "Stage 1", "TeamC", "TeamD", "pending")
 
-	mt.Run("successfully inserts new match nodes", func(mt *mtest.T) {
-		store := &Store{
-			Round: "test_round",
-			Collections: Collections{
-				MatchNodes: mt.Coll,
-			},
-		}
-
-		mt.AddMockResponses(mtest.CreateCursorResponse(0, "test.match_nodes", mtest.FirstBatch))
-		mt.AddMockResponses(mtest.CreateSuccessResponse())
-
-		nodes := []sources.MatchNode{
-			{ID: "abc_0001", Team1: "Team A", Team2: "Team B", Winner: "Team A", Score: "2-0"},
-		}
-		err := store.StoreMatchNodes(nodes, tournament.Swiss)
-		assert.NoError(t, err)
-	})
-}
-
-func TestStoreMatchNodes_Update(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-
-	mt.Run("successfully updates existing match nodes", func(mt *mtest.T) {
-		store := &Store{
-			Round: "test_round",
-			Collections: Collections{
-				MatchNodes: mt.Coll,
-			},
-		}
-
-		first := mtest.CreateCursorResponse(1, "test.match_nodes", mtest.FirstBatch, bson.D{
-			{Key: "round", Value: "test_round"},
-		})
-		getMore := mtest.CreateCursorResponse(0, "test.match_nodes", mtest.NextBatch)
-		updateSuccess := bson.D{{Key: "ok", Value: 1}, {Key: "nModified", Value: 1}}
-		mt.AddMockResponses(first, getMore, updateSuccess)
-
-		nodes := []sources.MatchNode{
-			{ID: "abc_0001", Team1: "Team A", Team2: "Team B", Winner: "Team B", Score: "1-2"},
-		}
-		err := store.StoreMatchNodes(nodes, tournament.Swiss)
-		assert.NoError(t, err)
-	})
-}
-
-func TestStoreMatchNodes_FindOneError(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-
-	mt.Run("returns error when lookup fails", func(mt *mtest.T) {
-		store := &Store{
-			Round: "test_round",
-			Collections: Collections{
-				MatchNodes: mt.Coll,
-			},
-		}
-
-		mt.AddMockResponses(mtest.CreateCommandErrorResponse(mtest.CommandError{
-			Code:    11000,
-			Message: "database error",
-		}))
-
-		err := store.StoreMatchNodes([]sources.MatchNode{}, tournament.Swiss)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "lookup for existing match nodes record failed")
-	})
-}
-
-// endregion
-
-// region FetchMatchNodesFromDb tests
-
-func TestFetchMatchNodesFromDb_Success(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-
-	mt.Run("successfully fetches match nodes", func(mt *mtest.T) {
-		store := &Store{
-			Round: "test_round",
-			Collections: Collections{
-				MatchNodes: mt.Coll,
-			},
-		}
-
-		doc := mtest.CreateCursorResponse(1, "test.match_nodes", mtest.FirstBatch, bson.D{
-			{Key: "round", Value: "test_round"},
-			{Key: "format", Value: "swiss"},
-			{Key: "nodes", Value: bson.A{
-				bson.D{
-					{Key: "id", Value: "abc_0001"},
-					{Key: "team1", Value: "Team A"},
-					{Key: "team2", Value: "Team B"},
-					{Key: "winner", Value: "Team A"},
-					{Key: "score", Value: "2-0"},
-					{Key: "section", Value: "Round 1"},
-				},
-			}},
-		})
-		mt.AddMockResponses(doc)
-
-		nodes, _, err := store.FetchMatchNodesFromDb()
-		require.NoError(t, err)
-		require.Len(t, nodes, 1)
-		assert.Equal(t, "abc_0001", nodes[0].ID)
-		assert.Equal(t, "Team A", nodes[0].Team1)
-		assert.Equal(t, "Team B", nodes[0].Team2)
-		assert.Equal(t, "Team A", nodes[0].Winner)
-		assert.Equal(t, "2-0", nodes[0].Score)
-		assert.Equal(t, "Round 1", nodes[0].Section)
-	})
-}
-
-func TestFetchMatchNodesFromDb_NotFound(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-
-	mt.Run("returns ErrNoDocuments when round not found", func(mt *mtest.T) {
-		store := &Store{
-			Round: "test_round",
-			Collections: Collections{
-				MatchNodes: mt.Coll,
-			},
-		}
-
-		mt.AddMockResponses(mtest.CreateCursorResponse(0, "test.match_nodes", mtest.FirstBatch))
-
-		nodes, _, err := store.FetchMatchNodesFromDb()
-		assert.Equal(t, mongo.ErrNoDocuments, err)
-		assert.Nil(t, nodes)
-	})
-}
-
-// endregion
-
-// region integration test
-
-func TestMatchNodes_WithRealDB(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
-	}
-	if os.Getenv("CI") != "" {
-		t.Skip("Skipping test that requires MongoDB in CI environment")
-	}
-
-	mongoURI := os.Getenv("MONGO_TEST_URI")
-	if mongoURI == "" {
-		mongoURI = "mongodb://localhost:27017"
-	}
-
-	store, cleanup, err := CreateTestStore(mongoURI)
-	if err != nil {
-		t.Skipf("Skipping test: could not connect to MongoDB: %v", err)
-	}
-	defer cleanup()
-
-	nodes := []sources.MatchNode{
-		{ID: "test_0001", Team1: "Team A", Team2: "Team B", Winner: "Team A", Score: "2-1", Section: "Round 1"},
-		{ID: "test_0002", Team1: "Team C", Team2: "Team D", Winner: "TBD", Score: "", Section: "Round 1"},
-	}
-
-	t.Run("store and fetch match nodes", func(t *testing.T) {
-		err := store.StoreMatchNodes(nodes, tournament.Swiss)
-		require.NoError(t, err)
-
-		fetched, _, err := store.FetchMatchNodesFromDb()
-		require.NoError(t, err)
-		require.Len(t, fetched, 2)
-
-		assert.Equal(t, "test_0001", fetched[0].ID)
-		assert.Equal(t, "Team A", fetched[0].Team1)
-		assert.Equal(t, "Team B", fetched[0].Team2)
-		assert.Equal(t, "Team A", fetched[0].Winner)
-		assert.Equal(t, "2-1", fetched[0].Score)
-
-		assert.Equal(t, "test_0002", fetched[1].ID)
-		assert.Equal(t, "TBD", fetched[1].Winner)
-		assert.Equal(t, "", fetched[1].Score)
-	})
-
-	t.Run("update existing match nodes", func(t *testing.T) {
-		updated := []sources.MatchNode{
-			{ID: "test_0001", Team1: "Team A", Team2: "Team B", Winner: "Team B", Score: "1-2"},
-		}
-
-		err := store.StoreMatchNodes(updated, tournament.Swiss)
-		require.NoError(t, err)
-
-		fetched, _, err := store.FetchMatchNodesFromDb()
-		require.NoError(t, err)
-		require.Len(t, fetched, 1)
-		assert.Equal(t, "Team B", fetched[0].Winner)
-		assert.Equal(t, "1-2", fetched[0].Score)
-	})
-
-	// Clean up
-	_, err = store.Collections.MatchNodes.DeleteMany(context.TODO(), bson.M{"round": store.Round})
+	nodes, kind, err := s.GetMatchNodes(ctx, tournamentID, "Stage 1")
 	require.NoError(t, err)
+	assert.Equal(t, "swiss", string(kind))
+	assert.Len(t, nodes, 2)
+
+	teams := make(map[string]bool)
+	for _, n := range nodes {
+		teams[n.Team1] = true
+		teams[n.Team2] = true
+	}
+	assert.True(t, teams["TeamA"])
+	assert.True(t, teams["TeamB"])
+	assert.True(t, teams["TeamC"])
+	assert.True(t, teams["TeamD"])
 }
 
-// endregion
+func TestGetMatchNodes_EmptyRound(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournament(t, "test-empty-round", "swiss")
+
+	_, _, err := s.GetMatchNodes(ctx, tournamentID, "Stage 1")
+	assert.Error(t, err)
+}
+
+func TestGetMatchNodes_WinnerResolvedFromFK(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournament(t, "test-winner-fk", "swiss")
+	winnerTeamID := seedTeam(t, "TeamA", "test", "team-a")
+
+	// Seed a completed match with score and winner FK set directly.
+	var matchID int
+	err := testPool.QueryRow(ctx, `
+		INSERT INTO matches (tournament_id, round, team1_name, team2_name, score, status, winner_id)
+		VALUES ($1, 'Stage 1', 'TeamA', 'TeamB', '3-1', 'completed', $2)
+		RETURNING id
+	`, tournamentID, winnerTeamID).Scan(&matchID)
+	require.NoError(t, err)
+
+	nodes, _, err := s.GetMatchNodes(ctx, tournamentID, "Stage 1")
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	assert.Equal(t, "TeamA", nodes[0].Winner)
+	assert.Equal(t, "3-1", nodes[0].Score)
+}
+
+func TestGetMatchNodes_NullableFormatHandled(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournamentNullFormat(t, "test-null-format")
+	seedMatch(t, tournamentID, "Stage 1", "TeamA", "TeamB", "pending")
+
+	nodes, kind, err := s.GetMatchNodes(ctx, tournamentID, "Stage 1")
+	require.NoError(t, err)
+	assert.Equal(t, "", string(kind))
+	assert.Len(t, nodes, 1)
+}
+
+func TestGetMatchNodes_OnlyReturnsRequestedRound(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournament(t, "test-round-filter", "swiss")
+	seedMatch(t, tournamentID, "Stage 1", "TeamA", "TeamB", "pending")
+	seedMatch(t, tournamentID, "Stage 2", "TeamC", "TeamD", "pending")
+
+	nodes, _, err := s.GetMatchNodes(ctx, tournamentID, "Stage 1")
+	require.NoError(t, err)
+	assert.Len(t, nodes, 1)
+	assert.Equal(t, "TeamA", nodes[0].Team1)
+}
