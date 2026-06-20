@@ -2,35 +2,48 @@ package store
 
 import (
 	"context"
-	"pickems-bot/metrics"
+	"fmt"
 	"time"
-
-	"go.mongodb.org/mongo-driver/bson"
 )
 
-// VRSEntry represents a single team's entry in the VRS world rankings database.
+// VRSEntry represents a single team's entry in the VRS world rankings.
 type VRSEntry struct {
-	Standing      int       `bson:"standing"`
-	Points        int       `bson:"points"`
-	TeamName      string    `bson:"team_name"`
-	Roster        []string  `bson:"roster"`
-	StandingsDate string    `bson:"standings_date"`
-	SyncedAt      time.Time `bson:"synced_at"`
+	Standing      int
+	Points        int
+	TeamName      string
+	Roster        []string
+	StandingsDate time.Time
+	SyncedAt      time.Time
 }
 
-// FetchVrsDataFromDB retrieves all entries from the VRS rankings collection.
-// Note: fetches the entire collection on each call. This is acceptable given the
-// expected volume (~300 documents), but should be revisited if that changes.
-func (s *Store) FetchVrsDataFromDB() ([]VRSEntry, error) {
-	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
-	var results []VRSEntry
-	cursor, err := s.Collections.VRS.Find(context.TODO(), bson.D{})
+// ListVRSRankings returns the latest VRS rankings for all teams, ordered by standing.
+func (s *PostgresStore) ListVRSRankings(ctx context.Context) ([]VRSEntry, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT canonical_name, standing, points, roster, standings_date, synced_at
+		FROM (
+			SELECT t.canonical_name, tr.standing, tr.points, tr.roster, tr.standings_date, tr.synced_at,
+			       ROW_NUMBER() OVER (PARTITION BY tr.team_id ORDER BY tr.standings_date DESC) AS rn
+			FROM team_rankings tr
+			JOIN teams t ON t.id = tr.team_id
+		) ranked
+		WHERE rn = 1
+		ORDER BY standing
+	`)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ListVRSRankings: %w", err)
 	}
+	defer rows.Close()
 
-	if err = cursor.All(context.TODO(), &results); err != nil {
-		return nil, err
+	var results []VRSEntry
+	for rows.Next() {
+		var e VRSEntry
+		if err := rows.Scan(&e.TeamName, &e.Standing, &e.Points, &e.Roster, &e.StandingsDate, &e.SyncedAt); err != nil {
+			return nil, fmt.Errorf("ListVRSRankings: scan: %w", err)
+		}
+		results = append(results, e)
 	}
-	return results, err
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("ListVRSRankings: rows: %w", err)
+	}
+	return results, nil
 }

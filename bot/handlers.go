@@ -7,6 +7,7 @@
 package bot
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -16,11 +17,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/go-andiamo/splitter"
-	"go.mongodb.org/mongo-driver/mongo"
+	"github.com/jackc/pgx/v5"
 )
 
 // helpMessageHandler handles the $help command with a DiscordSession interface
@@ -90,7 +90,7 @@ func (b *Bot) helpMessageHandler(session DiscordSession, message *discordgo.Mess
 
 // detailsHandler handles the $details command with a DiscordSession interface
 func (b *Bot) detailsHandler(session DiscordSession, message *discordgo.MessageCreate) {
-	info, err := b.APIPtr.GetTournamentInfo()
+	info, err := b.APIPtr.GetTournamentInfo(context.Background(), message.GuildID, message.ChannelID)
 	if err != nil {
 		b.logger().Error("failed to get tournament info", "error", fmt.Errorf("detailsHandler: %w", err))
 		sendError(session, message.ChannelID, "An unexpected error occurred.")
@@ -138,7 +138,7 @@ func (b *Bot) setPredictionsHandler(session DiscordSession, message *discordgo.M
 	msg, _ := spaceSplitter.Split(message.Content)
 	userPreds := msg[1:]
 
-	prediction, err := b.APIPtr.SetUserPrediction(user, userPreds, b.APIPtr.Store.GetRound())
+	prediction, err := b.APIPtr.SetUserPrediction(context.Background(), message.GuildID, message.ChannelID, user, userPreds)
 	if err != nil {
 		b.logger().Error("failed to set user prediction", "user", user.Username, "error", fmt.Errorf("setPredictionsHandler: %w", err))
 		sendError(session, message.ChannelID, err.Error())
@@ -187,9 +187,9 @@ func (b *Bot) checkPredictionsHandler(session DiscordSession, message *discordgo
 	if target == "" {
 		user = models.User{UserID: message.Author.ID, Username: message.Author.Username}
 		var err error
-		report, err = b.APIPtr.CheckPrediction(user)
+		report, err = b.APIPtr.CheckPrediction(context.Background(), message.GuildID, message.ChannelID, user)
 		if err != nil {
-			if errors.Is(err, mongo.ErrNoDocuments) {
+			if errors.Is(err, pgx.ErrNoRows) {
 				sendError(session, message.ChannelID, fmt.Sprintf("%s does not have any Pick'Ems stored. Use `$set` to set your predictions.", user.Username))
 			} else {
 				b.logger().Error("failed to check prediction", "user", user.Username, "error", fmt.Errorf("checkPredictionsHandler: %w", err))
@@ -199,9 +199,9 @@ func (b *Bot) checkPredictionsHandler(session DiscordSession, message *discordgo
 		}
 	} else {
 		var err error
-		user, report, err = b.APIPtr.CheckPredictionByUsername(target)
+		user, report, err = b.APIPtr.CheckPredictionByUsername(context.Background(), message.GuildID, message.ChannelID, target)
 		if err != nil {
-			if errors.Is(err, mongo.ErrNoDocuments) {
+			if errors.Is(err, pgx.ErrNoRows) {
 				sendError(session, message.ChannelID, fmt.Sprintf("No Pick'Ems found for **%s**.", target))
 			} else {
 				b.logger().Error("failed to check prediction by username", "target", target, "error", fmt.Errorf("checkPredictionsHandler: %w", err))
@@ -223,7 +223,7 @@ func (b *Bot) checkPredictionsHandler(session DiscordSession, message *discordgo
 		fields = append(fields, singleElimField(r.Predictions))
 	}
 
-	info, err := b.APIPtr.GetTournamentInfo()
+	info, err := b.APIPtr.GetTournamentInfo(context.Background(), message.GuildID, message.ChannelID)
 	if err != nil {
 		b.logger().Error("failed to get tournament info", "error", fmt.Errorf("checkPredictionsHandler: %w", err))
 		sendError(session, message.ChannelID, "An unexpected error occurred.")
@@ -244,7 +244,7 @@ func (b *Bot) checkPredictionsHandler(session DiscordSession, message *discordgo
 
 // leaderboardHandler handles the $leaderboard command with a DiscordSession interface
 func (b *Bot) leaderboardHandler(session DiscordSession, message *discordgo.MessageCreate) {
-	leaderboard, err := b.APIPtr.GetLeaderboard()
+	leaderboard, err := b.APIPtr.GetLeaderboard(context.Background(), message.GuildID, message.ChannelID)
 	if err != nil {
 		b.logger().Error("failed to get leaderboard", "error", fmt.Errorf("leaderboardHandler: %w", err))
 		sendError(session, message.ChannelID, "An error occurred getting the leaderboard.")
@@ -281,7 +281,7 @@ func (b *Bot) leaderboardHandler(session DiscordSession, message *discordgo.Mess
 
 // teamsHandler handles the $teams command with a DiscordSession interface
 func (b *Bot) teamsHandler(session DiscordSession, message *discordgo.MessageCreate) {
-	teams, err := b.APIPtr.GetTeams()
+	teams, err := b.APIPtr.GetTeams(context.Background(), message.GuildID, message.ChannelID)
 	if err != nil {
 		b.logger().Error("failed to get teams", "error", fmt.Errorf("teamsHandler: %w", err))
 		sendError(session, message.ChannelID, "An error occurred getting the teams list.")
@@ -343,7 +343,7 @@ func (b *Bot) teamHandler(session DiscordSession, message *discordgo.MessageCrea
 	}
 	teamName := strings.Join(msg[1:], " ")
 
-	entry, err := b.APIPtr.GetTeam(teamName)
+	entry, err := b.APIPtr.GetTeam(context.Background(), teamName)
 	if err != nil {
 		b.logger().Error("failed to get team", "team", teamName, "error", fmt.Errorf("teamHandler: %w", err))
 		sendError(session, message.ChannelID, fmt.Sprintf("No VRS data found for **%s**.", teamName))
@@ -356,9 +356,8 @@ func (b *Bot) teamHandler(session DiscordSession, message *discordgo.MessageCrea
 	}
 
 	footerText := "VRS Rankings"
-	t, parseErr := time.Parse("2006_01_02", entry.StandingsDate)
-	if parseErr == nil {
-		footerText = "Rankings as of " + t.Format("02 Jan 2006")
+	if !entry.StandingsDate.IsZero() {
+		footerText = "Rankings as of " + entry.StandingsDate.Format("02 Jan 2006")
 	}
 
 	embed := &discordgo.MessageEmbed{
@@ -378,7 +377,7 @@ func (b *Bot) teamHandler(session DiscordSession, message *discordgo.MessageCrea
 
 // upcomingMatchesHandler handles the $upcoming command with a DiscordSession interface
 func (b *Bot) upcomingMatchesHandler(session DiscordSession, message *discordgo.MessageCreate) {
-	matches, err := b.APIPtr.GetUpcomingMatches()
+	matches, err := b.APIPtr.GetUpcomingMatches(context.Background(), message.GuildID, message.ChannelID)
 	if err != nil {
 		b.logger().Error("failed to get upcoming matches", "error", fmt.Errorf("upcomingMatchesHandler: %w", err))
 		sendError(session, message.ChannelID, "An error occurred getting upcoming matches.")

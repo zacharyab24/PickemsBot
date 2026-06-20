@@ -1,0 +1,6 @@
+ALTER TABLE matches
+    DROP COLUMN IF EXISTS team1_name,
+    DROP COLUMN IF EXISTS team2_name,
+    DROP COLUMN IF EXISTS best_of,
+    DROP COLUMN IF EXISTS stream_url,
+    DROP COLUMN IF EXISTS is_live;

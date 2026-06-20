@@ -1,6 +1,7 @@
 /* app.go
- * This file contains the public methods for interacting with this package. For consistent results, fuctions should
- * only be called from this file, not the sub packages for match and processing. For details about functionality see `api.md`
+ * Public methods for interacting with the pickems bot data layer.
+ * User-facing commands take (ctx, guildID, channelID) and resolve tournament context from guild_config.
+ * Background/poller operations take explicit (tournamentID, round) parameters.
  * Authors: Zachary Bower
  */
 
@@ -8,6 +9,7 @@ package app
 
 import (
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -29,14 +31,13 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// App provides methods for interacting with the pickems bot data layer
+// App provides methods for interacting with the pickems bot data layer.
 type App struct {
 	Store       store.Interface
 	rateLimiter *rate.Limiter
 	log         *slog.Logger
 }
 
-// logger returns the app's logger, falling back to the global default when none was injected.
 func (a *App) logger() *slog.Logger {
 	if a.log == nil {
 		return slog.Default()
@@ -44,32 +45,32 @@ func (a *App) logger() *slog.Logger {
 	return a.log
 }
 
-// NewApp creates a new App instance with the provided configuration.
+// NewApp creates a new App instance.
+// postgresURI is the connection string for the PostgreSQL database.
 // log may be nil; if so the global slog default is used.
-func NewApp(cfg config.Config, mongoURI string, log *slog.Logger) (*App, error) {
+func NewApp(cfg config.Config, postgresURI string, log *slog.Logger) (*App, error) {
 	var fetcher store.DataSourceFetcher
 	var limiter *rate.Limiter
 	switch cfg.DataSource {
 	case "liquipedia":
 		fetcher = store.NewLiquipediaFetcher(cfg.Liquipedia.APIURL, os.Getenv("LIQUIDPEDIADB_API_KEY"), cfg.Liquipedia.Page)
-		limiter = rate.NewLimiter(rate.Every(time.Minute), 10) // 60/hr per API guidelines
+		limiter = rate.NewLimiter(rate.Every(time.Minute), 10)
 
 	case "pandascore":
 		fetcher = store.NewPandaScoreFetcher(cfg.PandaScore.APIURL, os.Getenv("PANDASCORE_API_KEY"), cfg.PandaScore.SeriesID, cfg.PandaScore.TournamentID)
-		limiter = rate.NewLimiter(rate.Every(4*time.Second), 5) // ~900/hr, less than the 1000 limit of our api plan
+		limiter = rate.NewLimiter(rate.Every(4*time.Second), 5)
 
 	default:
 		return nil, fmt.Errorf("unsupported data source: %s", cfg.DataSource)
 	}
 
-	// Tag each layer's logger with its own component before storing, so that
-	// every log line carries exactly one "component" field without double-stamping.
 	var appLog, storeLog *slog.Logger
 	if log != nil {
 		appLog = log.With("component", "app")
 		storeLog = log.With("component", "store")
 	}
-	s, err := store.NewStore(cfg.TournamentName, mongoURI, cfg.Round, fetcher, storeLog)
+
+	s, err := store.NewStore(postgresURI, fetcher, storeLog)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize store: %w", err)
 	}
@@ -82,8 +83,6 @@ func NewApp(cfg config.Config, mongoURI string, log *slog.Logger) (*App, error) 
 }
 
 // Allow calls the app's configured rate limiter's Allow() function.
-// Returns false if the limiter is nil or the limit has been reached.
-// Required since we are treating it as a singleton
 func (a *App) Allow() bool {
 	if a.rateLimiter == nil {
 		return false
@@ -91,19 +90,30 @@ func (a *App) Allow() bool {
 	return a.rateLimiter.Allow()
 }
 
-// SetUserPrediction contains the logic to set a user prediction in the DB.
-// It receives a user struct that contains userID and userName, and a list of teams the user wishes to set,
-// and strings containing dbName, collName and round.
-// It updates the user's predictions in the database, or returns an error if it occurs.
-// As a side effect, a successful set also triggers the leaderboard being updated
-func (a *App) SetUserPrediction(user models.User, inputTeams []string, round string) (models.Prediction, error) {
-	err := a.Store.EnsureScheduledMatches()
+// resolveConfig looks up the guild config and validates that a tournament and round are set.
+func (a *App) resolveConfig(ctx context.Context, guildID, channelID string) (store.GuildConfig, error) {
+	cfg, err := a.Store.GetGuildConfig(ctx, guildID, channelID)
+	if err != nil {
+		return store.GuildConfig{}, fmt.Errorf("no configuration found for this server/channel: %w", err)
+	}
+	if cfg.TournamentID == nil || cfg.Round == nil {
+		return store.GuildConfig{}, errors.New("tournament not configured for this server — use /config to set up")
+	}
+	return cfg, nil
+}
+
+// SetUserPrediction validates and stores a user's prediction for the configured tournament round.
+func (a *App) SetUserPrediction(ctx context.Context, guildID, channelID string, user models.User, inputTeams []string) (models.Prediction, error) {
+	cfg, err := a.resolveConfig(ctx, guildID, channelID)
 	if err != nil {
 		return models.Prediction{}, err
 	}
 
-	// Get valid team names
-	validTeams, formatName, err := a.Store.GetValidTeams()
+	if err := a.Store.EnsureScheduledMatches(ctx, *cfg.TournamentID); err != nil {
+		return models.Prediction{}, err
+	}
+
+	validTeams, formatName, err := a.Store.ListValidTeams(ctx, *cfg.TournamentID, *cfg.Round)
 	if err != nil {
 		return models.Prediction{}, err
 	}
@@ -113,22 +123,17 @@ func (a *App) SetUserPrediction(user models.User, inputTeams []string, round str
 		return models.Prediction{}, fmt.Errorf("unknown tournament format: %s", formatName)
 	}
 
-	// Get number of required teams
 	requiredPredictions := f.RequiredPredictions(len(validTeams))
-
-	// Check num required teams is correct
 	if len(inputTeams) != requiredPredictions {
 		return models.Prediction{}, fmt.Errorf("incorrect number of teams arguments, expected %d but got %d", requiredPredictions, len(inputTeams))
 	}
 
-	// Fix formatting on input teams
 	for i := range inputTeams {
 		inputTeams[i] = strings.ReplaceAll(inputTeams[i], "\"", "")
 		inputTeams[i] = strings.ReplaceAll(inputTeams[i], "“", "")
 		inputTeams[i] = strings.ReplaceAll(inputTeams[i], "”", "")
 	}
 
-	// Validate input teams
 	teams, invalidTeams := scoring.CheckTeamNames(inputTeams, validTeams)
 	if len(invalidTeams) > 0 {
 		var str strings.Builder
@@ -139,7 +144,6 @@ func (a *App) SetUserPrediction(user models.User, inputTeams []string, round str
 		return models.Prediction{}, errors.New(str.String())
 	}
 
-	// Check for unique team names
 	seen := make(map[string]string)
 	for i, team := range teams {
 		if original, exists := seen[team]; exists {
@@ -151,188 +155,120 @@ func (a *App) SetUserPrediction(user models.User, inputTeams []string, round str
 		seen[team] = inputTeams[i]
 	}
 
-	// Generate prediction struct
-	prediction, err := f.GeneratePrediction(user, round, teams)
+	prediction, err := f.GeneratePrediction(user, *cfg.Round, teams)
 	if err != nil {
 		return models.Prediction{}, err
 	}
 
-	// Insert prediction to db
-	err = a.Store.StoreUserPrediction(user.UserID, prediction)
-	if err != nil {
+	if err := a.Store.UpsertPrediction(ctx, guildID, *cfg.TournamentID, prediction); err != nil {
 		return models.Prediction{}, err
 	}
-
-	// Update the leaderboard with the new user's prediction
-	go func() {
-		if err := a.GenerateLeaderboard(); err != nil {
-			a.logger().Error("leaderboard regen after set failed", "error", err)
-		}
-	}()
 
 	return prediction, nil
 }
 
-// CheckPrediction contains the logic required to check a prediction.
-// It receives a user struct and receiver pointer to api.
-// It returns a ScoreReport containing the results of the user's predictions, or an error if it occurs.
-func (a *App) CheckPrediction(user models.User) (tournament.ScoreReport, error) {
-	err := a.Store.EnsureScheduledMatches()
-	if err != nil {
-		return nil, err
-	}
-	// Fetch prediction from db
-	doc, err := a.Store.GetUserPrediction(user.UserID)
+// CheckPrediction fetches and scores a user's stored prediction.
+func (a *App) CheckPrediction(ctx context.Context, guildID, channelID string, user models.User) (tournament.ScoreReport, error) {
+	cfg, err := a.resolveConfig(ctx, guildID, channelID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Fetch match results from db
-	results, err := a.Store.GetMatchResults()
+	if err := a.Store.EnsureScheduledMatches(ctx, *cfg.TournamentID); err != nil {
+		return nil, err
+	}
+
+	doc, err := a.Store.GetPrediction(ctx, user.UserID, guildID, *cfg.TournamentID, *cfg.Round)
 	if err != nil {
 		return nil, err
 	}
 
-	// Evaluate scores
-	report, err := scoring.CalculateUserScore(doc, results)
+	results, err := a.Store.GetMatchResults(ctx, *cfg.TournamentID, *cfg.Round)
 	if err != nil {
 		return nil, err
 	}
-	return report, nil
+
+	return scoring.CalculateUserScore(doc, results)
 }
 
 // CheckPredictionByUsername looks up picks by username (case-insensitive) and scores them.
-func (a *App) CheckPredictionByUsername(username string) (models.User, tournament.ScoreReport, error) {
-	err := a.Store.EnsureScheduledMatches()
+func (a *App) CheckPredictionByUsername(ctx context.Context, guildID, channelID, username string) (models.User, tournament.ScoreReport, error) {
+	cfg, err := a.resolveConfig(ctx, guildID, channelID)
 	if err != nil {
 		return models.User{}, nil, err
 	}
-	doc, err := a.Store.GetUserPredictionByUsername(username)
+
+	if err := a.Store.EnsureScheduledMatches(ctx, *cfg.TournamentID); err != nil {
+		return models.User{}, nil, err
+	}
+
+	doc, err := a.Store.GetPredictionByUsername(ctx, username, guildID, *cfg.TournamentID, *cfg.Round)
 	if err != nil {
 		return models.User{}, nil, err
 	}
-	results, err := a.Store.GetMatchResults()
+
+	results, err := a.Store.GetMatchResults(ctx, *cfg.TournamentID, *cfg.Round)
 	if err != nil {
 		return models.User{}, nil, err
 	}
+
 	report, err := scoring.CalculateUserScore(doc, results)
 	if err != nil {
 		return models.User{}, nil, err
 	}
+
 	return models.User{UserID: doc.UserID, Username: doc.Username}, report, nil
 }
 
-// GenerateLeaderboard contains the logic required to generate a leaderboard.
-// Preconditions: Receives receiver pointer to api
-// Postconditions: Generates the leaderboard, updates it in the DB and returns nil, or returns an error if it occurs
-func (a *App) GenerateLeaderboard() error {
-	timer := prometheus.NewTimer(metrics.LeaderboardDuration)
-	defer timer.ObserveDuration()
-
-	// Check if results have been initialised
-	err := a.Store.EnsureScheduledMatches()
-	if err != nil {
-		return err
-	}
-
-	// Fetch match results from db
-	results, err := a.Store.GetMatchResults()
-	if err != nil {
-		return err
-	}
-
-	// Fetch all predictions
-	preds, err := a.Store.GetAllUserPredictions()
-	if err != nil {
-		return err
-	}
-
-	var leaderboard store.Leaderboard
-	leaderboard.Round = a.Store.GetRound()
-
-	// Iterate over each user's predictions, calculate their score and append the leaderboardEntry to the leaderboard object
-	for _, pred := range preds {
-		var leaderboardEntry store.LeaderboardEntry
-		scoreReport, err := scoring.CalculateUserScore(pred, results)
-		if err != nil {
-			// Skip predictions that can't be scored — most likely a stale entry
-			// stored by an older code version or a different format for this round.
-			a.logger().Warn("skipping prediction (stale or incompatible format)",
-				"user", pred.Username,
-				"round", pred.Round,
-				"error", err,
-			)
-			continue
-		}
-		scores := scoreReport.GetScore()
-
-		leaderboardEntry.UserID = pred.UserID
-		leaderboardEntry.Username = pred.Username
-		leaderboardEntry.Score = (scores.Successes * 3) + (scores.Pending * 1) + (scores.Failed * 0) // Example scoring: 3 points per success, 1 per pending, 0 per failure
-		leaderboardEntry.ScoreResult.Successes = scores.Successes
-		leaderboardEntry.ScoreResult.Pending = scores.Pending
-		leaderboardEntry.ScoreResult.Failed = scores.Failed
-
-		leaderboard.Entries = append(leaderboard.Entries, leaderboardEntry)
-	}
-
-	err = a.Store.StoreLeaderboard(leaderboard)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// GetLeaderboard fetches the leaderboard from the db and generates a response string
-// Preconditions: Receives receiver pointer to api
-// Postconditions: Returns a string with the summary of the leaderboard for this round of the tournament
-func (a *App) GetLeaderboard() ([]LeaderboardUser, error) {
-	// Fetch leaderboard from DB
-	entries, err := a.Store.FetchLeaderboardFromDB()
+// GetLeaderboard returns the ranked leaderboard for the guild's configured tournament.
+// Scores are materialised on match result insert, so this is a simple read.
+func (a *App) GetLeaderboard(ctx context.Context, guildID, channelID string) ([]LeaderboardUser, error) {
+	cfg, err := a.resolveConfig(ctx, guildID, channelID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Order the leaderboard in descending order so that the user with the highest score appear at the top. Note score = successes - failures and there is no tie breaker
-	sort.Slice(entries, func(i, j int) bool {
-		return (entries[i].Score) > (entries[j].Score)
-	})
-
-	// Generate Response string
-	response := make([]LeaderboardUser, 0, len(entries))
-	for i, user := range entries {
-		entry := LeaderboardUser{
-			Username:  user.Username,
-			Rank:      i + 1,
-			Successes: user.ScoreResult.Successes,
-			Failures:  user.ScoreResult.Failed,
-		}
-		response = append(response, entry)
+	entries, err := a.Store.GetLeaderboard(ctx, guildID, *cfg.TournamentID)
+	if err != nil {
+		return nil, err
 	}
 
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Successes > entries[j].Successes
+	})
+
+	response := make([]LeaderboardUser, 0, len(entries))
+	for i, e := range entries {
+		response = append(response, LeaderboardUser{
+			Username:  e.Username,
+			Rank:      i + 1,
+			Successes: e.Successes,
+			Failures:  e.Failed,
+		})
+	}
 	return response, nil
 }
 
-// GetTeams gets a list of all valid team names.
-// The valid teams list must be initialized in db.
-// It returns a string slice containing all valid teams for this round.
-func (a *App) GetTeams() ([]Team, error) {
-	// Get valid team names
-	validTeams, _, err := a.Store.GetValidTeams()
+// GetTeams returns all valid teams for the round with their VRS world rankings.
+func (a *App) GetTeams(ctx context.Context, guildID, channelID string) ([]Team, error) {
+	cfg, err := a.resolveConfig(ctx, guildID, channelID)
 	if err != nil {
 		return nil, err
 	}
 
-	VRSEntries, err := a.Store.FetchVrsDataFromDB()
+	validTeams, _, err := a.Store.ListValidTeams(ctx, *cfg.TournamentID, *cfg.Round)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build a normalised map for lookup only — original names are never modified.
-	// Also keep a slice of normalised keys for fuzzy fallback.
-	vrsNorm := make(map[string]int, len(VRSEntries))
-	vrsNormKeys := make([]string, 0, len(VRSEntries))
-	for _, entry := range VRSEntries {
+	vrsEntries, err := a.Store.ListVRSRankings(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	vrsNorm := make(map[string]int, len(vrsEntries))
+	vrsNormKeys := make([]string, 0, len(vrsEntries))
+	for _, entry := range vrsEntries {
 		key := sources.NormalizeTeamName(entry.TeamName)
 		vrsNorm[key] = entry.Standing
 		vrsNormKeys = append(vrsNormKeys, key)
@@ -343,45 +279,39 @@ func (a *App) GetTeams() ([]Team, error) {
 		norm := sources.NormalizeTeamName(teamName)
 		ranking, ok := vrsNorm[norm]
 		if !ok {
-			// Normalised exact match failed — spacing/punctuation difference; try fuzzy
 			if matches := fuzzy.RankFind(norm, vrsNormKeys); len(matches) > 0 {
 				ranking = vrsNorm[matches[0].Target]
 			}
 		}
-		result = append(result, Team{
-			Name:       teamName,
-			VRSRanking: ranking,
-		})
+		result = append(result, Team{Name: teamName, VRSRanking: ranking})
 	}
-
 	return result, nil
 }
 
-// GetTeam returns the VRS information for a given team
-func (a *App) GetTeam(teamName string) (store.VRSEntry, error) {
+// GetTeam returns VRS data for a single team by name.
+func (a *App) GetTeam(ctx context.Context, teamName string) (store.VRSEntry, error) {
 	if teamName == "" {
 		return store.VRSEntry{}, fmt.Errorf("cannot lookup empty team name")
 	}
 
-	VRSEntries, err := a.Store.FetchVrsDataFromDB()
+	vrsEntries, err := a.Store.ListVRSRankings(ctx)
 	if err != nil {
 		return store.VRSEntry{}, err
 	}
 
 	norm := sources.NormalizeTeamName(teamName)
-	for _, entry := range VRSEntries {
+	for _, entry := range vrsEntries {
 		if sources.NormalizeTeamName(entry.TeamName) == norm {
 			return entry, nil
 		}
 	}
 
-	// Exact normalised match failed — try fuzzy
-	keys := make([]string, len(VRSEntries))
-	for i, e := range VRSEntries {
+	keys := make([]string, len(vrsEntries))
+	for i, e := range vrsEntries {
 		keys[i] = sources.NormalizeTeamName(e.TeamName)
 	}
 	if matches := fuzzy.RankFind(norm, keys); len(matches) > 0 {
-		for _, entry := range VRSEntries {
+		for _, entry := range vrsEntries {
 			if sources.NormalizeTeamName(entry.TeamName) == matches[0].Target {
 				return entry, nil
 			}
@@ -391,14 +321,18 @@ func (a *App) GetTeam(teamName string) (store.VRSEntry, error) {
 	return store.VRSEntry{}, fmt.Errorf("no VRS data found for %q", teamName)
 }
 
-// GetUpcomingMatches gets the upcoming matches for this round of the tournament. Will only follow the correct path if the scheduled matches data has been initialized.
-func (a *App) GetUpcomingMatches() ([]sources.ScheduledMatch, error) {
-	err := a.Store.EnsureScheduledMatches()
+// GetUpcomingMatches returns non-finished scheduled matches for the guild's configured tournament.
+func (a *App) GetUpcomingMatches(ctx context.Context, guildID, channelID string) ([]sources.ScheduledMatch, error) {
+	cfg, err := a.resolveConfig(ctx, guildID, channelID)
 	if err != nil {
 		return nil, err
 	}
 
-	scheduledMatches, err := a.Store.FetchMatchSchedule()
+	if err := a.Store.EnsureScheduledMatches(ctx, *cfg.TournamentID); err != nil {
+		return nil, err
+	}
+
+	scheduledMatches, err := a.Store.GetMatchSchedule(ctx, *cfg.TournamentID)
 	if err != nil {
 		return nil, err
 	}
@@ -409,9 +343,6 @@ func (a *App) GetUpcomingMatches() ([]sources.ScheduledMatch, error) {
 		if match.Finished {
 			continue
 		}
-		// A match whose start time has passed but isn't finished is live.
-		// Sources that provide explicit status (e.g. PandaScore "running") set Live directly;
-		// for sources without a live flag we infer it from the clock.
 		if match.EpochTime < now {
 			match.Live = true
 		}
@@ -421,20 +352,21 @@ func (a *App) GetUpcomingMatches() ([]sources.ScheduledMatch, error) {
 	slices.SortFunc(matches, func(a, b sources.ScheduledMatch) int {
 		return cmp.Compare(a.EpochTime, b.EpochTime)
 	})
-
 	return matches, nil
 }
 
-// GetTournamentInfo gets the following information about the tournament: Tournament Name, Round, Format, RequiredPredictions.
-// It returns a string slice with the contents attribute : value containing the information listed above.
-func (a *App) GetTournamentInfo() (TournamentInfo, error) {
-	err := a.Store.EnsureScheduledMatches()
+// GetTournamentInfo returns metadata about the guild's configured tournament.
+func (a *App) GetTournamentInfo(ctx context.Context, guildID, channelID string) (TournamentInfo, error) {
+	cfg, err := a.resolveConfig(ctx, guildID, channelID)
 	if err != nil {
 		return TournamentInfo{}, err
 	}
 
-	// Get valid team names
-	validTeams, formatName, err := a.Store.GetValidTeams()
+	if err := a.Store.EnsureScheduledMatches(ctx, *cfg.TournamentID); err != nil {
+		return TournamentInfo{}, err
+	}
+
+	validTeams, formatName, err := a.Store.ListValidTeams(ctx, *cfg.TournamentID, *cfg.Round)
 	if err != nil {
 		return TournamentInfo{}, err
 	}
@@ -443,57 +375,61 @@ func (a *App) GetTournamentInfo() (TournamentInfo, error) {
 	if err != nil {
 		return TournamentInfo{}, err
 	}
-	requiredPredictions := f.RequiredPredictions(len(validTeams))
+
+	name := ""
+	if cfg.TournamentName != nil {
+		name = *cfg.TournamentName
+	}
 
 	return TournamentInfo{
-		TournamentName: a.Store.GetDatabase().Name(),
-		Round:          a.Store.GetRound(),
+		TournamentName: name,
+		Round:          *cfg.Round,
 		Format:         string(formatName),
-		NumTeams:       requiredPredictions,
+		NumTeams:       f.RequiredPredictions(len(validTeams)),
 	}, nil
 }
 
-// PopulateMatches fetches and stores the match schedule via the configured data source.
-// When scheduleOnly is false, match results are also fetched and stored.
-func (a *App) PopulateMatches(scheduleOnly bool) error {
+// PopulateMatches fetches and stores match schedule and optionally results for a specific tournament.
+func (a *App) PopulateMatches(ctx context.Context, tournamentID int, round string, scheduleOnly bool) error {
 	if !a.Allow() {
 		return fmt.Errorf("rate limiter limit reached")
 	}
 
-	if err := a.Store.FetchAndStoreSchedule(); err != nil {
+	if err := a.Store.FetchAndSaveSchedule(ctx, tournamentID); err != nil {
 		return err
 	}
 
 	if !scheduleOnly {
-		if err := a.Store.FetchAndUpdateMatchResults(); err != nil {
+		if err := a.Store.FetchAndSaveMatchResults(ctx, tournamentID, round); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// UpdateMatchSchedule is a rate-limited wrapper around Store.FetchAndStoreSchedule.
-func (a *App) UpdateMatchSchedule() error {
+// UpdateMatchSchedule is a rate-limited wrapper around Store.FetchAndSaveSchedule.
+func (a *App) UpdateMatchSchedule(ctx context.Context, tournamentID int) error {
 	if !a.Allow() {
 		return fmt.Errorf("rate limiter exceeded, skipping match schedule update")
 	}
-	return a.Store.FetchAndStoreSchedule()
+	return a.Store.FetchAndSaveSchedule(ctx, tournamentID)
 }
 
-// StoreSchedule persists a pre-fetched schedule slice. Used by the PandaScore poller
-// to reuse already-fetched data instead of making a second API call.
-func (a *App) StoreSchedule(matches []sources.ScheduledMatch) error {
-	return a.Store.StoreMatchSchedule(matches)
+// StoreSchedule persists a pre-fetched schedule slice.
+// Used by the PandaScore poller to reuse already-fetched data.
+func (a *App) StoreSchedule(ctx context.Context, tournamentID int, matches []sources.ScheduledMatch) error {
+	return a.Store.UpsertMatchSchedule(ctx, tournamentID, matches)
 }
 
-// UpdateMatchResults is a wrapper function for App.Store.FetchAndUpdateMatchResults() that enforces rate limiting
-// across the app and ensuring we comply with api specifications
-func (a *App) UpdateMatchResults() error {
+// UpdateMatchResults is a rate-limited wrapper around Store.FetchAndSaveMatchResults.
+func (a *App) UpdateMatchResults(ctx context.Context, tournamentID int, round string) error {
 	if !a.Allow() {
 		return fmt.Errorf("rate limiter exceeded, skipping match result update")
 	}
+	timer := prometheus.NewTimer(metrics.LeaderboardDuration)
+	defer timer.ObserveDuration()
 
-	if err := a.Store.FetchAndUpdateMatchResults(); err != nil {
+	if err := a.Store.FetchAndSaveMatchResults(ctx, tournamentID, round); err != nil {
 		return err
 	}
 	metrics.MatchUpdatesTotal.Inc()

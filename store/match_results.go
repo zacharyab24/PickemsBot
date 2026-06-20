@@ -1,123 +1,202 @@
-/* match_results.go
- * Contains the methods for interacting with the match_results collection
- * Authors: Zachary Bower
- */
-
 package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"strings"
+	"time"
 
-	"pickems-bot/metrics"
+	"pickems-bot/sources"
 	"pickems-bot/tournament"
-
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// FetchMatchResultsFromDb retrieves the match result document for the current round and decodes it into the appropriate MatchResult implementation.
-func (s *Store) FetchMatchResultsFromDb() (tournament.MatchResult, error) {
-	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
-	s.Collections.MatchResults.Name()
-	opts := options.FindOne()
-
-	// MatchResult is an interface, which can't be decoded by MongoDB's driver. Instead need to get raw and convert to interface later
-	var raw bson.M
-
-	err := s.Collections.MatchResults.FindOne(context.TODO(), bson.D{{Key: "round", Value: s.Round}}, opts).Decode(&raw)
+// GetMatchResults derives a tournament.MatchResult from the stored match rows for the given tournament and round.
+func (s *PostgresStore) GetMatchResults(ctx context.Context, tournamentID int, round string) (tournament.MatchResult, error) {
+	nodes, kind, err := s.GetMatchNodes(ctx, tournamentID, round)
 	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, err
-		}
-		return nil, fmt.Errorf("error fetching results from db: %w", err)
+		return nil, fmt.Errorf("GetMatchResults: %w", err)
 	}
 
-	// Determine which type of MatchResult we fetched
-	resultType, ok := raw["type"].(string)
-	if !ok {
-		return nil, fmt.Errorf("missing or invalid `type` field in document")
-	}
-
-	bsonBytes, err := bson.Marshal(raw)
+	f, err := tournament.Get(kind)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal raw bson: %w", err)
+		return nil, fmt.Errorf("GetMatchResults: unknown format %q: %w", kind, err)
 	}
 
-	f, err := tournament.Get(tournament.Kind(resultType))
+	result, err := f.BuildFromMatchNodes(nodes, round)
 	if err != nil {
-		return nil, fmt.Errorf("unknown match result type: %s", resultType)
+		return nil, fmt.Errorf("GetMatchResults: %w", err)
 	}
-	return f.DecodeBSON(bsonBytes)
+	return result, nil
 }
 
-// GetMatchResults returns the raw tournament.MatchResult from the DB. Format-aware
-// conversion (record → MatchResult) is the caller's responsibility — it lives
-// in the tournament package, which can't be imported here without a cycle.
-func (s *Store) GetMatchResults() (tournament.MatchResult, error) {
-	rec, err := s.FetchMatchResultsFromDb()
-	if err != nil {
-		return nil, fmt.Errorf("error occured getting match results from db: %w", err)
-	}
-	return rec, nil
-}
-
-// StoreMatchResults persists a MatchResult to the DB. The record is BSON-marshalled
-// using its struct tags and tagged with a top-level "type" discriminator so
-// FetchMatchResultsFromDb can decode into the right concrete type later.
-// Format-agnostic: works for any registered format without code changes here.
-func (s *Store) StoreMatchResults(matchResult tournament.MatchResult) error {
-	metrics.MongoOpsTotal.WithLabelValues("write").Inc()
-	var raw bson.M
-	err := s.Collections.MatchResults.FindOne(context.TODO(), bson.M{"round": s.Round}).Decode(&raw)
-	notFound := err == mongo.ErrNoDocuments
-	if err != nil && !notFound {
-		return fmt.Errorf("lookup for existing record failed: %w", err)
-	}
-
-	// Marshal the record with its BSON tags, then inject the type discriminator.
-	doc := bson.M{"type": string(matchResult.GetType())}
-	bsonBytes, err := bson.Marshal(matchResult)
-	if err != nil {
-		return fmt.Errorf("failed to marshal match result: %w", err)
-	}
-	var recordMap bson.M
-	if err := bson.Unmarshal(bsonBytes, &recordMap); err != nil {
-		return fmt.Errorf("failed to unmarshal match result into bson.M: %w", err)
-	}
-	for k, v := range recordMap {
-		doc[k] = v
-	}
-
-	filter := bson.M{"round": s.Round}
-	if notFound {
-		if _, err := s.Collections.MatchResults.InsertOne(context.TODO(), doc); err != nil {
-			return fmt.Errorf("failed to insert new match result: %w", err)
-		}
-		return nil
-	}
-	if _, err := s.Collections.MatchResults.UpdateOne(context.TODO(), filter, bson.M{"$set": doc}); err != nil {
-		return fmt.Errorf("failed to update match result: %w", err)
+// UpsertMatchResults persists any match node updates implied by the result and materialises scores
+// for all predictions on this tournament/round.
+func (s *PostgresStore) UpsertMatchResults(ctx context.Context, tournamentID int, result tournament.MatchResult) error {
+	if err := s.updateScores(ctx, tournamentID, result.GetRound(), result); err != nil {
+		return fmt.Errorf("UpsertMatchResults: %w", err)
 	}
 	return nil
 }
 
-// FetchAndUpdateMatchResults fetches match data from the configured data source and stores the result in the db
-func (s *Store) FetchAndUpdateMatchResults() error {
-	result, nodes, err := s.Fetcher.FetchMatchData(s.Round)
+// FetchAndSaveMatchResults fetches match data from the configured data source, writes match rows,
+// and materialises scores for all predictions on this tournament/round.
+func (s *PostgresStore) FetchAndSaveMatchResults(ctx context.Context, tournamentID int, round string) error {
+	result, nodes, err := s.fetcher.FetchMatchData(round)
 	if err != nil {
-		return err
+		return fmt.Errorf("FetchAndSaveMatchResults: fetch: %w", err)
 	}
-	if err := s.StoreMatchResults(result); err != nil {
-		return err
-	}
+
 	if result.GetType() == tournament.Swiss {
 		nodes = tournament.NormalizeSwissSections(nodes)
 	}
-	if err := s.StoreMatchNodes(nodes, result.GetType()); err != nil {
-		s.logger().Warn("failed to store match nodes", "error", fmt.Errorf("FetchAndUpdateMatchResults: %w", err))
+
+	if err := s.upsertMatchNodes(ctx, tournamentID, round, nodes, result.GetType()); err != nil {
+		return fmt.Errorf("FetchAndSaveMatchResults: %w", err)
+	}
+
+	if err := s.updateScores(ctx, tournamentID, round, result); err != nil {
+		s.logger().Warn("FetchAndSaveMatchResults: score update failed", "error", err)
+	}
+	return nil
+}
+
+// upsertMatchNodes writes raw match node data into the matches table for a tournament/round.
+func (s *PostgresStore) upsertMatchNodes(ctx context.Context, tournamentID int, round string, nodes []sources.MatchNode, kind tournament.Kind) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("upsertMatchNodes: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	for _, n := range nodes {
+		winner := nullString(n.Winner)
+		score := nullString(n.Score)
+		extID := nullString(n.ID)
+
+		status := "pending"
+		switch n.Status {
+		case "finished":
+			status = "completed"
+		case "running":
+			status = "in_progress"
+		}
+
+		_, err := tx.Exec(ctx, `
+			INSERT INTO matches (tournament_id, round, team1_name, team2_name, score, external_id, status, completed_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			ON CONFLICT (tournament_id, external_id) WHERE external_id IS NOT NULL
+			DO UPDATE SET
+				team1_name   = EXCLUDED.team1_name,
+				team2_name   = EXCLUDED.team2_name,
+				score        = EXCLUDED.score,
+				status       = EXCLUDED.status,
+				completed_at = EXCLUDED.completed_at
+		`, tournamentID, round, n.Team1, n.Team2, score, extID, status,
+			completedAt(status))
+		if err != nil {
+			return fmt.Errorf("upsertMatchNodes: insert %q vs %q: %w", n.Team1, n.Team2, err)
+		}
+
+		// Update winner_id FK if we have a winner name and can resolve it to a team row.
+		if winner != nil {
+			_, err = tx.Exec(ctx, `
+				UPDATE matches SET winner_id = (
+					SELECT id FROM teams WHERE canonical_name = $1 LIMIT 1
+				)
+				WHERE tournament_id = $2 AND external_id = $3 AND external_id IS NOT NULL
+			`, *winner, tournamentID, n.ID)
+			if err != nil {
+				s.logger().Warn("upsertMatchNodes: could not resolve winner FK", "team", *winner, "error", err)
+			}
+		}
+
+	}
+
+	// Upsert all participant team names into the teams table so that pick inserts
+	// can resolve team_id FKs. Uses the match node team name as both canonical_name
+	// and external_id within the 'pandascore' source namespace.
+	seen := make(map[string]bool)
+	for _, n := range nodes {
+		for _, name := range []string{n.Team1, n.Team2} {
+			name = strings.TrimSpace(name)
+			if name == "" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO teams (canonical_name, source, external_id)
+				VALUES ($1, 'pandascore', $1)
+				ON CONFLICT (source, external_id) DO UPDATE SET canonical_name = EXCLUDED.canonical_name
+			`, name); err != nil {
+				return fmt.Errorf("upsertMatchNodes: ensure team %q: %w", name, err)
+			}
+		}
+	}
+
+	// Resolve team1_id / team2_id FKs on all matches for this tournament/round.
+	if _, err := tx.Exec(ctx, `
+		UPDATE matches m
+		SET
+			team1_id = (SELECT id FROM teams WHERE canonical_name = m.team1_name AND source = 'pandascore' LIMIT 1),
+			team2_id = (SELECT id FROM teams WHERE canonical_name = m.team2_name AND source = 'pandascore' LIMIT 1)
+		WHERE tournament_id = $1 AND round = $2
+	`, tournamentID, round); err != nil {
+		return fmt.Errorf("upsertMatchNodes: set team FKs: %w", err)
+	}
+
+	// Set tournament format lazily on first result write (format is NULL until match data arrives).
+	if _, err := tx.Exec(ctx, `
+		UPDATE tournaments SET format = $1 WHERE id = $2 AND format IS NULL
+	`, string(kind), tournamentID); err != nil {
+		return fmt.Errorf("upsertMatchNodes: set format: %w", err)
+	}
+
+	return tx.Commit(ctx)
+}
+
+// updateScores materialises scores for all predictions on this tournament/round based on the current result.
+// Called after match data is written so that leaderboard reads are always up to date.
+func (s *PostgresStore) updateScores(ctx context.Context, tournamentID int, round string, result tournament.MatchResult) error {
+	f, err := tournament.Get(result.GetType())
+	if err != nil {
+		return fmt.Errorf("updateScores: unknown format: %w", err)
+	}
+
+	predictions, err := s.ListPredictions(ctx, "", tournamentID, round)
+	if err != nil {
+		return fmt.Errorf("updateScores: list predictions: %w", err)
+	}
+
+	for _, p := range predictions {
+		report, err := f.CalculateScore(p, result)
+		if err != nil {
+			s.logger().Warn("updateScores: score calculation failed", "user", p.UserID, "error", err)
+			continue
+		}
+		score := report.GetScore()
+
+		if _, err := s.pool.Exec(ctx, `
+			INSERT INTO scores (prediction_id, successes, pending, failed, last_computed_at)
+			SELECT p.id, $2, $3, $4, NOW()
+			FROM predictions p
+			WHERE p.user_id = $1 AND p.tournament_id = $5 AND p.round = $6
+			ON CONFLICT (prediction_id) DO UPDATE SET
+				successes        = EXCLUDED.successes,
+				pending          = EXCLUDED.pending,
+				failed           = EXCLUDED.failed,
+				last_computed_at = NOW()
+		`, p.UserID, score.Successes, score.Pending, score.Failed, tournamentID, round); err != nil {
+			s.logger().Warn("updateScores: upsert failed", "user", p.UserID, "error", err)
+		}
+	}
+	return nil
+}
+
+// completedAt returns the current UTC time when a match is completed, nil otherwise.
+func completedAt(status string) *time.Time {
+	if status == "completed" {
+		t := time.Now().UTC()
+		return &t
 	}
 	return nil
 }
