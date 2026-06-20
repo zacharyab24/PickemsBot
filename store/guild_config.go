@@ -5,6 +5,7 @@ import (
 	"fmt"
 )
 
+// GuildConfig holds the per-guild tournament configuration stored in the guild_config table.
 type GuildConfig struct {
 	ID                    int
 	GuildID               string

@@ -82,10 +82,12 @@ func NewStore(connString string, fetcher DataSourceFetcher, log *slog.Logger) (*
 	}, nil
 }
 
+// Ping verifies the database connection is alive.
 func (s *PostgresStore) Ping(ctx context.Context) error {
 	return s.pool.Ping(ctx)
 }
 
+// Close releases all connections in the pool.
 func (s *PostgresStore) Close() {
 	s.pool.Close()
 }
