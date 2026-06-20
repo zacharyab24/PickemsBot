@@ -32,25 +32,25 @@ type MockStore struct {
 	GuildConfig      store.GuildConfig
 
 	// Error injection
-	EnsureTournamentError            error
-	PingError                        error
-	GetGuildConfigError              error
-	UpsertGuildConfigError           error
-	EnsureScheduledMatchesError      error
-	ListValidTeamsError              error
-	GetMatchResultsError             error
-	UpsertMatchResultsError          error
-	FetchAndSaveMatchResultsError    error
-	GetMatchNodesError               error
-	GetMatchScheduleError            error
-	UpsertMatchScheduleError         error
-	FetchAndSaveScheduleError        error
-	UpsertPredictionError            error
-	GetPredictionError               error
-	GetPredictionByUsernameError     error
-	ListPredictionsError             error
-	GetLeaderboardError              error
-	ListVRSRankingsError             error
+	EnsureTournamentError         error
+	PingError                     error
+	GetGuildConfigError           error
+	UpsertGuildConfigError        error
+	EnsureScheduledMatchesError   error
+	ListValidTeamsError           error
+	GetMatchResultsError          error
+	UpsertMatchResultsError       error
+	FetchAndSaveMatchResultsError error
+	GetMatchNodesError            error
+	GetMatchScheduleError         error
+	UpsertMatchScheduleError      error
+	FetchAndSaveScheduleError     error
+	UpsertPredictionError         error
+	GetPredictionError            error
+	GetPredictionByUsernameError  error
+	ListPredictionsError          error
+	GetLeaderboardError           error
+	ListVRSRankingsError          error
 
 	StoreMatchScheduleCallCount int
 }
