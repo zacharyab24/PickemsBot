@@ -26,15 +26,6 @@ var LeaderboardDuration = prometheus.NewHistogram(
 	},
 )
 
-// ImageRenderDuration measures time taken for Chromium to render the results image.
-var ImageRenderDuration = prometheus.NewHistogram(
-	prometheus.HistogramOpts{
-		Name:    "image_render_duration_seconds",
-		Help:    "Time taken for Chromium to render the results bracket image, in seconds",
-		Buckets: []float64{0.5, 1, 2, 5, 10, 20, 30},
-	},
-)
-
 // init registers the prometheus methods
 func init() {
 	prometheus.MustRegister(
@@ -43,7 +34,6 @@ func init() {
 		PollerErrorsTotal,
 		MatchUpdatesTotal,
 		LeaderboardDuration,
-		ImageRenderDuration,
 		MongoOpsTotal,
 	)
 }

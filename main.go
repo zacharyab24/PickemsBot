@@ -67,7 +67,7 @@ func main() {
 	} else {
 		discordToken = os.Getenv("DISCORD_PROD_TOKEN")
 	}
-	botInstance, err := bot.NewBot(discordToken, apiInstance, logger)
+	botInstance, err := bot.NewBot(discordToken, apiInstance, logger, cfg.GuildID)
 	if err != nil {
 		logger.Error("failed to initialize bot", "error", err)
 		os.Exit(1)

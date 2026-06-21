@@ -1,211 +1,54 @@
-/* handlers.go
- * Contains testable handler methods that accept DiscordSession interface
- * Authors: Zachary Bower
- * AI-Generated: Extracted runtime functionality from bot.go
- */
-
 package bot
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"pickems-bot/metrics"
 	"pickems-bot/models"
+	"pickems-bot/sources"
 	"pickems-bot/tournament"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/go-andiamo/splitter"
 	"github.com/jackc/pgx/v5"
 )
 
-// helpMessageHandler handles the $help command with a DiscordSession interface
-func (b *Bot) helpMessageHandler(session DiscordSession, message *discordgo.MessageCreate) {
-	embed := &discordgo.MessageEmbed{
-		Title: "PickEms Bot v3.3",
-		Description: "Manage your tournament predictions and check standings. All commands use the `$` prefix.\n\n" +
-			"*Match Data sourced from the [Liquipedia Counter-Strike API](https://liquipedia.net) and [PandaScore](https://pandascore.co)*\n" +
-			"*VRS Data sourced from the [counter-strike_regional_standings](https://github.com/ValveSoftware/counter-strike_regional_standings) GitHub repo*",
-		Color: burple,
-		Fields: []*discordgo.MessageEmbedField{
-			{
-				Name:   "`$details`",
-				Value:  "Check active tournament info (name, current round, format, and team requirements).",
-				Inline: false,
-			},
-			{
-				Name: "`$set <team1> ... <teamN>`",
-				Value: cleanIndent(`Lock in your tournament predictions.
-			- **Swiss:** 10 teams needed (1-2: 3-0 teams | 3-8: top-8 | 9-10: 0-3 teams).
-			- **Single Elim:** 4 teams needed (1-2: 3rd/4th place | 3: runner-up | 4: winner).
-			- **Tip:** Wrap multi-word names in quotes (e.g., \"The MongolZ\").`),
-				Inline: false,
-			},
-			{
-				Name:   "`$check`",
-				Value:  "View your currently saved Pick'Ems",
-				Inline: false,
-			},
-			{
-				Name:   "`$teams`",
-				Value:  "List all teams alive in the current stage. Use these exact names for the `$set` command if fuzzy matching doesn't work.",
-				Inline: false,
-			},
-			{
-				Name:   "`$team <name>`",
-				Value:  "Look up a team's current VRS world ranking and roster.",
-				Inline: false,
-			},
-			{
-				Name:   "`$leaderboard`",
-				Value:  "See who has the most correct picks this stage. Sorted strictly by total wins (no tiebreakers).",
-				Inline: false,
-			},
-			{
-				Name:   "`$upcoming`",
-				Value:  "Show matches upcoming matches for this round of the tournament.",
-				Inline: false,
-			},
-			{
-				Name: "`$results`",
-				Value: cleanIndent(`Generate a visual bracket image for Swiss or Single Elimination stages.
-			*Note: Third-place matches are hidden in Single Elim brackets.*`),
-
-				Inline: false,
-			},
-		},
-		Footer: &discordgo.MessageEmbedFooter{
-			Text: "Fuzzy matching is active, but keep names as close as possible!",
-		},
-	}
-
-	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-		b.logger().Error("failed to send help embed", "error", fmt.Errorf("helpMessageHandler: %w", err))
-	}
-}
-
-// detailsHandler handles the $details command with a DiscordSession interface
-func (b *Bot) detailsHandler(session DiscordSession, message *discordgo.MessageCreate) {
-	info, err := b.APIPtr.GetTournamentInfo(context.Background(), message.GuildID, message.ChannelID)
-	if err != nil {
-		b.logger().Error("failed to get tournament info", "error", fmt.Errorf("detailsHandler: %w", err))
-		sendError(session, message.ChannelID, "An unexpected error occurred.")
-		return
-	}
-
-	embed := &discordgo.MessageEmbed{
-		Title: "Match Details",
-		Color: green,
-		Fields: []*discordgo.MessageEmbedField{
-			{
-				Name:   "Tournament Name",
-				Value:  info.TournamentName,
-				Inline: false,
-			},
-			{
-				Name:   "Round",
-				Value:  info.Round,
-				Inline: false,
-			},
-			{
-				Name:   "Format",
-				Value:  info.Format,
-				Inline: false,
-			},
-			{
-				Name:   "Number of Required Teams",
-				Value:  strconv.Itoa(info.NumTeams),
-				Inline: false,
-			},
-		},
-	}
-
-	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-		b.logger().Error("failed to send details embed", "error", fmt.Errorf("detailsHandler: %w", err))
-	}
-}
-
-// setPredictionsHandler handles the $set command with a DiscordSession interface
-func (b *Bot) setPredictionsHandler(session DiscordSession, message *discordgo.MessageCreate) {
-	user := models.User{UserID: message.Author.ID, Username: message.Author.Username}
-
-	// Get User Predictions from message
-	spaceSplitter, _ := splitter.NewSplitter(' ', splitter.DoubleQuotes, splitter.LeftRightDoubleDoubleQuotes)
-	msg, _ := spaceSplitter.Split(message.Content)
-	userPreds := msg[1:]
-
-	prediction, err := b.APIPtr.SetUserPrediction(context.Background(), message.GuildID, message.ChannelID, user, userPreds)
-	if err != nil {
-		b.logger().Error("failed to set user prediction", "user", user.Username, "error", fmt.Errorf("setPredictionsHandler: %w", err))
-		sendError(session, message.ChannelID, err.Error())
-		return
-	}
-
-	fields, err := predictionFields(prediction)
-	if err != nil {
-		b.logger().Error("failed to build prediction fields", "user", user.Username, "error", fmt.Errorf("setPredictionsHandler: %w", err))
-		sendError(session, message.ChannelID, "An error occurred displaying your Pick'Ems.")
-		return
-	}
-	embed := &discordgo.MessageEmbed{
-		Title:       "Pick'Ems Updated",
-		Description: fmt.Sprintf("%s's Pick'Ems have been saved.", user.Username),
-		Color:       green,
-		Fields:      fields,
-	}
-	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-		b.logger().Error("failed to send set-predictions embed", "error", fmt.Errorf("setPredictionsHandler: %w", err))
-	}
-}
-
-func predictionFields(p models.Prediction) ([]*discordgo.MessageEmbedField, error) {
-	f, err := tournament.Get(tournament.Kind(p.Format))
-	if err != nil {
-		return nil, fmt.Errorf("unknown prediction format %q", p.Format)
-	}
-	pFields, err := f.PredictionFields(p)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*discordgo.MessageEmbedField, len(pFields))
-	for i, pf := range pFields {
-		out[i] = &discordgo.MessageEmbedField{Name: pf.Name, Value: pf.Value}
-	}
-	return out, nil
-}
-
-// checkPredictionsHandler handles the $check command with a DiscordSession interface
-func (b *Bot) checkPredictionsHandler(session DiscordSession, message *discordgo.MessageCreate) {
+func (b *Bot) checkInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
 	var user models.User
 	var report tournament.ScoreReport
 
-	target := strings.TrimSpace(strings.TrimPrefix(message.Content, "$check"))
-	if target == "" {
-		user = models.User{UserID: message.Author.ID, Username: message.Author.Username}
+	options := i.ApplicationCommandData().Options
+	if len(options) == 0 {
+		user = models.User{UserID: i.Member.User.ID, Username: i.Member.User.Username}
 		var err error
-		report, err = b.APIPtr.CheckPrediction(context.Background(), message.GuildID, message.ChannelID, user)
+		report, err = b.APIPtr.CheckPrediction(context.Background(), i.GuildID, i.ChannelID, user)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				sendError(session, message.ChannelID, fmt.Sprintf("%s does not have any Pick'Ems stored. Use `$set` to set your predictions.", user.Username))
+				respondError(session, i.Interaction, fmt.Sprintf("%s does not have any Pick'Ems stored. Use `/set` to set your predictions.", user.Username))
 			} else {
-				b.logger().Error("failed to check prediction", "user", user.Username, "error", fmt.Errorf("checkPredictionsHandler: %w", err))
-				sendError(session, message.ChannelID, fmt.Sprintf("An error occurred checking %s's Pick'Ems.", user.Username))
+				b.logger().Error("failed to check prediction", "user", user.Username, "error", fmt.Errorf("checkInteractionHandler: %w", err))
+				respondError(session, i.Interaction, fmt.Sprintf("An error occurred checking %s's Pick'Ems.", user.Username))
 			}
 			return
 		}
 	} else {
+		userID := options[0].Value.(string)
+		target := i.ApplicationCommandData().Resolved.Users[userID]
+		displayName := target.GlobalName
+		if displayName == "" {
+			displayName = target.Username
+		}
+		user = models.User{UserID: target.ID, Username: displayName}
 		var err error
-		user, report, err = b.APIPtr.CheckPredictionByUsername(context.Background(), message.GuildID, message.ChannelID, target)
+		report, err = b.APIPtr.CheckPrediction(context.Background(), i.GuildID, i.ChannelID, user)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				sendError(session, message.ChannelID, fmt.Sprintf("No Pick'Ems found for **%s**.", target))
+				respondError(session, i.Interaction, fmt.Sprintf("No Pick'Ems found for **%s**.", user.Username))
 			} else {
-				b.logger().Error("failed to check prediction by username", "target", target, "error", fmt.Errorf("checkPredictionsHandler: %w", err))
-				sendError(session, message.ChannelID, fmt.Sprintf("An error occurred checking %s's Pick'Ems.", target))
+				b.logger().Error("failed to check prediction", "user", user.Username, "error", fmt.Errorf("checkInteractionHandler: %w", err))
+				respondError(session, i.Interaction, fmt.Sprintf("An error occurred checking %s's Pick'Ems.", user.Username))
 			}
 			return
 		}
@@ -223,10 +66,10 @@ func (b *Bot) checkPredictionsHandler(session DiscordSession, message *discordgo
 		fields = append(fields, singleElimField(r.Predictions))
 	}
 
-	info, err := b.APIPtr.GetTournamentInfo(context.Background(), message.GuildID, message.ChannelID)
+	info, err := b.APIPtr.GetTournamentInfo(context.Background(), i.GuildID, i.ChannelID)
 	if err != nil {
-		b.logger().Error("failed to get tournament info", "error", fmt.Errorf("checkPredictionsHandler: %w", err))
-		sendError(session, message.ChannelID, "An unexpected error occurred.")
+		b.logger().Error("failed to get tournament info", "error", fmt.Errorf("checkInteractionHandler: %w", err))
+		respondError(session, i.Interaction, "An unexpected error occurred.")
 		return
 	}
 
@@ -237,116 +80,99 @@ func (b *Bot) checkPredictionsHandler(session DiscordSession, message *discordgo
 		Fields:      fields,
 	}
 
-	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-		b.logger().Error("failed to send check-predictions embed", "user", user.Username, "error", fmt.Errorf("checkPredictionsHandler: %w", err))
+	if err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+		},
+	}); err != nil {
+		b.logger().Error("failed to respond to check interaction", "user", user.Username, "error", fmt.Errorf("checkInteractionHandler: %w", err))
 	}
 }
 
-// leaderboardHandler handles the $leaderboard command with a DiscordSession interface
-func (b *Bot) leaderboardHandler(session DiscordSession, message *discordgo.MessageCreate) {
-	leaderboard, err := b.APIPtr.GetLeaderboard(context.Background(), message.GuildID, message.ChannelID)
+func (b *Bot) setInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
+	info, err := b.APIPtr.GetTournamentInfo(context.Background(), i.GuildID, i.ChannelID)
 	if err != nil {
-		b.logger().Error("failed to get leaderboard", "error", fmt.Errorf("leaderboardHandler: %w", err))
-		sendError(session, message.ChannelID, "An error occurred getting the leaderboard.")
-		return
-	}
-	if leaderboard == nil {
-		sendError(session, message.ChannelID, "There are currently no rankings. Try again later.")
+		b.logger().Error("failed to get tournament info", "error", fmt.Errorf("setInteractionHandler: %w", err))
+		respondError(session, i.Interaction, "An error occurred loading the tournament.")
 		return
 	}
 
-	var sb strings.Builder
-	for _, user := range leaderboard {
-		fmt.Fprintf(&sb, "%d. %s - %d Successes, %d Failures\n",
-			user.Rank,
-			user.Username,
-			user.Successes,
-			user.Failures,
-		)
-	}
-
-	embed := &discordgo.MessageEmbed{
-		Title:       "Leaderboard",
-		Description: sb.String(),
-		Color:       green,
-		Footer: &discordgo.MessageEmbedFooter{
-			Text: "Calculated using (Successes * 3) + (Pending * 1) + (Failed * 0) • No tiebreakers applied",
-		},
-	}
-
-	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-		b.logger().Error("failed to send leaderboard embed", "error", fmt.Errorf("leaderboardHandler: %w", err))
-	}
-}
-
-// teamsHandler handles the $teams command with a DiscordSession interface
-func (b *Bot) teamsHandler(session DiscordSession, message *discordgo.MessageCreate) {
-	teams, err := b.APIPtr.GetTeams(context.Background(), message.GuildID, message.ChannelID)
+	teams, err := b.APIPtr.GetTeams(context.Background(), i.GuildID, i.ChannelID)
 	if err != nil {
-		b.logger().Error("failed to get teams", "error", fmt.Errorf("teamsHandler: %w", err))
-		sendError(session, message.ChannelID, "An error occurred getting the teams list.")
+		b.logger().Error("failed to get teams", "error", fmt.Errorf("setInteractionHandler: %w", err))
+		respondError(session, i.Interaction, "An error occurred loading the team list.")
 		return
 	}
 
-	// Sort by VRS ranking ascending; unranked teams (0) go to the end
-	sort.Slice(teams, func(i, j int) bool {
-		ri, rj := teams[i].VRSRanking, teams[j].VRSRanking
-		if ri == 0 {
-			return false
-		}
-		if rj == 0 {
-			return true
-		}
-		return ri < rj
-	})
-
-	formatEntry := func(name string, ranking int) string {
-		if ranking == 0 {
-			return fmt.Sprintf("\u2014  %s\n", name)
-		}
-		return fmt.Sprintf("`#%d`  %s\n", ranking, name)
+	var teamOptions []discordgo.SelectMenuOption
+	for _, t := range teams {
+		teamOptions = append(teamOptions, discordgo.SelectMenuOption{
+			Label: t.Name,
+			Value: t.Name,
+		})
 	}
 
-	mid := (len(teams) + 1) / 2
-	var left, right strings.Builder
-	for _, t := range teams[:mid] {
-		left.WriteString(formatEntry(t.Name, t.VRSRanking))
-	}
-	for _, t := range teams[mid:] {
-		right.WriteString(formatEntry(t.Name, t.VRSRanking))
+	minVal := 0
+	var rows []discordgo.MessageComponent
+	switch tournament.Kind(info.Format) {
+	case tournament.Swiss:
+		rows = []discordgo.MessageComponent{
+			discordgo.ActionsRow{Components: []discordgo.MessageComponent{
+				discordgo.SelectMenu{CustomID: "set_select_win", Placeholder: "3-0 picks (pick 2)", MinValues: &minVal, MaxValues: 2, Options: teamOptions},
+			}},
+			discordgo.ActionsRow{Components: []discordgo.MessageComponent{
+				discordgo.SelectMenu{CustomID: "set_select_advance", Placeholder: "Top 8 advance picks (pick 6)", MinValues: &minVal, MaxValues: 6, Options: teamOptions},
+			}},
+			discordgo.ActionsRow{Components: []discordgo.MessageComponent{
+				discordgo.SelectMenu{CustomID: "set_select_lose", Placeholder: "0-3 picks (pick 2)", MinValues: &minVal, MaxValues: 2, Options: teamOptions},
+			}},
+		}
+	case tournament.SingleElim:
+		rows = []discordgo.MessageComponent{
+			discordgo.ActionsRow{Components: []discordgo.MessageComponent{
+				discordgo.SelectMenu{CustomID: "set_select_third", Placeholder: "3rd/4th place (pick 2)", MinValues: &minVal, MaxValues: 2, Options: teamOptions},
+			}},
+			discordgo.ActionsRow{Components: []discordgo.MessageComponent{
+				discordgo.SelectMenu{CustomID: "set_select_runnerup", Placeholder: "Runner-up (pick 1)", MinValues: &minVal, MaxValues: 1, Options: teamOptions},
+			}},
+			discordgo.ActionsRow{Components: []discordgo.MessageComponent{
+				discordgo.SelectMenu{CustomID: "set_select_winner", Placeholder: "Winner (pick 1)", MinValues: &minVal, MaxValues: 1, Options: teamOptions},
+			}},
+		}
+	default:
+		respondError(session, i.Interaction, "Unsupported tournament format.")
+		return
 	}
 
-	embed := &discordgo.MessageEmbed{
-		Title: "Teams in this Stage",
-		Color: green,
-		Fields: []*discordgo.MessageEmbedField{
-			{Name: "\u200b", Value: left.String(), Inline: true},
-			{Name: "\u200b", Value: right.String(), Inline: true},
+	rows = append(rows, discordgo.ActionsRow{Components: []discordgo.MessageComponent{
+		discordgo.Button{CustomID: "set_submit", Label: "Submit Pick'Ems", Style: discordgo.PrimaryButton},
+	}})
+
+	stateKey := i.GuildID + ":" + i.Member.User.ID
+	b.setPredictionMu.Lock()
+	b.setPredictionState[stateKey] = setPredictionSession{format: tournament.Kind(info.Format), selections: make(map[string][]string)}
+	b.setPredictionMu.Unlock()
+
+	if err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Flags:      discordgo.MessageFlagsEphemeral,
+			Content:    fmt.Sprintf("Set your Pick'Ems for **%s** — %s", info.TournamentName, info.Round),
+			Components: rows,
 		},
-		Footer: &discordgo.MessageEmbedFooter{
-			Text: fmt.Sprintf("%d teams \u2022 VRS world ranking shown \u2022 Fuzzy matching is active", len(teams)),
-		},
-	}
-
-	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-		b.logger().Error("failed to send teams embed", "error", fmt.Errorf("teamsHandler: %w", err))
+	}); err != nil {
+		b.logger().Error("failed to respond to set interaction", "error", fmt.Errorf("setInteractionHandler: %w", err))
 	}
 }
 
-// teamHandler handles the $team <name> command with a DiscordSession interface
-func (b *Bot) teamHandler(session DiscordSession, message *discordgo.MessageCreate) {
-	spaceSplitter, _ := splitter.NewSplitter(' ', splitter.DoubleQuotes, splitter.LeftRightDoubleDoubleQuotes)
-	msg, _ := spaceSplitter.Split(message.Content)
-	if len(msg) < 2 {
-		sendError(session, message.ChannelID, "Usage: `$team <team name>`")
-		return
-	}
-	teamName := strings.Join(msg[1:], " ")
+func (b *Bot) teamInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
+	teamName := i.ApplicationCommandData().Options[0].StringValue()
 
 	entry, err := b.APIPtr.GetTeam(context.Background(), teamName)
 	if err != nil {
-		b.logger().Error("failed to get team", "team", teamName, "error", fmt.Errorf("teamHandler: %w", err))
-		sendError(session, message.ChannelID, fmt.Sprintf("No VRS data found for **%s**.", teamName))
+		b.logger().Error("failed to get team", "team", teamName, "error", fmt.Errorf("teamInteractionHandler: %w", err))
+		respondError(session, i.Interaction, fmt.Sprintf("No VRS data found for **%s**.", teamName))
 		return
 	}
 
@@ -370,151 +196,603 @@ func (b *Bot) teamHandler(session DiscordSession, message *discordgo.MessageCrea
 		Footer: &discordgo.MessageEmbedFooter{Text: footerText},
 	}
 
-	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-		b.logger().Error("failed to send team embed", "error", fmt.Errorf("teamHandler: %w", err))
+	if err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+		},
+	}); err != nil {
+		b.logger().Error("failed to respond to team interaction", "error", fmt.Errorf("teamInteractionHandler: %w", err))
 	}
 }
 
-// upcomingMatchesHandler handles the $upcoming command with a DiscordSession interface
-func (b *Bot) upcomingMatchesHandler(session DiscordSession, message *discordgo.MessageCreate) {
-	matches, err := b.APIPtr.GetUpcomingMatches(context.Background(), message.GuildID, message.ChannelID)
+func (b *Bot) teamsInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
+	teams, err := b.APIPtr.GetTeams(context.Background(), i.GuildID, i.ChannelID)
 	if err != nil {
-		b.logger().Error("failed to get upcoming matches", "error", fmt.Errorf("upcomingMatchesHandler: %w", err))
-		sendError(session, message.ChannelID, "An error occurred getting upcoming matches.")
+		b.logger().Error("failed to get teams", "error", fmt.Errorf("teamsInteractionHandler: %w", err))
+		session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "An error occurred getting the teams list.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
 		return
 	}
 
-	if len(matches) == 0 {
-		embed := &discordgo.MessageEmbed{
-			Title:       "Upcoming Matches",
-			Description: "No upcoming matches at this time.",
-			Color:       green,
+	sort.Slice(teams, func(a, b int) bool {
+		ra, rb := teams[a].VRSRanking, teams[b].VRSRanking
+		if ra == 0 {
+			return false
 		}
-		if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-			b.logger().Error("failed to send upcoming-matches embed", "error", fmt.Errorf("upcomingMatchesHandler: %w", err))
+		if rb == 0 {
+			return true
 		}
+		return ra < rb
+	})
+
+	formatEntry := func(name string, ranking int) string {
+		if ranking == 0 {
+			return fmt.Sprintf("—  %s\n", name)
+		}
+		return fmt.Sprintf("`#%d`  %s\n", ranking, name)
+	}
+
+	mid := (len(teams) + 1) / 2
+	var left, right strings.Builder
+	for _, t := range teams[:mid] {
+		left.WriteString(formatEntry(t.Name, t.VRSRanking))
+	}
+	for _, t := range teams[mid:] {
+		right.WriteString(formatEntry(t.Name, t.VRSRanking))
+	}
+
+	embed := &discordgo.MessageEmbed{
+		Title: "Teams in this Stage",
+		Color: green,
+		Fields: []*discordgo.MessageEmbedField{
+			{Name: "\u200b", Value: left.String(), Inline: true},
+			{Name: "\u200b", Value: right.String(), Inline: true},
+		},
+		Footer: &discordgo.MessageEmbedFooter{
+			Text: fmt.Sprintf("%d teams • VRS world ranking shown", len(teams)),
+		},
+	}
+
+	session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+		},
+	})
+}
+
+func (b *Bot) leaderboardInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
+	leaderboard, err := b.APIPtr.GetLeaderboard(context.Background(), i.GuildID, i.ChannelID)
+	if err != nil {
+		b.logger().Error("failed to get leaderboard", "error", fmt.Errorf("leaderboardHandler: %w", err))
+		respondError(session, i.Interaction, "An error occurred getting the leaderboard.")
+		return
+	}
+	if leaderboard == nil {
+		respondError(session, i.Interaction, "There are currently no rankings. Try again later.")
 		return
 	}
 
-	var liveFields, upcomingFields []*discordgo.MessageEmbedField
+	var sb strings.Builder
+	for _, user := range leaderboard {
+		fmt.Fprintf(&sb, "%d. **%s** — %d correct, %d incorrect\n",
+			user.Rank,
+			user.Username,
+			user.Successes,
+			user.Failures,
+		)
+	}
+
+	accentColor := green
+	if err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Flags: discordgo.MessageFlagsIsComponentsV2,
+			Components: []discordgo.MessageComponent{
+				discordgo.Container{
+					AccentColor: &accentColor,
+					Components: []discordgo.MessageComponent{
+						discordgo.TextDisplay{Content: "## Leaderboard"},
+						discordgo.TextDisplay{Content: sb.String()},
+						discordgo.Separator{},
+						discordgo.TextDisplay{Content: "-# Scoring: 3pts correct · 1pt pending · 0pts incorrect • No tiebreakers"},
+					},
+				},
+			},
+		},
+	}); err != nil {
+		b.logger().Error("failed to respond to leaderboard interaction", "error", fmt.Errorf("leaderboardInteractionHandler: %w", err))
+	}
+}
+
+func (b *Bot) upcomingInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
+	matches, err := b.APIPtr.GetUpcomingMatches(context.Background(), i.GuildID, i.ChannelID)
+	if err != nil {
+		b.logger().Error("failed to get upcoming matches", "error", fmt.Errorf("upcomingInteractionHandler: %w", err))
+		respondError(session, i.Interaction, "An error occurred getting upcoming matches.")
+		return
+	}
+
+	var liveTexts, upcomingTexts []string
 	for _, match := range matches {
-		if match.Team1 == "TBD" || match.Team2 == "TBD" {
+		if match.Team1 == "TBD" || match.Team2 == "TBD" || match.BestOf == "" {
 			continue
 		}
-		name := fmt.Sprintf("**%s** vs **%s** (Bo%s)", match.Team1, match.Team2, match.BestOf)
-		var value string
+		line := fmt.Sprintf("**%s** vs **%s** (Bo%s)", match.Team1, match.Team2, match.BestOf)
 		if match.Live {
-			value = "**LIVE**"
+			line += "\nLIVE"
 		} else {
-			value = fmt.Sprintf("<t:%d:F> — <t:%d:R>", match.EpochTime, match.EpochTime)
+			line += fmt.Sprintf("\n<t:%d:F> — <t:%d:R>", match.EpochTime, match.EpochTime)
 		}
 		if match.StreamURL != "" {
-			value += fmt.Sprintf("\n📺 [Watch live](%s)", match.StreamURL)
+			line += fmt.Sprintf("\n\U0001f4fa [Watch live](%s)", match.StreamURL)
 		}
-		field := &discordgo.MessageEmbedField{Name: name, Value: value}
 		if match.Live {
-			liveFields = append(liveFields, field)
+			liveTexts = append(liveTexts, line)
 		} else {
-			upcomingFields = append(upcomingFields, field)
+			upcomingTexts = append(upcomingTexts, line)
 		}
 	}
+
+	var inner []discordgo.MessageComponent
+
+	if len(liveTexts) == 0 && len(upcomingTexts) == 0 {
+		inner = append(inner, discordgo.TextDisplay{Content: "No upcoming matches at this time."})
+	} else {
+		if len(liveTexts) > 0 {
+			inner = append(inner, discordgo.TextDisplay{Content: "## Live Now"})
+			for _, t := range liveTexts {
+				inner = append(inner, discordgo.TextDisplay{Content: t})
+			}
+		}
+		if len(upcomingTexts) > 0 {
+			if len(liveTexts) > 0 {
+				divider := true
+				spacing := discordgo.SeparatorSpacingSizeSmall
+				inner = append(inner, discordgo.Separator{Divider: &divider, Spacing: &spacing})
+			}
+			inner = append(inner, discordgo.TextDisplay{Content: "## Upcoming"})
+			for _, t := range upcomingTexts {
+				inner = append(inner, discordgo.TextDisplay{Content: t})
+			}
+		}
+	}
+
+	accentColor := green
+	components := []discordgo.MessageComponent{
+		discordgo.Container{
+			AccentColor: &accentColor,
+			Components:  inner,
+		},
+	}
+
+	if err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Flags:      discordgo.MessageFlagsIsComponentsV2,
+			Components: components,
+		},
+	}); err != nil {
+		b.logger().Error("failed to respond to upcoming matches interaction", "error", fmt.Errorf("upcomingInteractionHandler: %w", err))
+	}
+}
+
+func (b *Bot) resultsInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
+	nodes, kind, err := b.APIPtr.GetResults(context.Background(), i.GuildID, i.ChannelID)
+	if err != nil {
+		b.logger().Error("failed to get results", "error", fmt.Errorf("resultsInteractionHandler: %w", err))
+		session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Flags:   discordgo.MessageFlagsEphemeral,
+				Content: "An error occurred fetching the results.",
+			},
+		})
+		return
+	}
+
+	var resp *discordgo.InteractionResponse
+	switch kind {
+	case tournament.Swiss:
+		resp = &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{buildSwissResultEmbed(nodes)},
+			},
+		}
+	case tournament.SingleElim:
+		resp = &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Flags:      discordgo.MessageFlagsIsComponentsV2,
+				Components: buildSingleElimResultComponents(nodes),
+			},
+		}
+	default:
+		session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Flags:   discordgo.MessageFlagsEphemeral,
+				Content: "Unsupported tournament format.",
+			},
+		})
+		return
+	}
+
+	if err := session.InteractionRespond(i.Interaction, resp); err != nil {
+		b.logger().Error("failed to respond to results interaction", "error", fmt.Errorf("resultsInteractionHandler: %w", err))
+	}
+}
+
+// buildResultMatchSection returns a Section component for a single match node.
+// The text shows the winner bolded (if known); the button accessory shows the score.
+func buildResultMatchSection(n sources.MatchNode, buttonID int) discordgo.Section {
+	var text string
+	switch {
+	case n.Winner == n.Team1:
+		text = fmt.Sprintf("**%s** vs %s", n.Team1, n.Team2)
+	case n.Winner == n.Team2:
+		text = fmt.Sprintf("%s vs **%s**", n.Team1, n.Team2)
+	default:
+		text = fmt.Sprintf("%s vs %s", n.Team1, n.Team2)
+	}
+
+	label := "—"
+	style := discordgo.SecondaryButton
+	switch n.Status {
+	case "completed":
+		score := n.Score
+		if parts := strings.SplitN(score, "-", 2); len(parts) == 2 {
+			score = parts[0] + " — " + parts[1]
+		}
+		label = score
+		style = discordgo.SuccessButton
+	case "in_progress":
+		label = "Live"
+		style = discordgo.PrimaryButton
+	}
+
+	return discordgo.Section{
+		Components: []discordgo.MessageComponent{
+			discordgo.TextDisplay{Content: text},
+		},
+		Accessory: discordgo.Button{
+			Label:    label,
+			Style:    style,
+			Disabled: true,
+			CustomID: fmt.Sprintf("result_%d", buttonID),
+		},
+	}
+}
+
+// buildRoundContainer wraps a labelled group of match nodes into a Container.
+func buildRoundContainer(label string, nodes []sources.MatchNode, idxOffset int) discordgo.Container {
+	grey := 0x2b2d31
+	comps := []discordgo.MessageComponent{
+		discordgo.TextDisplay{Content: "## " + label},
+		discordgo.Separator{},
+	}
+	for j, n := range nodes {
+		comps = append(comps, buildResultMatchSection(n, idxOffset+j))
+	}
+	return discordgo.Container{AccentColor: &grey, Components: comps}
+}
+
+// canonicalElimRound maps PandaScore and Liquipedia section labels to a
+// consistent display name used for grouping and ordering.
+func canonicalElimRound(section string) string {
+	lower := strings.ToLower(section)
+	switch {
+	case strings.HasPrefix(lower, "grand final"):
+		return "Grand Final"
+	case strings.HasPrefix(lower, "semifinal"), strings.HasPrefix(lower, "semi-final"), strings.HasPrefix(lower, "semi final"):
+		return "Semi-finals"
+	case strings.HasPrefix(lower, "quarterfinal"), strings.HasPrefix(lower, "quarter-final"), strings.HasPrefix(lower, "quarter final"):
+		return "Quarter-finals"
+	case strings.HasPrefix(lower, "round of 16"):
+		return "Round of 16"
+	case strings.HasPrefix(lower, "round of 32"):
+		return "Round of 32"
+	default:
+		return section
+	}
+}
+
+var singleElimRoundOrder = []string{"Round of 32", "Round of 16", "Quarter-finals", "Semi-finals", "Grand Final"}
+
+func buildSingleElimResultComponents(nodes []sources.MatchNode) []discordgo.MessageComponent {
+	byRound := make(map[string][]sources.MatchNode)
+	for _, n := range nodes {
+		label := canonicalElimRound(n.Section)
+		byRound[label] = append(byRound[label], n)
+	}
+
+	var containers []discordgo.MessageComponent
+	idx := 0
+	for _, round := range singleElimRoundOrder {
+		matches, ok := byRound[round]
+		if !ok {
+			continue
+		}
+		containers = append(containers, buildRoundContainer(round, matches, idx))
+		idx += len(matches)
+	}
+	return containers
+}
+
+func buildSwissResultEmbed(nodes []sources.MatchNode) *discordgo.MessageEmbed {
+	byRound := make(map[string][]sources.MatchNode)
+	var roundOrder []string
+	seen := make(map[string]bool)
+	for _, n := range nodes {
+		if !seen[n.Section] {
+			seen[n.Section] = true
+			roundOrder = append(roundOrder, n.Section)
+		}
+		byRound[n.Section] = append(byRound[n.Section], n)
+	}
+
+	sort.Slice(roundOrder, func(a, b int) bool {
+		var na, nb int
+		fmt.Sscanf(roundOrder[a], "Round %d", &na)
+		fmt.Sscanf(roundOrder[b], "Round %d", &nb)
+		return na < nb
+	})
 
 	var fields []*discordgo.MessageEmbedField
-	if len(liveFields) > 0 {
-		fields = append(fields, &discordgo.MessageEmbedField{Name: "🔴  Live Now", Value: "\u200b"})
-		fields = append(fields, liveFields...)
-	}
-	if len(upcomingFields) > 0 {
-		if len(liveFields) > 0 {
-			fields = append(fields, &discordgo.MessageEmbedField{Name: "Upcoming", Value: "\u200b"})
+	for _, round := range roundOrder {
+		var lines []string
+		for _, n := range byRound[round] {
+			t1, t2 := n.Team1, n.Team2
+			if n.Winner == n.Team1 {
+				t1 = "**" + t1 + "**"
+			} else if n.Winner == n.Team2 {
+				t2 = "**" + t2 + "**"
+			}
+			score := n.Score
+			if parts := strings.SplitN(score, "-", 2); len(parts) == 2 {
+				score = parts[0] + " — " + parts[1]
+			}
+			if score != "" {
+				lines = append(lines, fmt.Sprintf("%s vs %s (%s)", t1, t2, score))
+			} else {
+				lines = append(lines, fmt.Sprintf("%s vs %s", t1, t2))
+			}
 		}
-		fields = append(fields, upcomingFields...)
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:  round,
+			Value: strings.Join(lines, "\n"),
+		})
 	}
 
-	if len(fields) == 0 {
-		embed := &discordgo.MessageEmbed{
-			Title:       "Upcoming Matches",
-			Description: "No upcoming matches at this time.",
-			Color:       green,
+	return &discordgo.MessageEmbed{
+		Title:  "Results",
+		Color:  0x5865F2,
+		Fields: fields,
+	}
+}
+
+func (b *Bot) newAutocompleteInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
+	switch i.ApplicationCommandData().Name {
+	case "team":
+		b.teamNameAutocomplete(session, i)
+	}
+}
+
+func (b *Bot) teamNameAutocomplete(session DiscordSession, i *discordgo.InteractionCreate) {
+	var typed string
+	for _, opt := range i.ApplicationCommandData().Options {
+		if opt.Focused {
+			typed = strings.ToLower(opt.StringValue())
+			break
 		}
-		if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-			b.logger().Error("failed to send upcoming-matches embed", "error", fmt.Errorf("upcomingMatchesHandler: %w", err))
+	}
+
+	teams, err := b.APIPtr.GetTeams(context.Background(), i.GuildID, i.ChannelID)
+	if err != nil {
+		b.logger().Error("failed to get teams for autocomplete", "error", fmt.Errorf("teamNameAutocomplete: %w", err))
+		session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+			Data: &discordgo.InteractionResponseData{Choices: []*discordgo.ApplicationCommandOptionChoice{}},
+		})
+		return
+	}
+
+	var choices []*discordgo.ApplicationCommandOptionChoice
+	for _, t := range teams {
+		if typed == "" || strings.Contains(strings.ToLower(t.Name), typed) {
+			choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
+				Name:  t.Name,
+				Value: t.Name,
+			})
+			if len(choices) == 25 {
+				break
+			}
 		}
+	}
+
+	if err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+		Data: &discordgo.InteractionResponseData{Choices: choices},
+	}); err != nil {
+		b.logger().Error("failed to respond to team autocomplete", "error", fmt.Errorf("teamNameAutocomplete: %w", err))
+	}
+}
+
+func (b *Bot) newComponentHandler(session DiscordSession, i *discordgo.InteractionCreate) {
+	customID := i.MessageComponentData().CustomID
+	switch {
+	case strings.HasPrefix(customID, "set_select_"):
+		b.setSelectHandler(session, i)
+	case customID == "set_submit":
+		b.setSubmitHandler(session, i)
+	}
+}
+
+func (b *Bot) setSelectHandler(session DiscordSession, i *discordgo.InteractionCreate) {
+	stateKey := i.GuildID + ":" + i.Member.User.ID
+	customID := i.MessageComponentData().CustomID
+	values := i.MessageComponentData().Values
+
+	b.setPredictionMu.Lock()
+	state, ok := b.setPredictionState[stateKey]
+	if ok {
+		state.selections[customID] = values
+		b.setPredictionState[stateKey] = state
+	}
+	b.setPredictionMu.Unlock()
+
+	if err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredMessageUpdate,
+	}); err != nil {
+		b.logger().Error("failed to ack select interaction", "error", fmt.Errorf("setSelectHandler: %w", err))
+	}
+}
+
+func (b *Bot) setSubmitHandler(session DiscordSession, i *discordgo.InteractionCreate) {
+	stateKey := i.GuildID + ":" + i.Member.User.ID
+
+	b.setPredictionMu.Lock()
+	state, ok := b.setPredictionState[stateKey]
+	b.setPredictionMu.Unlock()
+
+	ephemeralError := func(msg string) {
+		session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Flags:   discordgo.MessageFlagsEphemeral,
+				Content: msg,
+			},
+		})
+	}
+
+	if !ok {
+		ephemeralError("Session expired — please run `/set` again.")
+		return
+	}
+
+	var userPreds []string
+	switch state.format {
+	case tournament.Swiss:
+		userPreds = append(userPreds, state.selections["set_select_win"]...)
+		userPreds = append(userPreds, state.selections["set_select_advance"]...)
+		userPreds = append(userPreds, state.selections["set_select_lose"]...)
+	case tournament.SingleElim:
+		userPreds = append(userPreds, state.selections["set_select_third"]...)
+		userPreds = append(userPreds, state.selections["set_select_runnerup"]...)
+		userPreds = append(userPreds, state.selections["set_select_winner"]...)
+	}
+
+	seen := make(map[string]bool)
+	for _, p := range userPreds {
+		if seen[p] {
+			ephemeralError(fmt.Sprintf("**%s** appears in multiple buckets — each team can only be picked once.", p))
+			return
+		}
+		seen[p] = true
+	}
+
+	// All local validation passed — defer before the DB call
+	if err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+	}); err != nil {
+		b.logger().Error("failed to defer set submit", "error", fmt.Errorf("setSubmitHandler: %w", err))
+		return
+	}
+
+	errContent := func(msg string) {
+		session.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Content: &msg})
+	}
+
+	user := models.User{UserID: i.Member.User.ID, Username: i.Member.User.Username}
+	prediction, err := b.APIPtr.SetUserPrediction(context.Background(), i.GuildID, i.ChannelID, user, userPreds)
+	if err != nil {
+		b.logger().Error("failed to set user prediction", "user", user.Username, "error", fmt.Errorf("setSubmitHandler: %w", err))
+		msg := fmt.Sprintf("Failed to save Pick'Ems: %s", err.Error())
+		errContent(msg)
+		return
+	}
+
+	b.setPredictionMu.Lock()
+	delete(b.setPredictionState, stateKey)
+	b.setPredictionMu.Unlock()
+
+	fields, err := predictionFields(prediction)
+	if err != nil {
+		b.logger().Error("failed to build prediction fields", "user", user.Username, "error", fmt.Errorf("setSubmitHandler: %w", err))
+		errContent("An error occurred displaying your Pick'Ems.")
 		return
 	}
 
 	embed := &discordgo.MessageEmbed{
-		Title:  "Upcoming Matches",
-		Color:  green,
-		Fields: fields,
+		Title:       "Pick'Ems Updated",
+		Description: fmt.Sprintf("%s's Pick'Ems have been saved.", user.Username),
+		Color:       green,
+		Fields:      fields,
 	}
-
-	if _, err := session.ChannelMessageSendEmbed(message.ChannelID, embed); err != nil {
-		b.logger().Error("failed to send upcoming-matches embed", "error", fmt.Errorf("upcomingMatchesHandler: %w", err))
+	embeds := []*discordgo.MessageEmbed{embed}
+	if _, err := session.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+		Embeds: &embeds,
+	}); err != nil {
+		b.logger().Error("failed to edit set submit response", "error", fmt.Errorf("setSubmitHandler: %w", err))
 	}
 }
 
-// resultsHandler handles the $results command withing a DiscordSession interface
-// the results image should be stored in <project-root>/resources/result.png.
-// Creating / updating the results image is a slow process and should be handled when we update the match results db via a goroutine
-func (b *Bot) resultsHandler(session DiscordSession, message *discordgo.MessageCreate) {
-	outputPath := "resources/result.png"
+func (b *Bot) newInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
 
-	// Load image from disk
-	f, err := os.Open(outputPath)
-	if err != nil {
-		b.logger().Error("failed to open results image", "path", outputPath, "error", fmt.Errorf("resultsHandler: %w", err))
-		sendError(session, message.ChannelID, "An error occurred fetching the match results.")
+	switch i.Type {
+	case discordgo.InteractionApplicationCommandAutocomplete:
+		b.newAutocompleteInteractionHandler(session, i)
 		return
-	}
-
-	session.ChannelFileSend(message.ChannelID, outputPath, f)
-}
-
-// newMessageHandler routes messages to appropriate handlers with a DiscordSession interface
-// botUserID is the bot's user ID to prevent self-responses
-func (b *Bot) newMessageHandler(session DiscordSession, message *discordgo.MessageCreate, botUserID string) {
-	// Prevent bot from responding to its own messages
-	if message.Author.ID == botUserID {
+	case discordgo.InteractionMessageComponent:
+		b.newComponentHandler(session, i)
 		return
 	}
 
 	// Route to appropriate handler
-	switch {
-	case startsWith(message.Content, "$help"):
-		metrics.DiscordCommandsTotal.WithLabelValues("help").Inc()
-		b.helpMessageHandler(session, message)
-
-	case startsWith(message.Content, "$details"):
-		metrics.DiscordCommandsTotal.WithLabelValues("details").Inc()
-		b.detailsHandler(session, message)
-
-	case startsWith(message.Content, "$set"):
-		metrics.DiscordCommandsTotal.WithLabelValues("set").Inc()
-		b.setPredictionsHandler(session, message)
-
-	case startsWith(message.Content, "$check"):
+	switch i.ApplicationCommandData().Name {
+	case "check":
 		metrics.DiscordCommandsTotal.WithLabelValues("check").Inc()
-		b.checkPredictionsHandler(session, message)
-
-	case startsWith(message.Content, "$leaderboard"):
-		metrics.DiscordCommandsTotal.WithLabelValues("leaderboard").Inc()
-		b.leaderboardHandler(session, message)
-
-	case startsWith(message.Content, "$teams"):
-		metrics.DiscordCommandsTotal.WithLabelValues("teams").Inc()
-		b.teamsHandler(session, message)
-
-	case startsWith(message.Content, "$team "):
+		b.checkInteractionHandler(session, i)
+	case "set":
+		metrics.DiscordCommandsTotal.WithLabelValues("set").Inc()
+		b.setInteractionHandler(session, i)
+	case "team":
 		metrics.DiscordCommandsTotal.WithLabelValues("team").Inc()
-		b.teamHandler(session, message)
-
-	case startsWith(message.Content, "$upcoming"):
+		b.teamInteractionHandler(session, i)
+	case "teams":
+		metrics.DiscordCommandsTotal.WithLabelValues("teams").Inc()
+		b.teamsInteractionHandler(session, i)
+	case "leaderboard":
+		metrics.DiscordCommandsTotal.WithLabelValues("leaderboard").Inc()
+		b.leaderboardInteractionHandler(session, i)
+	case "upcoming":
 		metrics.DiscordCommandsTotal.WithLabelValues("upcoming").Inc()
-		b.upcomingMatchesHandler(session, message)
-
-	case startsWith(message.Content, "$result"):
+		b.upcomingInteractionHandler(session, i)
+	case "results":
 		metrics.DiscordCommandsTotal.WithLabelValues("results").Inc()
-		b.resultsHandler(session, message)
+		b.resultsInteractionHandler(session, i)
 	}
+}
+
+func predictionFields(p models.Prediction) ([]*discordgo.MessageEmbedField, error) {
+	f, err := tournament.Get(tournament.Kind(p.Format))
+	if err != nil {
+		return nil, fmt.Errorf("unknown prediction format %q", p.Format)
+	}
+	pFields, err := f.PredictionFields(p)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*discordgo.MessageEmbedField, len(pFields))
+	for i, pf := range pFields {
+		out[i] = &discordgo.MessageEmbedField{Name: pf.Name, Value: pf.Value}
+	}
+	return out, nil
 }

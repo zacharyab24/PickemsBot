@@ -5,16 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
-
-	"pickems-bot/app"
-	"pickems-bot/metrics"
-	"pickems-bot/sources"
-	"pickems-bot/tournament"
-
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/zacharyab24/pickems-renderer/render"
 )
 
 // LiquipediaEvent represents the webhook event payload from Liquipedia
@@ -68,58 +59,8 @@ func (s *Server) LiquipediaWebhookHandler(w http.ResponseWriter, r *http.Request
 		}
 		if err := s.api.UpdateMatchResults(ctx, s.tournamentID, s.round); err != nil {
 			s.logger().Error("update match results failed", "error", fmt.Errorf("webhook pipeline: %w", err))
-			return
-		}
-		if err := RenderResultsImage(ctx, s.api, s.tournamentID, s.round); err != nil {
-			s.logger().Error("render results image failed", "error", fmt.Errorf("webhook pipeline: %w", err))
 		}
 	}(event)
 
 	w.WriteHeader(http.StatusOK)
-}
-
-const resultImagePath = "resources/result.png"
-
-// RenderResultsImage fetches match nodes for the given tournament/round and regenerates the result image on disk.
-func RenderResultsImage(ctx context.Context, a *app.App, tournamentID int, round string) error {
-	timer := prometheus.NewTimer(metrics.ImageRenderDuration)
-	defer timer.ObserveDuration()
-
-	if err := os.MkdirAll("resources", 0755); err != nil {
-		return fmt.Errorf("failed to create resources directory: %w", err)
-	}
-	nodes, kind, err := a.Store.GetMatchNodes(ctx, tournamentID, round)
-	if err != nil {
-		return fmt.Errorf("failed to fetch match nodes: %w", err)
-	}
-	if kind == "" {
-		return fmt.Errorf("kind was empty, cannot generate results image")
-	}
-	if kind == tournament.SingleElim {
-		nodes = tournament.TrimSingleElimNodes(nodes)
-		nodes = tournament.NormalizeSingleElimSections(nodes)
-	}
-
-	renderNodes := toRenderNodes(nodes)
-	if err := render.RenderBracket(renderNodes, string(kind), round, resultImagePath); err != nil {
-		return fmt.Errorf("RenderBracket failed: %w", err)
-	}
-	return nil
-}
-
-// toRenderNodes converts sources.MatchNode slice to the renderer's input type.
-// The two types are structurally identical; this bridges the package boundary.
-func toRenderNodes(nodes []sources.MatchNode) []render.MatchNode {
-	out := make([]render.MatchNode, len(nodes))
-	for i, n := range nodes {
-		out[i] = render.MatchNode{
-			ID:      n.ID,
-			Team1:   n.Team1,
-			Team2:   n.Team2,
-			Winner:  n.Winner,
-			Score:   n.Score,
-			Section: n.Section,
-		}
-	}
-	return out
 }

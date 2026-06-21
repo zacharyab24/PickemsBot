@@ -15,7 +15,8 @@ import (
 type Config struct {
 	TournamentName string `toml:"tournament_name"`
 	Round          string `toml:"round"`
-	DataSource     string `toml:"data_source"` // liquipedia or pandascore
+	DataSource     string `toml:"data_source"`  // liquipedia or pandascore
+	GuildID        string `toml:"dev_guild_id"` // optional; if set, bot will only register commands in this guild (faster for testing)
 
 	// Bot modes
 	UpcomingOnly bool `toml:"upcoming_only"`

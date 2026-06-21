@@ -204,8 +204,7 @@ func bracketDepth(n int) int {
 	return k
 }
 
-// renderRoundNames maps round depth index → the section label the
-// pickems-renderer recognises in its knownSingleElimOrder table.
+// renderRoundNames maps round depth index → canonical section label.
 // Index 0 = Grand Final (latest round), increasing index = earlier rounds.
 var renderRoundNames = []string{
 	"Grand Final",   // 0 — depth 1 bracket

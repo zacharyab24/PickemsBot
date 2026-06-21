@@ -355,6 +355,27 @@ func (a *App) GetUpcomingMatches(ctx context.Context, guildID, channelID string)
 	return matches, nil
 }
 
+// GetResults returns raw match nodes and format kind for the guild's active tournament round.
+// Section labels are normalised: existing rows without a stored section fall back to positional
+// derivation (single-elim) or Swiss record normalisation.
+func (a *App) GetResults(ctx context.Context, guildID, channelID string) ([]sources.MatchNode, tournament.Kind, error) {
+	cfg, err := a.resolveConfig(ctx, guildID, channelID)
+	if err != nil {
+		return nil, "", err
+	}
+	nodes, kind, err := a.Store.GetMatchNodes(ctx, *cfg.TournamentID, *cfg.Round)
+	if err != nil {
+		return nil, "", err
+	}
+	switch kind {
+	case tournament.Swiss:
+		nodes = tournament.NormalizeSwissSections(nodes)
+	case tournament.SingleElim:
+		nodes = tournament.NormalizeSingleElimSections(nodes)
+	}
+	return nodes, kind, nil
+}
+
 // GetTournamentInfo returns metadata about the guild's configured tournament.
 func (a *App) GetTournamentInfo(ctx context.Context, guildID, channelID string) (TournamentInfo, error) {
 	cfg, err := a.resolveConfig(ctx, guildID, channelID)
@@ -396,13 +417,16 @@ func (a *App) PopulateMatches(ctx context.Context, tournamentID int, round strin
 	}
 
 	if err := a.Store.FetchAndSaveSchedule(ctx, tournamentID); err != nil {
-		return err
+		a.logger().Warn("PopulateMatches: schedule fetch skipped", "tournament_id", tournamentID, "error", err)
 	}
 
 	if !scheduleOnly {
+		a.logger().Info("PopulateMatches: fetching results", "tournament_id", tournamentID, "round", round)
 		if err := a.Store.FetchAndSaveMatchResults(ctx, tournamentID, round); err != nil {
+			a.logger().Error("PopulateMatches: results fetch failed", "tournament_id", tournamentID, "round", round, "error", err)
 			return err
 		}
+		a.logger().Info("PopulateMatches: results fetch complete", "tournament_id", tournamentID, "round", round)
 	}
 	return nil
 }

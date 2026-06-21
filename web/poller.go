@@ -128,9 +128,6 @@ func (p *Poller) tick() bool {
 		if err := p.app.UpdateMatchResults(context.Background(), p.dbTournamentID, p.round); err != nil {
 			p.logger().Warn("failed to update match results", "error", fmt.Errorf("poller.tick: %w", err))
 		}
-		if err := RenderResultsImage(context.Background(), p.app, p.dbTournamentID, p.round); err != nil {
-			p.logger().Warn("failed to render results image", "error", fmt.Errorf("poller.tick: %w", err))
-		}
 	}
 
 	return true

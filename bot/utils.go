@@ -94,6 +94,16 @@ func swissBucketField(label string, entries []format.BucketEntry) *discordgo.Mes
 	return &discordgo.MessageEmbedField{Name: label, Value: sb.String(), Inline: false}
 }
 
+// respondError sends an inline error message as an interaction response.
+// Use this in slash command handlers; sendError sends a standalone channel message
+// which leaves the interaction in a perpetual "thinking" state.
+func respondError(session DiscordSession, i *discordgo.Interaction, msg string) {
+	session.InteractionRespond(i, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{Content: msg},
+	})
+}
+
 // sendError sends a red error embed to the given channel.
 func sendError(session DiscordSession, channelID string, msg string) {
 	embed := &discordgo.MessageEmbed{

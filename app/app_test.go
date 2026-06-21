@@ -740,8 +740,9 @@ func TestPopulateMatches_ScheduleError(t *testing.T) {
 	mockStore.FetchAndSaveScheduleError = fmt.Errorf("schedule fetch failed")
 	api := &App{Store: mockStore, rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
 
-	if err := api.PopulateMatches(bg(), 1, "test_round", true); err == nil {
-		t.Error("expected error when schedule fetch fails, got nil")
+	// Schedule errors are non-fatal — PopulateMatches warns and continues.
+	if err := api.PopulateMatches(bg(), 1, "test_round", true); err != nil {
+		t.Errorf("expected nil when schedule fetch fails (non-fatal), got: %v", err)
 	}
 }
 
