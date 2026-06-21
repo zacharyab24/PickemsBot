@@ -9,13 +9,13 @@ import (
 	"pickems-bot/sources"
 )
 
-// EnsureScheduledMatches verifies that at least one pending match exists in the database for the given tournament.
+// EnsureScheduledMatches verifies that at least one match exists in the database for the given tournament.
 // Prediction operations depend on this data being present, so callers should use this as a precondition check.
 func (s *PostgresStore) EnsureScheduledMatches(ctx context.Context, tournamentID int) error {
 	var count int
 	err := s.pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM matches
-		WHERE tournament_id = $1 AND status = 'pending'
+		WHERE tournament_id = $1
 	`, tournamentID).Scan(&count)
 	if err != nil {
 		return fmt.Errorf("EnsureScheduledMatches: %w", err)
@@ -69,7 +69,7 @@ func (s *PostgresStore) GetMatchSchedule(ctx context.Context, tournamentID int) 
 // Completed and in-progress matches are preserved.
 func (s *PostgresStore) UpsertMatchSchedule(ctx context.Context, tournamentID int, matches []sources.ScheduledMatch) error {
 	if len(matches) == 0 {
-		return fmt.Errorf("UpsertMatchSchedule: matches list is empty")
+		return nil
 	}
 
 	tx, err := s.pool.Begin(ctx)

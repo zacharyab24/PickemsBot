@@ -23,9 +23,6 @@ func (b *Bot) Run() error {
 		return err
 	}
 
-	// add a event handler
-	discord.AddHandler(b.newMessage)
-
 	// open session
 	discord.Open()
 	b.session = discord
@@ -41,12 +38,6 @@ func (b *Bot) Run() error {
 	signal.Notify(c, os.Interrupt)
 	<-c
 	return nil
-}
-
-// newMessage delegates to the testable newMessageHandler
-// *discordgo.Session implements DiscordSession interface
-func (b *Bot) newMessage(discord *discordgo.Session, message *discordgo.MessageCreate) {
-	b.newMessageHandler(discord, message, discord.State.User.ID)
 }
 
 func (b *Bot) newInteraction(discord *discordgo.Session, i *discordgo.InteractionCreate) {

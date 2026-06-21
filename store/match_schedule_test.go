@@ -69,7 +69,7 @@ func TestGetMatchSchedule_Empty(t *testing.T) {
 	assert.Empty(t, got)
 }
 
-func TestEnsureScheduledMatches_NoPendingMatches(t *testing.T) {
+func TestEnsureScheduledMatches_NoMatches(t *testing.T) {
 	cleanDB(t)
 	ctx := context.Background()
 	s := newTestStore(t)
@@ -87,6 +87,19 @@ func TestEnsureScheduledMatches_WithPendingMatches(t *testing.T) {
 
 	tournamentID := seedTournament(t, "test-ensure-pending", "swiss")
 	seedMatch(t, tournamentID, "Stage 1", "TeamA", "TeamB", "pending")
+
+	err := s.EnsureScheduledMatches(ctx, tournamentID)
+	assert.NoError(t, err)
+}
+
+func TestEnsureScheduledMatches_AllCompleted(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournament(t, "test-ensure-completed", "swiss")
+	seedMatch(t, tournamentID, "Stage 1", "TeamA", "TeamB", "completed")
+	seedMatch(t, tournamentID, "Stage 1", "TeamC", "TeamD", "completed")
 
 	err := s.EnsureScheduledMatches(ctx, tournamentID)
 	assert.NoError(t, err)

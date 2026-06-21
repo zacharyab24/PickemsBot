@@ -417,13 +417,16 @@ func (a *App) PopulateMatches(ctx context.Context, tournamentID int, round strin
 	}
 
 	if err := a.Store.FetchAndSaveSchedule(ctx, tournamentID); err != nil {
-		return err
+		a.logger().Warn("PopulateMatches: schedule fetch skipped", "tournament_id", tournamentID, "error", err)
 	}
 
 	if !scheduleOnly {
+		a.logger().Info("PopulateMatches: fetching results", "tournament_id", tournamentID, "round", round)
 		if err := a.Store.FetchAndSaveMatchResults(ctx, tournamentID, round); err != nil {
+			a.logger().Error("PopulateMatches: results fetch failed", "tournament_id", tournamentID, "round", round, "error", err)
 			return err
 		}
+		a.logger().Info("PopulateMatches: results fetch complete", "tournament_id", tournamentID, "round", round)
 	}
 	return nil
 }

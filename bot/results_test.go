@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"strings"
 	"testing"
 
 	"pickems-bot/sources"
@@ -209,42 +210,38 @@ func TestBuildSingleElimResultComponents_AllRoundsPresent(t *testing.T) {
 
 // endregion
 
-// region buildSwissResultComponents tests
+// region buildSwissResultEmbed tests
 
-func TestBuildSwissResultComponents_SortedByRound(t *testing.T) {
+func TestBuildSwissResultEmbed_SortedByRound(t *testing.T) {
 	nodes := []sources.MatchNode{
 		{Team1: "A", Team2: "B", Winner: "A", Score: "2-0", Section: "Round 2", Status: "completed"},
 		{Team1: "C", Team2: "D", Winner: "C", Score: "2-1", Section: "Round 2", Status: "completed"},
 		{Team1: "E", Team2: "F", Winner: "E", Score: "2-0", Section: "Round 1", Status: "completed"},
 		{Team1: "G", Team2: "H", Winner: "", Score: "", Section: "Round 3", Status: "pending"},
 	}
-	result := buildSwissResultComponents(nodes)
+	embed := buildSwissResultEmbed(nodes)
 
-	if len(result) != 3 {
-		t.Fatalf("expected 3 containers, got %d", len(result))
+	if len(embed.Fields) != 3 {
+		t.Fatalf("expected 3 fields, got %d", len(embed.Fields))
 	}
 	wantLabels := []string{"Round 1", "Round 2", "Round 3"}
-	for i, comp := range result {
-		if got := containerHeading(t, comp); got != wantLabels[i] {
-			t.Errorf("container[%d] = %q, want %q", i, got, wantLabels[i])
+	for i, f := range embed.Fields {
+		if f.Name != wantLabels[i] {
+			t.Errorf("field[%d] = %q, want %q", i, f.Name, wantLabels[i])
 		}
 	}
-	if got := containerMatchCount(t, result[1]); got != 2 {
-		t.Errorf("Round 2 has %d matches, want 2", got)
+	if lines := strings.Count(embed.Fields[1].Value, "\n") + 1; lines != 2 {
+		t.Errorf("Round 2 has %d lines, want 2", lines)
 	}
 }
 
-func TestBuildSwissResultComponents_SingleRound(t *testing.T) {
+func TestBuildSwissResultEmbed_WinnerBolded(t *testing.T) {
 	nodes := []sources.MatchNode{
 		{Team1: "A", Team2: "B", Winner: "A", Score: "2-0", Section: "Round 1", Status: "completed"},
-		{Team1: "C", Team2: "D", Winner: "C", Score: "2-1", Section: "Round 1", Status: "completed"},
 	}
-	result := buildSwissResultComponents(nodes)
-	if len(result) != 1 {
-		t.Fatalf("expected 1 container, got %d", len(result))
-	}
-	if got := containerMatchCount(t, result[0]); got != 2 {
-		t.Errorf("Round 1 has %d matches, want 2", got)
+	embed := buildSwissResultEmbed(nodes)
+	if !strings.Contains(embed.Fields[0].Value, "**A**") {
+		t.Errorf("expected winner A to be bolded, got: %s", embed.Fields[0].Value)
 	}
 }
 

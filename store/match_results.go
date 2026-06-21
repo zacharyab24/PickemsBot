@@ -89,6 +89,7 @@ func (s *PostgresStore) upsertMatchNodes(ctx context.Context, tournamentID int, 
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			ON CONFLICT (tournament_id, external_id) WHERE external_id IS NOT NULL
 			DO UPDATE SET
+				round        = EXCLUDED.round,
 				team1_name   = EXCLUDED.team1_name,
 				team2_name   = EXCLUDED.team2_name,
 				section      = EXCLUDED.section,

@@ -397,12 +397,23 @@ func (b *Bot) resultsInteractionHandler(session DiscordSession, i *discordgo.Int
 		return
 	}
 
-	var containers []discordgo.MessageComponent
+	var resp *discordgo.InteractionResponse
 	switch kind {
 	case tournament.Swiss:
-		containers = buildSwissResultComponents(nodes)
+		resp = &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{buildSwissResultEmbed(nodes)},
+			},
+		}
 	case tournament.SingleElim:
-		containers = buildSingleElimResultComponents(nodes)
+		resp = &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Flags:      discordgo.MessageFlagsIsComponentsV2,
+				Components: buildSingleElimResultComponents(nodes),
+			},
+		}
 	default:
 		session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -414,13 +425,7 @@ func (b *Bot) resultsInteractionHandler(session DiscordSession, i *discordgo.Int
 		return
 	}
 
-	if err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Flags:      discordgo.MessageFlagsIsComponentsV2,
-			Components: containers,
-		},
-	}); err != nil {
+	if err := session.InteractionRespond(i.Interaction, resp); err != nil {
 		b.logger().Error("failed to respond to results interaction", "error", fmt.Errorf("resultsInteractionHandler: %w", err))
 	}
 }
@@ -521,7 +526,7 @@ func buildSingleElimResultComponents(nodes []sources.MatchNode) []discordgo.Mess
 	return containers
 }
 
-func buildSwissResultComponents(nodes []sources.MatchNode) []discordgo.MessageComponent {
+func buildSwissResultEmbed(nodes []sources.MatchNode) *discordgo.MessageEmbed {
 	byRound := make(map[string][]sources.MatchNode)
 	var roundOrder []string
 	seen := make(map[string]bool)
@@ -540,14 +545,37 @@ func buildSwissResultComponents(nodes []sources.MatchNode) []discordgo.MessageCo
 		return na < nb
 	})
 
-	var containers []discordgo.MessageComponent
-	idx := 0
+	var fields []*discordgo.MessageEmbedField
 	for _, round := range roundOrder {
-		matches := byRound[round]
-		containers = append(containers, buildRoundContainer(round, matches, idx))
-		idx += len(matches)
+		var lines []string
+		for _, n := range byRound[round] {
+			t1, t2 := n.Team1, n.Team2
+			if n.Winner == n.Team1 {
+				t1 = "**" + t1 + "**"
+			} else if n.Winner == n.Team2 {
+				t2 = "**" + t2 + "**"
+			}
+			score := n.Score
+			if parts := strings.SplitN(score, "-", 2); len(parts) == 2 {
+				score = parts[0] + " — " + parts[1]
+			}
+			if score != "" {
+				lines = append(lines, fmt.Sprintf("%s vs %s (%s)", t1, t2, score))
+			} else {
+				lines = append(lines, fmt.Sprintf("%s vs %s", t1, t2))
+			}
+		}
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:  round,
+			Value: strings.Join(lines, "\n"),
+		})
 	}
-	return containers
+
+	return &discordgo.MessageEmbed{
+		Title:  "Results",
+		Color:  0x5865F2,
+		Fields: fields,
+	}
 }
 
 func (b *Bot) newAutocompleteInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
@@ -751,4 +779,20 @@ func (b *Bot) newInteractionHandler(session DiscordSession, i *discordgo.Interac
 		metrics.DiscordCommandsTotal.WithLabelValues("results").Inc()
 		b.resultsInteractionHandler(session, i)
 	}
+}
+
+func predictionFields(p models.Prediction) ([]*discordgo.MessageEmbedField, error) {
+	f, err := tournament.Get(tournament.Kind(p.Format))
+	if err != nil {
+		return nil, fmt.Errorf("unknown prediction format %q", p.Format)
+	}
+	pFields, err := f.PredictionFields(p)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*discordgo.MessageEmbedField, len(pFields))
+	for i, pf := range pFields {
+		out[i] = &discordgo.MessageEmbedField{Name: pf.Name, Value: pf.Value}
+	}
+	return out, nil
 }
