@@ -355,6 +355,27 @@ func (a *App) GetUpcomingMatches(ctx context.Context, guildID, channelID string)
 	return matches, nil
 }
 
+// GetResults returns raw match nodes and format kind for the guild's active tournament round.
+// Section labels are normalised: existing rows without a stored section fall back to positional
+// derivation (single-elim) or Swiss record normalisation.
+func (a *App) GetResults(ctx context.Context, guildID, channelID string) ([]sources.MatchNode, tournament.Kind, error) {
+	cfg, err := a.resolveConfig(ctx, guildID, channelID)
+	if err != nil {
+		return nil, "", err
+	}
+	nodes, kind, err := a.Store.GetMatchNodes(ctx, *cfg.TournamentID, *cfg.Round)
+	if err != nil {
+		return nil, "", err
+	}
+	switch kind {
+	case tournament.Swiss:
+		nodes = tournament.NormalizeSwissSections(nodes)
+	case tournament.SingleElim:
+		nodes = tournament.NormalizeSingleElimSections(nodes)
+	}
+	return nodes, kind, nil
+}
+
 // GetTournamentInfo returns metadata about the guild's configured tournament.
 func (a *App) GetTournamentInfo(ctx context.Context, guildID, channelID string) (TournamentInfo, error) {
 	cfg, err := a.resolveConfig(ctx, guildID, channelID)

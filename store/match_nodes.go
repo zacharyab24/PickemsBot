@@ -15,7 +15,7 @@ func (s *PostgresStore) GetMatchNodes(ctx context.Context, tournamentID int, rou
 		SELECT m.external_id, m.team1_name, m.team2_name,
 		       COALESCE(tw.canonical_name, ''),
 		       COALESCE(m.score, ''),
-		       m.round,
+		       COALESCE(m.section, m.round),
 		       m.status,
 		       COALESCE(t.format, '')
 		FROM matches m

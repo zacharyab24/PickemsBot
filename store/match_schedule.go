@@ -32,7 +32,7 @@ func (s *PostgresStore) GetMatchSchedule(ctx context.Context, tournamentID int) 
 		SELECT team1_name, team2_name, scheduled_at, best_of, stream_url, is_live,
 		       (status = 'completed') AS finished
 		FROM matches
-		WHERE tournament_id = $1 AND status != 'completed'
+		WHERE tournament_id = $1 AND status != 'completed' AND best_of IS NOT NULL
 		ORDER BY scheduled_at ASC
 	`, tournamentID)
 	if err != nil {
@@ -80,7 +80,7 @@ func (s *PostgresStore) UpsertMatchSchedule(ctx context.Context, tournamentID in
 
 	_, err = tx.Exec(ctx, `
 		DELETE FROM matches
-		WHERE tournament_id = $1 AND status = 'pending' AND is_live = FALSE
+		WHERE tournament_id = $1 AND status != 'completed'
 	`, tournamentID)
 	if err != nil {
 		return fmt.Errorf("UpsertMatchSchedule: clear pending: %w", err)

@@ -48,6 +48,8 @@ func (s *PostgresStore) FetchAndSaveMatchResults(ctx context.Context, tournament
 
 	if result.GetType() == tournament.Swiss {
 		nodes = tournament.NormalizeSwissSections(nodes)
+	} else if result.GetType() == tournament.SingleElim {
+		nodes = tournament.NormalizeSingleElimSections(nodes)
 	}
 
 	if err := s.upsertMatchNodes(ctx, tournamentID, round, nodes, result.GetType()); err != nil {
@@ -72,6 +74,7 @@ func (s *PostgresStore) upsertMatchNodes(ctx context.Context, tournamentID int, 
 		winner := nullString(n.Winner)
 		score := nullString(n.Score)
 		extID := nullString(n.ID)
+		section := nullString(n.Section)
 
 		status := "pending"
 		switch n.Status {
@@ -82,16 +85,17 @@ func (s *PostgresStore) upsertMatchNodes(ctx context.Context, tournamentID int, 
 		}
 
 		_, err := tx.Exec(ctx, `
-			INSERT INTO matches (tournament_id, round, team1_name, team2_name, score, external_id, status, completed_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			INSERT INTO matches (tournament_id, round, section, team1_name, team2_name, score, external_id, status, completed_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			ON CONFLICT (tournament_id, external_id) WHERE external_id IS NOT NULL
 			DO UPDATE SET
 				team1_name   = EXCLUDED.team1_name,
 				team2_name   = EXCLUDED.team2_name,
+				section      = EXCLUDED.section,
 				score        = EXCLUDED.score,
 				status       = EXCLUDED.status,
 				completed_at = EXCLUDED.completed_at
-		`, tournamentID, round, n.Team1, n.Team2, score, extID, status,
+		`, tournamentID, round, section, n.Team1, n.Team2, score, extID, status,
 			completedAt(status))
 		if err != nil {
 			return fmt.Errorf("upsertMatchNodes: insert %q vs %q: %w", n.Team1, n.Team2, err)
@@ -109,7 +113,6 @@ func (s *PostgresStore) upsertMatchNodes(ctx context.Context, tournamentID int, 
 				s.logger().Warn("upsertMatchNodes: could not resolve winner FK", "team", *winner, "error", err)
 			}
 		}
-
 	}
 
 	// Upsert all participant team names into the teams table so that pick inserts

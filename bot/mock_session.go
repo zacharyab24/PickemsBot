@@ -20,6 +20,8 @@ type MockDiscordSession struct {
 	SentEmbeds []MockEmbedMessage
 	// SentFiles stores all files sent during tests
 	SentFiles []MockFileMessage
+	// SentInteractions stores all interaction responses sent during tests
+	SentInteractions []MockInteractionResponse
 	// ErrorToReturn allows tests to simulate errors
 	ErrorToReturn error
 }
@@ -40,6 +42,12 @@ type MockFileMessage struct {
 type MockEmbedMessage struct {
 	ChannelID string
 	Embed     *discordgo.MessageEmbed
+}
+
+// MockInteractionResponse captures an interaction and its response for test assertions.
+type MockInteractionResponse struct {
+	Interaction *discordgo.Interaction
+	Response    *discordgo.InteractionResponse
 }
 
 // ChannelFileSend implements DiscordSession.ChannelFileSend
@@ -122,4 +130,15 @@ func NewMockDiscordSession() *MockDiscordSession {
 	return &MockDiscordSession{
 		SentMessages: make([]MockMessage, 0),
 	}
+}
+
+// InteractionResponseEdit implements DiscordSession.InteractionResponseEdit.
+func (m *MockDiscordSession) InteractionResponseEdit(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit, options ...discordgo.RequestOption) (*discordgo.Message, error) {
+	return &discordgo.Message{}, m.ErrorToReturn
+}
+
+// InteractionRespond implements DiscordSession.InteractionRespond.
+func (m *MockDiscordSession) InteractionRespond(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse, options ...discordgo.RequestOption) error {
+	m.SentInteractions = append(m.SentInteractions, MockInteractionResponse{interaction, resp})
+	return m.ErrorToReturn
 }
