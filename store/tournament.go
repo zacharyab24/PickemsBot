@@ -28,3 +28,16 @@ func (s *PostgresStore) EnsureTournament(ctx context.Context, externalID, source
 	}
 	return id, nil
 }
+
+// GetTournamentByExternalID retrieves the internal db id for a tournament by its external_id and source.
+// Returns pgx.ErrNoRows if no tournament exists for the given external_id and source.
+func (s *PostgresStore) GetTournamentByExternalID(ctx context.Context, source, externalID string) (int, error) {
+	var id int
+	err := s.pool.QueryRow(ctx, `
+		SELECT id FROM tournaments WHERE source = $1 AND external_id = $2
+	`, source, externalID).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("GetTournamentByExternalID: %w", err)
+	}
+	return id, nil
+}

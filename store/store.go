@@ -19,8 +19,10 @@ type Interface interface {
 
 	// Tournament lifecycle — format is detected lazily from match data, not stored at creation
 	EnsureTournament(ctx context.Context, externalID, source, name string, seriesID int) (int, error)
+	GetTournamentByExternalID(ctx context.Context, source, externalID string) (int, error)
 
 	// Guild config — new in v4, used by /config (#67)
+	EnsureGuild(ctx context.Context, guildID string) error
 	GetGuildConfig(ctx context.Context, guildID, channelID string) (GuildConfig, error)
 	UpsertGuildConfig(ctx context.Context, cfg GuildConfig) error
 

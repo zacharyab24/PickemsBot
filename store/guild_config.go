@@ -54,3 +54,13 @@ func (s *PostgresStore) UpsertGuildConfig(ctx context.Context, cfg GuildConfig) 
 	}
 	return nil
 }
+
+// EnsureGuild inserts a guilds row if one does not already exist.
+// Must be called before UpsertGuildConfig — guild_config.guild_id has an FK to guilds.
+func (s *PostgresStore) EnsureGuild(ctx context.Context, guildID string) error {
+	if _, err := s.pool.Exec(ctx,
+		`INSERT INTO guilds (guild_id) VALUES ($1) ON CONFLICT DO NOTHING`, guildID); err != nil {
+		return fmt.Errorf("EnsureGuild: %w", err)
+	}
+	return nil
+}

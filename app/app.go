@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/time/rate"
@@ -457,5 +458,54 @@ func (a *App) UpdateMatchResults(ctx context.Context, tournamentID int, round st
 		return err
 	}
 	metrics.MatchUpdatesTotal.Inc()
+	return nil
+}
+
+// GetConfig returns the raw guild config for a channel for `/config view`.
+// Unlike resolveConfig, this does not require a tournament or round to be set.
+func (a *App) GetConfig(ctx context.Context, guildID, channelID string) (store.GuildConfig, error) {
+	return a.Store.GetGuildConfig(ctx, guildID, channelID)
+}
+
+// SetConfigTournament sets the tournament for a guild config
+// Ensures the guilds row, resolves external tournament ID to internal ID, and upserts the guild config row.
+func (a *App) SetConfigTournament(ctx context.Context, guildID, channelID, source, externalID string) error {
+	id, err := a.Store.GetTournamentByExternalID(ctx, source, externalID)
+	if err != nil {
+		return fmt.Errorf("SetConfigTournament: %w", err)
+	}
+	return a.upsertConfigField(ctx, guildID, channelID, func(c *store.GuildConfig) {
+		c.TournamentID = &id
+	})
+}
+
+// SetConfigRound updates only the round for this guild/channel, preserving the existing tournament ID.
+func (a *App) SetConfigRound(ctx context.Context, guildID, channelID, round string) error {
+	return a.upsertConfigField(ctx, guildID, channelID, func(c *store.GuildConfig) {
+		c.Round = &round
+	})
+}
+
+// upsertConfigField is a helper for updating a single field in the guild config.
+func (a *App) upsertConfigField(ctx context.Context, guildID, channelID string, mutate func(*store.GuildConfig)) error {
+	// Read current state; a missing row just means first-time setup — start empty.
+	cfg, err := a.Store.GetGuildConfig(ctx, guildID, channelID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("upsertConfigField: %w", err)
+	}
+
+	// results_channel_id is the ON CONFLICT key — must be set for the upsert to match.
+	cfg.GuildID = guildID
+	cfg.ResultsChannelID = &channelID
+
+	mutate(&cfg) // caller's one-field change
+
+	// guild_config.guild_id has an FK to guilds — ensure the parent row first.
+	if err := a.Store.EnsureGuild(ctx, guildID); err != nil {
+		return fmt.Errorf("upsertConfigField: %w", err)
+	}
+	if err := a.Store.UpsertGuildConfig(ctx, cfg); err != nil {
+		return fmt.Errorf("upsertConfigField: %w", err)
+	}
 	return nil
 }

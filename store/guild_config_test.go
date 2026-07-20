@@ -114,3 +114,51 @@ func TestGetGuildConfig_NotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "GetGuildConfig")
 }
+
+func TestEnsureGuild_InsertsRow(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	require.NoError(t, s.EnsureGuild(ctx, "guild-1"))
+
+	var count int
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT count(*) FROM guilds WHERE guild_id = $1`, "guild-1").Scan(&count))
+	assert.Equal(t, 1, count)
+}
+
+func TestEnsureGuild_Idempotent(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	require.NoError(t, s.EnsureGuild(ctx, "guild-1"))
+	require.NoError(t, s.EnsureGuild(ctx, "guild-1"))
+
+	var count int
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT count(*) FROM guilds WHERE guild_id = $1`, "guild-1").Scan(&count))
+	assert.Equal(t, 1, count)
+}
+
+// TestEnsureGuild_SatisfiesGuildConfigFK is the reason this method exists: on a
+// brand-new guild with no seeded row, EnsureGuild must create the parent guilds
+// row so a first-time /config upsert doesn't fail the guild_config FK.
+func TestEnsureGuild_SatisfiesGuildConfigFK(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	// Deliberately no seedGuild — EnsureGuild is the only thing creating the parent.
+	require.NoError(t, s.EnsureGuild(ctx, "guild-1"))
+
+	round := "Stage 1"
+	channel := "channel-1"
+	err := s.UpsertGuildConfig(ctx, GuildConfig{
+		GuildID:          "guild-1",
+		Round:            &round,
+		ResultsChannelID: &channel,
+	})
+	require.NoError(t, err)
+}
