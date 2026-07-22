@@ -56,7 +56,9 @@ type MockStore struct {
 
 	StoreMatchScheduleCallCount int
 	Tournaments                 []store.Tournament
-	ListTournamentsError        error
+	ListTournamentNamesError    error
+	ListRoundsError             error
+	GetTournamentError          error
 	EnsureGuildError            error
 }
 
@@ -110,12 +112,64 @@ func (m *MockStore) EnsureGuild(ctx context.Context, guildID string) error {
 	return m.EnsureGuildError
 }
 
-// ListTournaments implements store.Interface.
-func (m *MockStore) ListTournaments(ctx context.Context) ([]store.Tournament, error) {
-	if m.ListTournamentsError != nil {
-		return nil, m.ListTournamentsError
+// ListTournamentNames implements store.Interface, deriving distinct names from
+// the seeded Tournaments slice.
+func (m *MockStore) ListTournamentNames(_ context.Context) ([]string, error) {
+	if m.ListTournamentNamesError != nil {
+		return nil, m.ListTournamentNamesError
 	}
-	return m.Tournaments, nil
+	seen := map[string]bool{}
+	var names []string
+	for _, t := range m.Tournaments {
+		if !seen[t.Name] {
+			seen[t.Name] = true
+			names = append(names, t.Name)
+		}
+	}
+	return names, nil
+}
+
+// ListRoundsForTournament implements store.Interface, returning the non-empty
+// rounds of seeded tournaments sharing the given name.
+func (m *MockStore) ListRoundsForTournament(_ context.Context, name string) ([]string, error) {
+	if m.ListRoundsError != nil {
+		return nil, m.ListRoundsError
+	}
+	var rounds []string
+	for _, t := range m.Tournaments {
+		if t.Name == name && t.Round != "" {
+			rounds = append(rounds, t.Round)
+		}
+	}
+	return rounds, nil
+}
+
+// GetTournamentByNameAndRound implements store.Interface, resolving a (name, round)
+// pair against the seeded Tournaments slice.
+func (m *MockStore) GetTournamentByNameAndRound(_ context.Context, name, round string) (store.Tournament, error) {
+	if m.GetTournamentError != nil {
+		return store.Tournament{}, m.GetTournamentError
+	}
+	for _, t := range m.Tournaments {
+		if t.Name == name && t.Round == round {
+			return t, nil
+		}
+	}
+	return store.Tournament{}, fmt.Errorf("tournament not found: %s / %s", name, round)
+}
+
+// GetTournament implements store.Interface, resolving by internal id against the
+// seeded Tournaments slice.
+func (m *MockStore) GetTournament(_ context.Context, id int) (store.Tournament, error) {
+	if m.GetTournamentError != nil {
+		return store.Tournament{}, m.GetTournamentError
+	}
+	for _, t := range m.Tournaments {
+		if t.ID == id {
+			return t, nil
+		}
+	}
+	return store.Tournament{}, fmt.Errorf("tournament not found: id=%d", id)
 }
 
 // EnsureScheduledMatches implements store.Interface.

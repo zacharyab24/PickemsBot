@@ -467,25 +467,85 @@ func (a *App) GetConfig(ctx context.Context, guildID, channelID string) (store.G
 	return a.Store.GetGuildConfig(ctx, guildID, channelID)
 }
 
-// SetConfigTournament points a guild/channel at a tournament by its internal DB id
-// (the value supplied by the /config set-tournament autocomplete). Ensures the guilds
-// row and upserts the guild config; a non-existent id is rejected by the guild_config FK.
-func (a *App) SetConfigTournament(ctx context.Context, guildID, channelID string, tournamentID int) error {
-	return a.upsertConfigField(ctx, guildID, channelID, func(c *store.GuildConfig) {
-		c.TournamentID = &tournamentID
-	})
+// SetConfigTournament points a guild/channel at a specific tournament stage,
+// identified by the (name, round) pair the admin picked in /config set-tournament.
+// The pair resolves to one tournament row; its internal id and round are stored
+// together so guild_config.round always matches the chosen row. Returns the
+// resolved tournament for the confirmation message. An unrecognised pair (e.g.
+// free-typed text that matched no row) surfaces as an error.
+func (a *App) SetConfigTournament(ctx context.Context, guildID, channelID, name, round string) (store.Tournament, error) {
+	t, err := a.Store.GetTournamentByNameAndRound(ctx, name, round)
+	if err != nil {
+		return store.Tournament{}, fmt.Errorf("SetConfigTournament: %w", err)
+	}
+	if err := a.upsertConfigField(ctx, guildID, channelID, func(c *store.GuildConfig) {
+		c.TournamentID = &t.ID
+		c.Round = &t.Round
+	}); err != nil {
+		return store.Tournament{}, err
+	}
+	return t, nil
 }
 
-// ListTournaments returns the known tournaments for the /config set-tournament picklist.
-func (a *App) ListTournaments(ctx context.Context) ([]store.Tournament, error) {
-	return a.Store.ListTournaments(ctx)
+// ListTournamentNames returns the distinct tournament names for the /config
+// set-tournament picklist (one entry per tournament, not per round).
+func (a *App) ListTournamentNames(ctx context.Context) ([]string, error) {
+	return a.Store.ListTournamentNames(ctx)
 }
 
-// SetConfigRound updates only the round for this guild/channel, preserving the existing tournament ID.
-func (a *App) SetConfigRound(ctx context.Context, guildID, channelID, round string) error {
-	return a.upsertConfigField(ctx, guildID, channelID, func(c *store.GuildConfig) {
-		c.Round = &round
-	})
+// ListRoundsForTournament returns the rounds available for a tournament name,
+// scoping the round autocomplete to what the chosen tournament actually offers.
+func (a *App) ListRoundsForTournament(ctx context.Context, name string) ([]string, error) {
+	return a.Store.ListRoundsForTournament(ctx, name)
+}
+
+// RoundsForConfiguredTournament returns the rounds available for the tournament
+// currently configured on this guild/channel, so /config set-round can prefill
+// only valid rounds without the admin re-picking the tournament. Errors if no
+// tournament is configured yet.
+func (a *App) RoundsForConfiguredTournament(ctx context.Context, guildID, channelID string) ([]string, error) {
+	cfg, err := a.Store.GetGuildConfig(ctx, guildID, channelID)
+	if err != nil {
+		return nil, fmt.Errorf("RoundsForConfiguredTournament: %w", err)
+	}
+	if cfg.TournamentID == nil {
+		return nil, fmt.Errorf("RoundsForConfiguredTournament: no tournament configured")
+	}
+	t, err := a.Store.GetTournament(ctx, *cfg.TournamentID)
+	if err != nil {
+		return nil, fmt.Errorf("RoundsForConfiguredTournament: %w", err)
+	}
+	return a.Store.ListRoundsForTournament(ctx, t.Name)
+}
+
+// SetConfigRound changes only the round for this guild/channel, keeping the same
+// tournament. Because each (name, round) is a distinct row, switching round means
+// repointing tournament_id at the sibling row for the new round, so this resolves
+// the current tournament's name plus the new round to that row and stores both.
+// Errors if no tournament is configured, or the round isn't valid for it.
+func (a *App) SetConfigRound(ctx context.Context, guildID, channelID, round string) (store.Tournament, error) {
+	cfg, err := a.Store.GetGuildConfig(ctx, guildID, channelID)
+	if err != nil {
+		return store.Tournament{}, fmt.Errorf("SetConfigRound: %w", err)
+	}
+	if cfg.TournamentID == nil {
+		return store.Tournament{}, fmt.Errorf("SetConfigRound: no tournament configured")
+	}
+	current, err := a.Store.GetTournament(ctx, *cfg.TournamentID)
+	if err != nil {
+		return store.Tournament{}, fmt.Errorf("SetConfigRound: %w", err)
+	}
+	t, err := a.Store.GetTournamentByNameAndRound(ctx, current.Name, round)
+	if err != nil {
+		return store.Tournament{}, fmt.Errorf("SetConfigRound: %w", err)
+	}
+	if err := a.upsertConfigField(ctx, guildID, channelID, func(c *store.GuildConfig) {
+		c.TournamentID = &t.ID
+		c.Round = &t.Round
+	}); err != nil {
+		return store.Tournament{}, err
+	}
+	return t, nil
 }
 
 // upsertConfigField is a helper for updating a single field in the guild config.

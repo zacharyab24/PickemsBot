@@ -114,7 +114,7 @@ func (b *Bot) registerSlashCommands(discord *discordgo.Session) {
 			{
 				Type:        discordgo.ApplicationCommandOptionSubCommand,
 				Name:        "set-tournament",
-				Description: "Set which tournament this channel tracks",
+				Description: "Set which tournament and round this channel tracks",
 				Options: []*discordgo.ApplicationCommandOption{
 					{
 						Type:         discordgo.ApplicationCommandOptionString,
@@ -123,18 +123,26 @@ func (b *Bot) registerSlashCommands(discord *discordgo.Session) {
 						Autocomplete: true,
 						Required:     true,
 					},
+					{
+						Type:         discordgo.ApplicationCommandOptionString,
+						Name:         "round",
+						Description:  "Round/stage to track (only rounds for the chosen tournament are offered)",
+						Autocomplete: true,
+						Required:     true,
+					},
 				},
 			},
 			{
 				Type:        discordgo.ApplicationCommandOptionSubCommand,
 				Name:        "set-round",
-				Description: "Set the active round/stage",
+				Description: "Change the round/stage without changing the tournament",
 				Options: []*discordgo.ApplicationCommandOption{
 					{
-						Type:        discordgo.ApplicationCommandOptionString,
-						Name:        "round",
-						Description: "Round name (e.g. Playoffs)",
-						Required:    true,
+						Type:         discordgo.ApplicationCommandOptionString,
+						Name:         "round",
+						Description:  "Round/stage to track (only rounds for the configured tournament are offered)",
+						Autocomplete: true,
+						Required:     true,
 					},
 				},
 			},

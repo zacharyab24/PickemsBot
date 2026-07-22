@@ -72,8 +72,8 @@ func TestBuildResultMatchSection_WinnerTeam1(t *testing.T) {
 	if text != "**Alpha** vs Beta" {
 		t.Errorf("text = %q, want %q", text, "**Alpha** vs Beta")
 	}
-	if label != "2 — 1" {
-		t.Errorf("label = %q, want %q", label, "2 — 1")
+	if label != "2 - 1" {
+		t.Errorf("label = %q, want %q", label, "2 - 1")
 	}
 	if style != discordgo.SuccessButton {
 		t.Errorf("style = %v, want SuccessButton", style)
@@ -86,8 +86,8 @@ func TestBuildResultMatchSection_WinnerTeam2(t *testing.T) {
 	if text != "Alpha vs **Beta**" {
 		t.Errorf("text = %q, want %q", text, "Alpha vs **Beta**")
 	}
-	if label != "0 — 2" {
-		t.Errorf("label = %q, want %q", label, "0 — 2")
+	if label != "0 - 2" {
+		t.Errorf("label = %q, want %q", label, "0 - 2")
 	}
 }
 
@@ -97,8 +97,8 @@ func TestBuildResultMatchSection_Pending(t *testing.T) {
 	if text != "Alpha vs Beta" {
 		t.Errorf("text = %q, want %q", text, "Alpha vs Beta")
 	}
-	if label != "—" {
-		t.Errorf("label = %q, want %q", label, "—")
+	if label != "-" {
+		t.Errorf("label = %q, want %q", label, "-")
 	}
 	if style != discordgo.SecondaryButton {
 		t.Errorf("style = %v, want SecondaryButton", style)

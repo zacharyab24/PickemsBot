@@ -139,6 +139,19 @@ func seedTournament(t *testing.T, name, format string) int {
 	return id
 }
 
+// seedTournamentWithRound inserts a tournament row carrying a round/stage label.
+// externalID is explicit so several rounds can share a name without colliding on
+// the (source, external_id) unique constraint.
+func seedTournamentWithRound(t *testing.T, externalID, name, round string) int {
+	t.Helper()
+	var id int
+	err := testPool.QueryRow(context.Background(),
+		`INSERT INTO tournaments (external_id, source, name, format, round) VALUES ($1, 'test', $2, 'swiss', $3) RETURNING id`,
+		externalID, name, round).Scan(&id)
+	require.NoError(t, err)
+	return id
+}
+
 // seedMatch inserts a match with team names (no FK) and returns its id.
 func seedMatch(t *testing.T, tournamentID int, round, team1Name, team2Name, status string) int {
 	t.Helper()
