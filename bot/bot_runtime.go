@@ -97,4 +97,49 @@ func (b *Bot) registerSlashCommands(discord *discordgo.Session) {
 		Name:        "results",
 		Description: "See the results of completed matches in the tournament",
 	})
+
+	adminPerm := int64(discordgo.PermissionManageGuild)
+
+	if _, err := discord.ApplicationCommandCreate(discord.State.User.ID, b.devGuildID, &discordgo.ApplicationCommand{
+		Name:                     "config",
+		Description:              "Configure the tournament and round for this channel (admin only)",
+		DefaultMemberPermissions: &adminPerm,
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "view",
+				Description: "Show the current configuration for this channel",
+				// no args
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "set-tournament",
+				Description: "Set which tournament this channel tracks",
+				Options: []*discordgo.ApplicationCommandOption{
+					{
+						Type:         discordgo.ApplicationCommandOptionString,
+						Name:         "tournament",
+						Description:  "Tournament to track",
+						Autocomplete: true,
+						Required:     true,
+					},
+				},
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "set-round",
+				Description: "Set the active round/stage",
+				Options: []*discordgo.ApplicationCommandOption{
+					{
+						Type:        discordgo.ApplicationCommandOptionString,
+						Name:        "round",
+						Description: "Round name (e.g. Playoffs)",
+						Required:    true,
+					},
+				},
+			},
+		},
+	}); err != nil {
+		b.logger().Error("failed to register /config command", "error", err)
+	}
 }

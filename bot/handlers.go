@@ -9,6 +9,7 @@ import (
 	"pickems-bot/sources"
 	"pickems-bot/tournament"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -430,6 +431,80 @@ func (b *Bot) resultsInteractionHandler(session DiscordSession, i *discordgo.Int
 	}
 }
 
+func (b *Bot) guildConfigInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
+	// /config is guild-scoped. Discord enforces DefaultMemberPermissions in its UI;
+	// this is the second-layer server-side gate in case that's misconfigured.
+	if i.Member == nil {
+		respondEphemeral(session, i.Interaction, "`/config` can only be used in a server.")
+		return
+	}
+	if i.Member.Permissions&(discordgo.PermissionManageGuild|discordgo.PermissionAdministrator) == 0 {
+		respondEphemeral(session, i.Interaction, "You need the **Manage Server** permission to use `/config`.")
+		return
+	}
+
+	sub := i.ApplicationCommandData().Options[0] // exactly one subcommand per invocation
+	switch sub.Name {
+	case "view":
+		b.configView(session, i)
+	case "set-tournament":
+		b.configSetTournament(session, i, sub)
+	case "set-round":
+		b.configSetRound(session, i, sub)
+	default:
+		respondEphemeral(session, i.Interaction, "Unknown `/config` subcommand.")
+	}
+}
+
+func (b *Bot) configView(session DiscordSession, i *discordgo.InteractionCreate) {
+	cfg, err := b.APIPtr.GetConfig(context.Background(), i.GuildID, i.ChannelID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			respondEphemeral(session, i.Interaction, "No configuration set for this channel yet.\nUse `/config set-tournament` and `/config set-round` to get started.")
+			return
+		}
+		b.logger().Error("failed to get config", "error", fmt.Errorf("configView: %w", err))
+		respondEphemeral(session, i.Interaction, "An error occurred loading the configuration.")
+		return
+	}
+
+	tournamentName := "*not set*"
+	if cfg.TournamentName != nil {
+		tournamentName = *cfg.TournamentName
+	}
+	round := "*not set*"
+	if cfg.Round != nil {
+		round = *cfg.Round
+	}
+	respondEphemeral(session, i.Interaction, fmt.Sprintf("**Configuration for this channel**\nTournament: %s\nRound: %s", tournamentName, round))
+}
+
+func (b *Bot) configSetTournament(session DiscordSession, i *discordgo.InteractionCreate, sub *discordgo.ApplicationCommandInteractionDataOption) {
+	// Autocomplete supplies the DB tournament id as its value, but Discord does not
+	// restrict a user to the offered choices — validate the submitted value.
+	id, err := strconv.Atoi(sub.Options[0].StringValue())
+	if err != nil {
+		respondEphemeral(session, i.Interaction, "Please pick a tournament from the list.")
+		return
+	}
+	if err := b.APIPtr.SetConfigTournament(context.Background(), i.GuildID, i.ChannelID, id); err != nil {
+		b.logger().Error("failed to set config tournament", "tournament_id", id, "error", fmt.Errorf("configSetTournament: %w", err))
+		respondEphemeral(session, i.Interaction, "Could not set that tournament — please pick one from the list.")
+		return
+	}
+	respondEphemeral(session, i.Interaction, fmt.Sprintf("Tournament set to %s for this channel.", sub.Options[0].StringValue()))
+}
+
+func (b *Bot) configSetRound(session DiscordSession, i *discordgo.InteractionCreate, sub *discordgo.ApplicationCommandInteractionDataOption) {
+	round := sub.Options[0].StringValue()
+	if err := b.APIPtr.SetConfigRound(context.Background(), i.GuildID, i.ChannelID, round); err != nil {
+		b.logger().Error("failed to set config round", "round", round, "error", fmt.Errorf("configSetRound: %w", err))
+		respondEphemeral(session, i.Interaction, "An error occurred updating the round.")
+		return
+	}
+	respondEphemeral(session, i.Interaction, fmt.Sprintf("✅ Round set to **%s** for this channel.", round))
+}
+
 // buildResultMatchSection returns a Section component for a single match node.
 // The text shows the winner bolded (if known); the button accessory shows the score.
 func buildResultMatchSection(n sources.MatchNode, buttonID int) discordgo.Section {
@@ -582,6 +657,52 @@ func (b *Bot) newAutocompleteInteractionHandler(session DiscordSession, i *disco
 	switch i.ApplicationCommandData().Name {
 	case "team":
 		b.teamNameAutocomplete(session, i)
+	case "config":
+		b.configTournamentAutocomplete(session, i)
+	}
+}
+
+func (b *Bot) configTournamentAutocomplete(session DiscordSession, i *discordgo.InteractionCreate) {
+	// For a subcommand, the focused option is nested: Options[0] is the subcommand,
+	// its Options are the args.
+	var typed string
+	if data := i.ApplicationCommandData(); len(data.Options) > 0 {
+		for _, opt := range data.Options[0].Options {
+			if opt.Focused {
+				typed = strings.ToLower(opt.StringValue())
+				break
+			}
+		}
+	}
+
+	tournaments, err := b.APIPtr.ListTournaments(context.Background())
+	if err != nil {
+		b.logger().Error("failed to list tournaments for autocomplete", "error", fmt.Errorf("configTournamentAutocomplete: %w", err))
+		session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+			Data: &discordgo.InteractionResponseData{Choices: []*discordgo.ApplicationCommandOptionChoice{}},
+		})
+		return
+	}
+
+	var choices []*discordgo.ApplicationCommandOptionChoice
+	for _, t := range tournaments {
+		if typed == "" || strings.Contains(strings.ToLower(t.Name), typed) {
+			choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
+				Name:  t.Name,
+				Value: strconv.Itoa(t.ID),
+			})
+			if len(choices) == 25 {
+				break
+			}
+		}
+	}
+
+	if err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+		Data: &discordgo.InteractionResponseData{Choices: choices},
+	}); err != nil {
+		b.logger().Error("failed to respond to tournament autocomplete", "error", fmt.Errorf("configTournamentAutocomplete: %w", err))
 	}
 }
 
@@ -778,6 +899,9 @@ func (b *Bot) newInteractionHandler(session DiscordSession, i *discordgo.Interac
 	case "results":
 		metrics.DiscordCommandsTotal.WithLabelValues("results").Inc()
 		b.resultsInteractionHandler(session, i)
+	case "config":
+		metrics.DiscordCommandsTotal.WithLabelValues("config").Inc()
+		b.guildConfigInteractionHandler(session, i)
 	}
 }
 

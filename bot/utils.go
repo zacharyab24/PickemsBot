@@ -104,6 +104,18 @@ func respondError(session DiscordSession, i *discordgo.Interaction, msg string) 
 	})
 }
 
+// respondEphemeral sends an ephemeral (only visible to the invoking user) message
+// as an interaction response. Used by /config so admin output doesn't clutter the channel.
+func respondEphemeral(session DiscordSession, i *discordgo.Interaction, msg string) {
+	session.InteractionRespond(i, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: msg,
+			Flags:   discordgo.MessageFlagsEphemeral,
+		},
+	})
+}
+
 // sendError sends a red error embed to the given channel.
 func sendError(session DiscordSession, channelID string, msg string) {
 	embed := &discordgo.MessageEmbed{

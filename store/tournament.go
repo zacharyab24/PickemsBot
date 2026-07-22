@@ -29,15 +29,34 @@ func (s *PostgresStore) EnsureTournament(ctx context.Context, externalID, source
 	return id, nil
 }
 
-// GetTournamentByExternalID retrieves the internal db id for a tournament by its external_id and source.
-// Returns pgx.ErrNoRows if no tournament exists for the given external_id and source.
-func (s *PostgresStore) GetTournamentByExternalID(ctx context.Context, source, externalID string) (int, error) {
-	var id int
-	err := s.pool.QueryRow(ctx, `
-		SELECT id FROM tournaments WHERE source = $1 AND external_id = $2
-	`, source, externalID).Scan(&id)
+// Tournament is a lightweight view of a tournament row, used to populate the
+// /config set-tournament picklist. Source-agnostic: the caller stores the ID.
+type Tournament struct {
+	ID   int
+	Name string
+}
+
+// ListTournaments returns all known tournaments ordered by name, for the
+// /config set-tournament autocomplete. The tournaments table is populated
+// independently (startup config + a separate ingestion script), so this is a
+// plain read with no data-source coupling.
+func (s *PostgresStore) ListTournaments(ctx context.Context) ([]Tournament, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id, name FROM tournaments ORDER BY name`)
 	if err != nil {
-		return 0, fmt.Errorf("GetTournamentByExternalID: %w", err)
+		return nil, fmt.Errorf("ListTournaments: %w", err)
 	}
-	return id, nil
+	defer rows.Close()
+
+	var tournaments []Tournament
+	for rows.Next() {
+		var t Tournament
+		if err := rows.Scan(&t.ID, &t.Name); err != nil {
+			return nil, fmt.Errorf("ListTournaments: %w", err)
+		}
+		tournaments = append(tournaments, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("ListTournaments: %w", err)
+	}
+	return tournaments, nil
 }

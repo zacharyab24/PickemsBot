@@ -30,6 +30,8 @@ type MockStore struct {
 	MatchNodes       []sources.MatchNode
 	MatchKind        tournament.Kind
 	GuildConfig      store.GuildConfig
+	// UpsertedGuildConfig captures the last config passed to UpsertGuildConfig, for assertions.
+	UpsertedGuildConfig *store.GuildConfig
 
 	// Error injection
 	EnsureTournamentError         error
@@ -52,10 +54,10 @@ type MockStore struct {
 	GetLeaderboardError           error
 	ListVRSRankingsError          error
 
-	StoreMatchScheduleCallCount     int
-	GetTournamentByExternalIDResult int
-	GetTournamentByExternalIDError  error
-	EnsureGuildError                error
+	StoreMatchScheduleCallCount int
+	Tournaments                 []store.Tournament
+	ListTournamentsError        error
+	EnsureGuildError            error
 }
 
 // NewMockStore creates a MockStore pre-wired for the given format and round.
@@ -99,6 +101,7 @@ func (m *MockStore) GetGuildConfig(ctx context.Context, guildID, channelID strin
 
 // UpsertGuildConfig implements store.Interface.
 func (m *MockStore) UpsertGuildConfig(ctx context.Context, cfg store.GuildConfig) error {
+	m.UpsertedGuildConfig = &cfg
 	return m.UpsertGuildConfigError
 }
 
@@ -107,12 +110,12 @@ func (m *MockStore) EnsureGuild(ctx context.Context, guildID string) error {
 	return m.EnsureGuildError
 }
 
-// GetTournamentByExternalID implements store.Interface.
-func (m *MockStore) GetTournamentByExternalID(ctx context.Context, source, externalID string) (int, error) {
-	if m.GetTournamentByExternalIDError != nil {
-		return 0, m.GetTournamentByExternalIDError
+// ListTournaments implements store.Interface.
+func (m *MockStore) ListTournaments(ctx context.Context) ([]store.Tournament, error) {
+	if m.ListTournamentsError != nil {
+		return nil, m.ListTournamentsError
 	}
-	return m.GetTournamentByExternalIDResult, nil
+	return m.Tournaments, nil
 }
 
 // EnsureScheduledMatches implements store.Interface.

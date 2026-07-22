@@ -467,16 +467,18 @@ func (a *App) GetConfig(ctx context.Context, guildID, channelID string) (store.G
 	return a.Store.GetGuildConfig(ctx, guildID, channelID)
 }
 
-// SetConfigTournament sets the tournament for a guild config
-// Ensures the guilds row, resolves external tournament ID to internal ID, and upserts the guild config row.
-func (a *App) SetConfigTournament(ctx context.Context, guildID, channelID, source, externalID string) error {
-	id, err := a.Store.GetTournamentByExternalID(ctx, source, externalID)
-	if err != nil {
-		return fmt.Errorf("SetConfigTournament: %w", err)
-	}
+// SetConfigTournament points a guild/channel at a tournament by its internal DB id
+// (the value supplied by the /config set-tournament autocomplete). Ensures the guilds
+// row and upserts the guild config; a non-existent id is rejected by the guild_config FK.
+func (a *App) SetConfigTournament(ctx context.Context, guildID, channelID string, tournamentID int) error {
 	return a.upsertConfigField(ctx, guildID, channelID, func(c *store.GuildConfig) {
-		c.TournamentID = &id
+		c.TournamentID = &tournamentID
 	})
+}
+
+// ListTournaments returns the known tournaments for the /config set-tournament picklist.
+func (a *App) ListTournaments(ctx context.Context) ([]store.Tournament, error) {
+	return a.Store.ListTournaments(ctx)
 }
 
 // SetConfigRound updates only the round for this guild/channel, preserving the existing tournament ID.
