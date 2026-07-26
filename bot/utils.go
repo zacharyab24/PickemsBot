@@ -4,23 +4,14 @@ import (
 	"fmt"
 	"log/slog"
 	format "pickems-bot/tournament"
-	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
 
-const burple = 0x7289DA
 const green = 0x57F287
 const red = 0xED4245
-
-// CleanIndent removes structural code indentation from raw multiline strings
-func cleanIndent(s string) string {
-	// Matches any leading whitespace characters at the start of a line
-	re := regexp.MustCompile(`(?m)^[ \t]+`)
-	return re.ReplaceAllString(s, "")
-}
 
 // singleElimField formats a single-elimination predictions list as an embed field,
 // ordered Champion → Runner-up → 3rd/4th → … .
@@ -101,6 +92,18 @@ func respondError(session DiscordSession, i *discordgo.Interaction, msg string) 
 	session.InteractionRespond(i, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{Content: msg},
+	})
+}
+
+// respondEphemeral sends an ephemeral (only visible to the invoking user) message
+// as an interaction response. Used by /config so admin output doesn't clutter the channel.
+func respondEphemeral(session DiscordSession, i *discordgo.Interaction, msg string) {
+	session.InteractionRespond(i, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: msg,
+			Flags:   discordgo.MessageFlagsEphemeral,
+		},
 	})
 }
 

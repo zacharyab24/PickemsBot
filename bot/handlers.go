@@ -158,7 +158,7 @@ func (b *Bot) setInteractionHandler(session DiscordSession, i *discordgo.Interac
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Flags:      discordgo.MessageFlagsEphemeral,
-			Content:    fmt.Sprintf("Set your Pick'Ems for **%s** — %s", info.TournamentName, info.Round),
+			Content:    fmt.Sprintf("Set your Pick'Ems for **%s** - %s", info.TournamentName, info.Round),
 			Components: rows,
 		},
 	}); err != nil {
@@ -233,7 +233,7 @@ func (b *Bot) teamsInteractionHandler(session DiscordSession, i *discordgo.Inter
 
 	formatEntry := func(name string, ranking int) string {
 		if ranking == 0 {
-			return fmt.Sprintf("—  %s\n", name)
+			return fmt.Sprintf("-  %s\n", name)
 		}
 		return fmt.Sprintf("`#%d`  %s\n", ranking, name)
 	}
@@ -281,7 +281,7 @@ func (b *Bot) leaderboardInteractionHandler(session DiscordSession, i *discordgo
 
 	var sb strings.Builder
 	for _, user := range leaderboard {
-		fmt.Fprintf(&sb, "%d. **%s** — %d correct, %d incorrect\n",
+		fmt.Fprintf(&sb, "%d. **%s** - %d correct, %d incorrect\n",
 			user.Rank,
 			user.Username,
 			user.Successes,
@@ -328,7 +328,7 @@ func (b *Bot) upcomingInteractionHandler(session DiscordSession, i *discordgo.In
 		if match.Live {
 			line += "\nLIVE"
 		} else {
-			line += fmt.Sprintf("\n<t:%d:F> — <t:%d:R>", match.EpochTime, match.EpochTime)
+			line += fmt.Sprintf("\n<t:%d:F> - <t:%d:R>", match.EpochTime, match.EpochTime)
 		}
 		if match.StreamURL != "" {
 			line += fmt.Sprintf("\n\U0001f4fa [Watch live](%s)", match.StreamURL)
@@ -430,6 +430,90 @@ func (b *Bot) resultsInteractionHandler(session DiscordSession, i *discordgo.Int
 	}
 }
 
+func (b *Bot) guildConfigInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
+	// /config is guild-scoped. Discord enforces DefaultMemberPermissions in its UI;
+	// this is the second-layer server-side gate in case that's misconfigured.
+	if i.Member == nil {
+		respondEphemeral(session, i.Interaction, "`/config` can only be used in a server.")
+		return
+	}
+	if i.Member.Permissions&(discordgo.PermissionManageGuild|discordgo.PermissionAdministrator) == 0 {
+		respondEphemeral(session, i.Interaction, "You need the **Manage Server** permission to use `/config`.")
+		return
+	}
+
+	sub := i.ApplicationCommandData().Options[0] // exactly one subcommand per invocation
+	switch sub.Name {
+	case "view":
+		b.configView(session, i)
+	case "set-tournament":
+		b.configSetTournament(session, i, sub)
+	case "set-round":
+		b.configSetRound(session, i, sub)
+	default:
+		respondEphemeral(session, i.Interaction, "Unknown `/config` subcommand.")
+	}
+}
+
+func (b *Bot) configView(session DiscordSession, i *discordgo.InteractionCreate) {
+	cfg, err := b.APIPtr.GetConfig(context.Background(), i.GuildID, i.ChannelID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			respondEphemeral(session, i.Interaction, "No configuration set for this channel yet.\nUse `/config set-tournament` to get started, then `/config set-round` to switch rounds.")
+			return
+		}
+		b.logger().Error("failed to get config", "error", fmt.Errorf("configView: %w", err))
+		respondEphemeral(session, i.Interaction, "An error occurred loading the configuration.")
+		return
+	}
+
+	tournamentName := "*not set*"
+	if cfg.TournamentName != nil {
+		tournamentName = *cfg.TournamentName
+	}
+	round := "*not set*"
+	if cfg.Round != nil {
+		round = *cfg.Round
+	}
+	respondEphemeral(session, i.Interaction, fmt.Sprintf("**Configuration for this channel**\nTournament: %s\nRound: %s", tournamentName, round))
+}
+
+func (b *Bot) configSetTournament(session DiscordSession, i *discordgo.InteractionCreate, sub *discordgo.ApplicationCommandInteractionDataOption) {
+	// Both values come from autocomplete, but Discord doesn't restrict a user to the
+	// offered choices, so the (name, round) pair is validated by resolving it to a row.
+	name := subOptionString(sub, "tournament")
+	round := subOptionString(sub, "round")
+	t, err := b.APIPtr.SetConfigTournament(context.Background(), i.GuildID, i.ChannelID, name, round)
+	if err != nil {
+		b.logger().Error("failed to set config tournament", "tournament", name, "round", round, "error", fmt.Errorf("configSetTournament: %w", err))
+		respondEphemeral(session, i.Interaction, "Could not set that tournament - please pick a tournament and round from the lists.")
+		return
+	}
+	respondEphemeral(session, i.Interaction, fmt.Sprintf("Tournament set to **%s - %s** for this channel.", t.Name, t.Round))
+}
+
+func (b *Bot) configSetRound(session DiscordSession, i *discordgo.InteractionCreate, sub *discordgo.ApplicationCommandInteractionDataOption) {
+	round := subOptionString(sub, "round")
+	t, err := b.APIPtr.SetConfigRound(context.Background(), i.GuildID, i.ChannelID, round)
+	if err != nil {
+		b.logger().Error("failed to set config round", "round", round, "error", fmt.Errorf("configSetRound: %w", err))
+		respondEphemeral(session, i.Interaction, "Could not set that round - set a tournament first, then pick a round from the list.")
+		return
+	}
+	respondEphemeral(session, i.Interaction, fmt.Sprintf("Round set to **%s** for **%s**.", t.Round, t.Name))
+}
+
+// subOptionString returns the string value of a named option under a subcommand,
+// or "" if absent. Options aren't positional, so look up by name.
+func subOptionString(sub *discordgo.ApplicationCommandInteractionDataOption, name string) string {
+	for _, opt := range sub.Options {
+		if opt.Name == name {
+			return opt.StringValue()
+		}
+	}
+	return ""
+}
+
 // buildResultMatchSection returns a Section component for a single match node.
 // The text shows the winner bolded (if known); the button accessory shows the score.
 func buildResultMatchSection(n sources.MatchNode, buttonID int) discordgo.Section {
@@ -443,13 +527,13 @@ func buildResultMatchSection(n sources.MatchNode, buttonID int) discordgo.Sectio
 		text = fmt.Sprintf("%s vs %s", n.Team1, n.Team2)
 	}
 
-	label := "—"
+	label := "-"
 	style := discordgo.SecondaryButton
 	switch n.Status {
 	case "completed":
 		score := n.Score
 		if parts := strings.SplitN(score, "-", 2); len(parts) == 2 {
-			score = parts[0] + " — " + parts[1]
+			score = parts[0] + " - " + parts[1]
 		}
 		label = score
 		style = discordgo.SuccessButton
@@ -557,7 +641,7 @@ func buildSwissResultEmbed(nodes []sources.MatchNode) *discordgo.MessageEmbed {
 			}
 			score := n.Score
 			if parts := strings.SplitN(score, "-", 2); len(parts) == 2 {
-				score = parts[0] + " — " + parts[1]
+				score = parts[0] + " - " + parts[1]
 			}
 			if score != "" {
 				lines = append(lines, fmt.Sprintf("%s vs %s (%s)", t1, t2, score))
@@ -582,6 +666,77 @@ func (b *Bot) newAutocompleteInteractionHandler(session DiscordSession, i *disco
 	switch i.ApplicationCommandData().Name {
 	case "team":
 		b.teamNameAutocomplete(session, i)
+	case "config":
+		b.configAutocomplete(session, i)
+	}
+}
+
+// configAutocomplete serves both autocompleted options on /config. The tournament
+// option offers distinct tournament names; the round option offers only the rounds
+// that belong to the tournament in scope - the sibling `tournament` value for
+// set-tournament, or the already-configured tournament for set-round.
+func (b *Bot) configAutocomplete(session DiscordSession, i *discordgo.InteractionCreate) {
+	data := i.ApplicationCommandData()
+	if len(data.Options) == 0 {
+		b.respondAutocomplete(session, i, nil)
+		return
+	}
+	sub := data.Options[0] // Options[0] is the subcommand; its Options are the args.
+
+	var focused, tournamentName string
+	for _, opt := range sub.Options {
+		if opt.Focused {
+			focused = opt.Name
+		}
+		if opt.Name == "tournament" {
+			tournamentName = opt.StringValue()
+		}
+	}
+
+	var values []string
+	var err error
+	switch {
+	case focused == "tournament":
+		values, err = b.APIPtr.ListTournamentNames(context.Background())
+	case focused == "round" && sub.Name == "set-tournament":
+		if tournamentName == "" {
+			b.respondAutocomplete(session, i, nil) // no tournament chosen yet - nothing to scope to
+			return
+		}
+		values, err = b.APIPtr.ListRoundsForTournament(context.Background(), tournamentName)
+	case focused == "round" && sub.Name == "set-round":
+		values, err = b.APIPtr.RoundsForConfiguredTournament(context.Background(), i.GuildID, i.ChannelID)
+	default:
+		b.respondAutocomplete(session, i, nil)
+		return
+	}
+	if err != nil {
+		b.logger().Error("config autocomplete failed", "option", focused, "subcommand", sub.Name, "error", fmt.Errorf("configAutocomplete: %w", err))
+		b.respondAutocomplete(session, i, nil)
+		return
+	}
+
+	typed := strings.ToLower(subOptionString(sub, focused))
+	var choices []*discordgo.ApplicationCommandOptionChoice
+	for _, v := range values {
+		if typed == "" || strings.Contains(strings.ToLower(v), typed) {
+			choices = append(choices, &discordgo.ApplicationCommandOptionChoice{Name: v, Value: v})
+			if len(choices) == 25 {
+				break
+			}
+		}
+	}
+	b.respondAutocomplete(session, i, choices)
+}
+
+// respondAutocomplete sends autocomplete choices, logging (but not surfacing) a
+// send failure - Discord just shows no suggestions.
+func (b *Bot) respondAutocomplete(session DiscordSession, i *discordgo.InteractionCreate, choices []*discordgo.ApplicationCommandOptionChoice) {
+	if err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+		Data: &discordgo.InteractionResponseData{Choices: choices},
+	}); err != nil {
+		b.logger().Error("failed to respond to config autocomplete", "error", fmt.Errorf("respondAutocomplete: %w", err))
 	}
 }
 
@@ -673,7 +828,7 @@ func (b *Bot) setSubmitHandler(session DiscordSession, i *discordgo.InteractionC
 	}
 
 	if !ok {
-		ephemeralError("Session expired — please run `/set` again.")
+		ephemeralError("Session expired - please run `/set` again.")
 		return
 	}
 
@@ -692,13 +847,13 @@ func (b *Bot) setSubmitHandler(session DiscordSession, i *discordgo.InteractionC
 	seen := make(map[string]bool)
 	for _, p := range userPreds {
 		if seen[p] {
-			ephemeralError(fmt.Sprintf("**%s** appears in multiple buckets — each team can only be picked once.", p))
+			ephemeralError(fmt.Sprintf("**%s** appears in multiple buckets - each team can only be picked once.", p))
 			return
 		}
 		seen[p] = true
 	}
 
-	// All local validation passed — defer before the DB call
+	// All local validation passed - defer before the DB call
 	if err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 	}); err != nil {
@@ -778,6 +933,9 @@ func (b *Bot) newInteractionHandler(session DiscordSession, i *discordgo.Interac
 	case "results":
 		metrics.DiscordCommandsTotal.WithLabelValues("results").Inc()
 		b.resultsInteractionHandler(session, i)
+	case "config":
+		metrics.DiscordCommandsTotal.WithLabelValues("config").Inc()
+		b.guildConfigInteractionHandler(session, i)
 	}
 }
 

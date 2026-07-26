@@ -1,0 +1,2 @@
+ALTER TABLE tournaments ADD COLUMN is_finished BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE tournaments ADD COLUMN round TEXT;
