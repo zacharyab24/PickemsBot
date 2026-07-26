@@ -20,6 +20,7 @@ import (
 	"pickems-bot/app"
 	bot "pickems-bot/bot"
 	"pickems-bot/config"
+	"pickems-bot/ingest"
 	"pickems-bot/web"
 
 	"github.com/joho/godotenv"
@@ -60,6 +61,18 @@ func main() {
 		os.Exit(1)
 	}
 	defer apiInstance.Store.Close()
+
+	// Background ingestion jobs: keep the tournament catalog (/config picklist) and
+	// VRS rankings fresh, independent of the live-match poller. They run for the
+	// lifetime of the process on their own schedules; the tournament job shares the
+	// app's PandaScore rate limiter via app.Wait.
+	ingestCtx := context.Background()
+	if pandaKey := os.Getenv("PANDASCORE_API_KEY"); pandaKey != "" {
+		go ingest.NewTournamentSync(apiInstance, pandaKey, time.Hour, logger).Start(ingestCtx)
+	} else {
+		logger.Warn("PANDASCORE_API_KEY not set, tournament catalog sync disabled")
+	}
+	go ingest.NewVRSSync(apiInstance, time.Hour, logger).Start(ingestCtx)
 
 	var discordToken string
 	if cfg.Test {

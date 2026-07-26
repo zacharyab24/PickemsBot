@@ -29,6 +29,71 @@ func (s *PostgresStore) EnsureTournament(ctx context.Context, externalID, source
 	return id, nil
 }
 
+// TournamentCatalogEntry is one resolved PandaScore tournament (stage) to upsert
+// into the catalog. The caller (the ingest job) has already turned the raw
+// PandaScore payload into these fields, so the store stays free of source types.
+type TournamentCatalogEntry struct {
+	ExternalID string
+	Name       string
+	Round      string
+	SeriesID   string
+}
+
+// SyncTournaments upserts the active (upcoming + running) PandaScore tournaments
+// as not-finished, then marks any pandascore row that has dropped out of the
+// active set as finished. Both steps run in one transaction.
+//
+// The finished-sweep only runs when active is non-empty: an empty set almost
+// always means a bad API response rather than "no tournaments exist", and
+// sweeping on it would wrongly mark every row finished. Callers must ensure both
+// PandaScore fetches succeeded before combining them into active; a failed fetch
+// must not reach here as a short active set. An empty active set is rejected.
+//
+// Unlike EnsureTournament (the startup path, which preserves round on conflict),
+// this owns round/series_id for pandascore catalog rows and overwrites them, and
+// resets is_finished to false: anything in the active set is by definition live,
+// so a previously-swept tournament that reappears is reactivated.
+func (s *PostgresStore) SyncTournaments(ctx context.Context, active []TournamentCatalogEntry) error {
+	if len(active) == 0 {
+		return fmt.Errorf("SyncTournaments: empty active set, refusing to run finished-sweep")
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("SyncTournaments: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	activeIDs := make([]string, 0, len(active))
+	for _, t := range active {
+		activeIDs = append(activeIDs, t.ExternalID)
+
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO tournaments (external_id, source, name, round, series_id, is_finished)
+			VALUES ($1, 'pandascore', $2, $3, $4, false)
+			ON CONFLICT (source, external_id) DO UPDATE SET
+				name        = EXCLUDED.name,
+				round       = EXCLUDED.round,
+				series_id   = EXCLUDED.series_id,
+				is_finished = false
+		`, t.ExternalID, t.Name, t.Round, t.SeriesID); err != nil {
+			return fmt.Errorf("SyncTournaments: upsert %q: %w", t.Name, err)
+		}
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE tournaments
+		   SET is_finished = true
+		 WHERE source = 'pandascore'
+		   AND is_finished = false
+		   AND external_id <> ALL($1)
+	`, activeIDs); err != nil {
+		return fmt.Errorf("SyncTournaments: finished-sweep: %w", err)
+	}
+
+	return tx.Commit(ctx)
+}
+
 // Tournament is a lightweight view of a tournament row, used to populate the
 // /config set-tournament picklist. Source-agnostic: the caller stores the ID.
 // Round is the stage label (e.g. "Qualifier", "Playoffs") that distinguishes

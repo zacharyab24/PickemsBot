@@ -60,6 +60,12 @@ type MockStore struct {
 	ListRoundsError             error
 	GetTournamentError          error
 	EnsureGuildError            error
+
+	SyncedTournaments    []store.TournamentCatalogEntry
+	SyncTournamentsError error
+	SyncedStandings      []store.VRSEntry
+	SyncStandingsResult  bool
+	SyncStandingsError   error
 }
 
 // NewMockStore creates a MockStore pre-wired for the given format and round.
@@ -170,6 +176,15 @@ func (m *MockStore) GetTournament(_ context.Context, id int) (store.Tournament, 
 		}
 	}
 	return store.Tournament{}, fmt.Errorf("tournament not found: id=%d", id)
+}
+
+// SyncTournaments implements store.Interface, recording the active set it was given.
+func (m *MockStore) SyncTournaments(_ context.Context, active []store.TournamentCatalogEntry) error {
+	if m.SyncTournamentsError != nil {
+		return m.SyncTournamentsError
+	}
+	m.SyncedTournaments = active
+	return nil
 }
 
 // EnsureScheduledMatches implements store.Interface.
@@ -304,6 +319,15 @@ func (m *MockStore) ListVRSRankings(ctx context.Context) ([]store.VRSEntry, erro
 		return nil, m.ListVRSRankingsError
 	}
 	return m.VRSEntries, nil
+}
+
+// SyncStandings implements store.Interface, recording the entries it was given.
+func (m *MockStore) SyncStandings(_ context.Context, entries []store.VRSEntry) (bool, error) {
+	if m.SyncStandingsError != nil {
+		return false, m.SyncStandingsError
+	}
+	m.SyncedStandings = entries
+	return m.SyncStandingsResult, nil
 }
 
 // --- Test setup helpers ---

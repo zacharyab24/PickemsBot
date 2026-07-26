@@ -5,7 +5,6 @@ go 1.26.4
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/bwmarrin/discordgo v0.29.0
-	github.com/go-andiamo/splitter v1.2.5
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/joho/godotenv v1.5.1

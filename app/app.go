@@ -84,11 +84,24 @@ func NewApp(cfg config.Config, postgresURI string, log *slog.Logger) (*App, erro
 }
 
 // Allow calls the app's configured rate limiter's Allow() function.
+// Non-blocking: returns false immediately when no token is available. The poller
+// uses this to skip a tick rather than wait.
 func (a *App) Allow() bool {
 	if a.rateLimiter == nil {
 		return false
 	}
 	return a.rateLimiter.Allow()
+}
+
+// Wait blocks until the shared rate limiter permits another call, or ctx is
+// cancelled. Backed by the same limiter as Allow(), so background jobs that call
+// Wait and the poller that calls Allow() draw from one token bucket and together
+// stay within the API's rate limit. Batch jobs use this to pace instead of drop.
+func (a *App) Wait(ctx context.Context) error {
+	if a.rateLimiter == nil {
+		return nil
+	}
+	return a.rateLimiter.Wait(ctx)
 }
 
 // resolveConfig looks up the guild config and validates that a tournament and round are set.
