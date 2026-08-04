@@ -7,8 +7,19 @@
 - `set-tournament` takes a tournament and a round, both autocompleted. The tournament list shows distinct names, so a tournament split across several stages no longer appears multiple times; the round list is scoped to the rounds available for the chosen tournament.
 - `set-round` changes the round without re-picking the tournament, autocompleting only the rounds valid for the currently-configured tournament. Because each (tournament, round) stage is its own catalog row, switching round repoints the channel at the matching row.
 - Both commands resolve the (name, round) pair to a specific tournament row and store its id and round together, so `guild_config.round` always matches the selected stage rather than free-typed text.
-- `guild_config` is now seeded per channel by `/config`; every command that resolves tournament context reads it. The tournament catalog is populated independently (ingestion script), keeping `/config` source-agnostic across PandaScore and Liquipedia.
+- `guild_config` is now seeded per channel by `/config`; every command that resolves tournament context reads it. The tournament catalog is populated independently (the ingest jobs, below), keeping `/config` source-agnostic across PandaScore and Liquipedia.
 - Store: `EnsureGuild`, `ListTournamentNames`, `ListRoundsForTournament`, `GetTournamentByNameAndRound`, `GetTournament`. App: `GetConfig`, `SetConfigTournament`, `SetConfigRound`, `ListTournamentNames`, `ListRoundsForTournament`, `RoundsForConfiguredTournament`.
+
+In-process data ingestion (`ingest` package):
+- The standalone data-seeding scripts (`scripts/dataseeding`) were folded into the app and now run as background goroutines launched from `main.go`, each on its own schedule.
+- `TournamentSync` (hourly) refreshes the tournament catalog from PandaScore's upcoming + running endpoints, upserting active tournaments and sweeping any that dropped out of the active set to `is_finished`. It gates each request on the app's PandaScore rate limiter (`App.Wait`), so it and the live poller share one API budget.
+- `VRSSync` (hourly) refreshes the VRS world rankings from the public GitHub snapshot, no-opping when the snapshot date is unchanged.
+- Fetch/parse moved into `sources` (`GetUpcomingPandaScoreTournaments`, `GetRunningPandaScoreTournaments`, `FetchLatestVRSStandings`, `ParseVRSStandings`); DB writes into `store` (`SyncTournaments`, `SyncStandings`). `App.Wait` was added alongside `App.Allow` (blocking vs non-blocking on the shared limiter, so batch jobs pace instead of drop).
+
+Tournament format detection:
+- A tournament's format (swiss / single-elimination / double-elimination / other) is now detected from its PandaScore bracket structure rather than match-name text: any loser-bracket feeder edge means double-elimination, winner-only edges mean single-elimination, and no bracket edges means a group stage (round-robin when the match count is n*(n-1)/2, otherwise swiss). Detection runs best-effort in the background when a tournament is configured via `/config`, and the result is stored on the tournament row.
+- Formats that can't run predictions (double-elimination, other) are now first-class via a null-object format: read-only features (schedule, results) keep working, while `/set` refuses cleanly with "the selected tournament uses a format that does not support predictions" instead of erroring on an unknown format.
+- Store: `SetTournamentFormat`, and `Tournament` now carries all row columns. Sources: `GetPandaScoreBracket`, `CountTeams`. Tournament: `DetectKindFromBracket`, the `Other` kind, and `ErrPredictionsUnsupported`.
 
 ## 3.7
 - fix: sort upcoming matches chronologically in `$upcoming`
