@@ -1,0 +1,1362 @@
+[
+    {
+        "id": 1616711,
+        "name": "GamersLab Esports vs maybe",
+        "status": "not_started",
+        "results": [
+            {
+                "score": 0,
+                "team_id": 138899
+            },
+            {
+                "score": 0,
+                "team_id": 139045
+            }
+        ],
+        "live": {
+            "supported": false,
+            "url": null,
+            "opens_at": null
+        },
+        "begin_at": "2026-08-06T14:00:00Z",
+        "detailed_stats": false,
+        "end_at": null,
+        "forfeit": false,
+        "winner_id": null,
+        "winner_type": "Team",
+        "slug": "gamerslab-esports-vs-maybe-2026-08-06",
+        "games": [
+            {
+                "complete": false,
+                "id": 225056,
+                "position": 1,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616711,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225057,
+                "position": 2,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616711,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225058,
+                "position": 3,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616711,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            }
+        ],
+        "draw": false,
+        "tournament_id": 21606,
+        "modified_at": "2026-08-02T07:14:46Z",
+        "match_type": "best_of",
+        "number_of_games": 3,
+        "scheduled_at": "2026-08-06T14:00:00Z",
+        "opponents": [
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 139045,
+                    "name": "GamersLab Esports",
+                    "location": "CZ",
+                    "slug": "gamerslab-esports",
+                    "modified_at": "2026-08-02T06:59:05Z",
+                    "acronym": null,
+                    "image_url": null,
+                    "dark_mode_image_url": null
+                }
+            },
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 138899,
+                    "name": "maybe",
+                    "location": "UA",
+                    "slug": "maybe-cs-go",
+                    "modified_at": "2026-08-02T06:59:04Z",
+                    "acronym": null,
+                    "image_url": "https://cdn-api.pandascore.co/images/team/image/138899/maybe__ukrainian_team__allmode.png",
+                    "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/138899/maybe__ukrainian_team__allmode.png"
+                }
+            }
+        ],
+        "previous_matches": [],
+        "original_scheduled_at": "2026-08-06T14:00:00Z",
+        "game_advantage": null,
+        "streams_list": [
+            {
+                "main": false,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzoneup",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzoneup"
+            },
+            {
+                "main": true,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzonecz",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzonecz"
+            }
+        ]
+    },
+    {
+        "id": 1616710,
+        "name": "NAVI.J vs JAM",
+        "status": "not_started",
+        "results": [
+            {
+                "score": 0,
+                "team_id": 139046
+            },
+            {
+                "score": 0,
+                "team_id": 126491
+            }
+        ],
+        "live": {
+            "supported": false,
+            "url": null,
+            "opens_at": null
+        },
+        "begin_at": "2026-08-06T14:00:00Z",
+        "detailed_stats": false,
+        "end_at": null,
+        "forfeit": false,
+        "winner_id": null,
+        "winner_type": "Team",
+        "slug": "navi-junior-vs-jam-2026-08-06",
+        "games": [
+            {
+                "complete": false,
+                "id": 225053,
+                "position": 1,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616710,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225054,
+                "position": 2,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616710,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225055,
+                "position": 3,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616710,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            }
+        ],
+        "draw": false,
+        "tournament_id": 21606,
+        "modified_at": "2026-08-02T07:14:46Z",
+        "match_type": "best_of",
+        "number_of_games": 3,
+        "scheduled_at": "2026-08-06T14:00:00Z",
+        "opponents": [
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 126491,
+                    "name": "NAVI Junior",
+                    "location": "UA",
+                    "slug": "natus-vincere-junior",
+                    "modified_at": "2026-08-02T06:59:04Z",
+                    "acronym": "NAVI.J",
+                    "image_url": "https://cdn-api.pandascore.co/images/team/image/126491/630px_na_vi_jr.png",
+                    "dark_mode_image_url": null
+                }
+            },
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 139046,
+                    "name": "JAM",
+                    "location": "UA",
+                    "slug": "jam",
+                    "modified_at": "2026-08-02T06:59:05Z",
+                    "acronym": null,
+                    "image_url": null,
+                    "dark_mode_image_url": null
+                }
+            }
+        ],
+        "previous_matches": [],
+        "original_scheduled_at": "2026-08-06T14:00:00Z",
+        "game_advantage": null,
+        "streams_list": [
+            {
+                "main": false,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzoneup",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzoneup"
+            },
+            {
+                "main": true,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzonecz",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzonecz"
+            }
+        ]
+    },
+    {
+        "id": 1616709,
+        "name": "maybe vs JAM",
+        "status": "not_started",
+        "results": [
+            {
+                "score": 0,
+                "team_id": 139046
+            },
+            {
+                "score": 0,
+                "team_id": 138899
+            }
+        ],
+        "live": {
+            "supported": false,
+            "url": null,
+            "opens_at": null
+        },
+        "begin_at": "2026-08-06T11:00:00Z",
+        "detailed_stats": false,
+        "end_at": null,
+        "forfeit": false,
+        "winner_id": null,
+        "winner_type": "Team",
+        "slug": "maybe-vs-jam-2026-08-06",
+        "games": [
+            {
+                "complete": false,
+                "id": 225050,
+                "position": 1,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616709,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225051,
+                "position": 2,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616709,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225052,
+                "position": 3,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616709,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            }
+        ],
+        "draw": false,
+        "tournament_id": 21606,
+        "modified_at": "2026-08-02T07:14:46Z",
+        "match_type": "best_of",
+        "number_of_games": 3,
+        "scheduled_at": "2026-08-06T11:00:00Z",
+        "opponents": [
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 138899,
+                    "name": "maybe",
+                    "location": "UA",
+                    "slug": "maybe-cs-go",
+                    "modified_at": "2026-08-02T06:59:04Z",
+                    "acronym": null,
+                    "image_url": "https://cdn-api.pandascore.co/images/team/image/138899/maybe__ukrainian_team__allmode.png",
+                    "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/138899/maybe__ukrainian_team__allmode.png"
+                }
+            },
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 139046,
+                    "name": "JAM",
+                    "location": "UA",
+                    "slug": "jam",
+                    "modified_at": "2026-08-02T06:59:05Z",
+                    "acronym": null,
+                    "image_url": null,
+                    "dark_mode_image_url": null
+                }
+            }
+        ],
+        "previous_matches": [],
+        "original_scheduled_at": "2026-08-06T11:00:00Z",
+        "game_advantage": null,
+        "streams_list": [
+            {
+                "main": false,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzoneup",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzoneup"
+            },
+            {
+                "main": true,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzonecz",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzonecz"
+            }
+        ]
+    },
+    {
+        "id": 1616708,
+        "name": "ESB vs NAVI.J",
+        "status": "not_started",
+        "results": [
+            {
+                "score": 0,
+                "team_id": 126491
+            },
+            {
+                "score": 0,
+                "team_id": 127497
+            }
+        ],
+        "live": {
+            "supported": false,
+            "url": null,
+            "opens_at": null
+        },
+        "begin_at": "2026-08-06T11:00:00Z",
+        "detailed_stats": false,
+        "end_at": null,
+        "forfeit": false,
+        "winner_id": null,
+        "winner_type": "Team",
+        "slug": "esuba-vs-navi-junior-2026-08-06",
+        "games": [
+            {
+                "complete": false,
+                "id": 225047,
+                "position": 1,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616708,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225048,
+                "position": 2,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616708,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225049,
+                "position": 3,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616708,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            }
+        ],
+        "draw": false,
+        "tournament_id": 21606,
+        "modified_at": "2026-08-02T07:14:46Z",
+        "match_type": "best_of",
+        "number_of_games": 3,
+        "scheduled_at": "2026-08-06T11:00:00Z",
+        "opponents": [
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 127497,
+                    "name": "eSuba",
+                    "location": "CZ",
+                    "slug": "esuba-cs-go",
+                    "modified_at": "2026-08-02T06:58:59Z",
+                    "acronym": "ESB",
+                    "image_url": "https://cdn-api.pandascore.co/images/team/image/127497/e_suba_2021_lightmode.png",
+                    "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/127497/630px_e_suba_2021_darkmode.png"
+                }
+            },
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 126491,
+                    "name": "NAVI Junior",
+                    "location": "UA",
+                    "slug": "natus-vincere-junior",
+                    "modified_at": "2026-08-02T06:59:04Z",
+                    "acronym": "NAVI.J",
+                    "image_url": "https://cdn-api.pandascore.co/images/team/image/126491/630px_na_vi_jr.png",
+                    "dark_mode_image_url": null
+                }
+            }
+        ],
+        "previous_matches": [],
+        "original_scheduled_at": "2026-08-06T11:00:00Z",
+        "game_advantage": null,
+        "streams_list": [
+            {
+                "main": false,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzoneup",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzoneup"
+            },
+            {
+                "main": true,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzonecz",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzonecz"
+            }
+        ]
+    },
+    {
+        "id": 1616707,
+        "name": "GamersLab Esports vs JAM",
+        "status": "not_started",
+        "results": [
+            {
+                "score": 0,
+                "team_id": 139046
+            },
+            {
+                "score": 0,
+                "team_id": 139045
+            }
+        ],
+        "live": {
+            "supported": false,
+            "url": null,
+            "opens_at": null
+        },
+        "begin_at": "2026-08-05T17:00:00Z",
+        "detailed_stats": false,
+        "end_at": null,
+        "forfeit": false,
+        "winner_id": null,
+        "winner_type": "Team",
+        "slug": "gamerslab-esports-vs-jam-2026-08-05",
+        "games": [
+            {
+                "complete": false,
+                "id": 225044,
+                "position": 1,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616707,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225045,
+                "position": 2,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616707,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225046,
+                "position": 3,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616707,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            }
+        ],
+        "draw": false,
+        "tournament_id": 21606,
+        "modified_at": "2026-08-02T07:14:46Z",
+        "match_type": "best_of",
+        "number_of_games": 3,
+        "scheduled_at": "2026-08-05T17:00:00Z",
+        "opponents": [
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 139045,
+                    "name": "GamersLab Esports",
+                    "location": "CZ",
+                    "slug": "gamerslab-esports",
+                    "modified_at": "2026-08-02T06:59:05Z",
+                    "acronym": null,
+                    "image_url": null,
+                    "dark_mode_image_url": null
+                }
+            },
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 139046,
+                    "name": "JAM",
+                    "location": "UA",
+                    "slug": "jam",
+                    "modified_at": "2026-08-02T06:59:05Z",
+                    "acronym": null,
+                    "image_url": null,
+                    "dark_mode_image_url": null
+                }
+            }
+        ],
+        "previous_matches": [],
+        "original_scheduled_at": "2026-08-05T17:00:00Z",
+        "game_advantage": null,
+        "streams_list": [
+            {
+                "main": false,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzoneup",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzoneup"
+            },
+            {
+                "main": true,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzonecz",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzonecz"
+            }
+        ]
+    },
+    {
+        "id": 1616706,
+        "name": "maybe vs ESB",
+        "status": "not_started",
+        "results": [
+            {
+                "score": 0,
+                "team_id": 127497
+            },
+            {
+                "score": 0,
+                "team_id": 138899
+            }
+        ],
+        "live": {
+            "supported": false,
+            "url": null,
+            "opens_at": null
+        },
+        "begin_at": "2026-08-05T17:00:00Z",
+        "detailed_stats": false,
+        "end_at": null,
+        "forfeit": false,
+        "winner_id": null,
+        "winner_type": "Team",
+        "slug": "maybe-vs-esuba-2026-08-05",
+        "games": [
+            {
+                "complete": false,
+                "id": 225041,
+                "position": 1,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616706,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225042,
+                "position": 2,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616706,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225043,
+                "position": 3,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616706,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            }
+        ],
+        "draw": false,
+        "tournament_id": 21606,
+        "modified_at": "2026-08-02T07:14:46Z",
+        "match_type": "best_of",
+        "number_of_games": 3,
+        "scheduled_at": "2026-08-05T17:00:00Z",
+        "opponents": [
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 138899,
+                    "name": "maybe",
+                    "location": "UA",
+                    "slug": "maybe-cs-go",
+                    "modified_at": "2026-08-02T06:59:04Z",
+                    "acronym": null,
+                    "image_url": "https://cdn-api.pandascore.co/images/team/image/138899/maybe__ukrainian_team__allmode.png",
+                    "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/138899/maybe__ukrainian_team__allmode.png"
+                }
+            },
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 127497,
+                    "name": "eSuba",
+                    "location": "CZ",
+                    "slug": "esuba-cs-go",
+                    "modified_at": "2026-08-02T06:58:59Z",
+                    "acronym": "ESB",
+                    "image_url": "https://cdn-api.pandascore.co/images/team/image/127497/e_suba_2021_lightmode.png",
+                    "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/127497/630px_e_suba_2021_darkmode.png"
+                }
+            }
+        ],
+        "previous_matches": [],
+        "original_scheduled_at": "2026-08-05T17:00:00Z",
+        "game_advantage": null,
+        "streams_list": [
+            {
+                "main": false,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzoneup",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzoneup"
+            },
+            {
+                "main": true,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzonecz",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzonecz"
+            }
+        ]
+    },
+    {
+        "id": 1616705,
+        "name": "JAM vs ESB",
+        "status": "not_started",
+        "results": [
+            {
+                "score": 0,
+                "team_id": 127497
+            },
+            {
+                "score": 0,
+                "team_id": 139046
+            }
+        ],
+        "live": {
+            "supported": false,
+            "url": null,
+            "opens_at": null
+        },
+        "begin_at": "2026-08-05T14:00:00Z",
+        "detailed_stats": false,
+        "end_at": null,
+        "forfeit": false,
+        "winner_id": null,
+        "winner_type": "Team",
+        "slug": "jam-vs-esuba-2026-08-05",
+        "games": [
+            {
+                "complete": false,
+                "id": 225038,
+                "position": 1,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616705,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225039,
+                "position": 2,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616705,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225040,
+                "position": 3,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616705,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            }
+        ],
+        "draw": false,
+        "tournament_id": 21606,
+        "modified_at": "2026-08-02T07:14:46Z",
+        "match_type": "best_of",
+        "number_of_games": 3,
+        "scheduled_at": "2026-08-05T14:00:00Z",
+        "opponents": [
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 139046,
+                    "name": "JAM",
+                    "location": "UA",
+                    "slug": "jam",
+                    "modified_at": "2026-08-02T06:59:05Z",
+                    "acronym": null,
+                    "image_url": null,
+                    "dark_mode_image_url": null
+                }
+            },
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 127497,
+                    "name": "eSuba",
+                    "location": "CZ",
+                    "slug": "esuba-cs-go",
+                    "modified_at": "2026-08-02T06:58:59Z",
+                    "acronym": "ESB",
+                    "image_url": "https://cdn-api.pandascore.co/images/team/image/127497/e_suba_2021_lightmode.png",
+                    "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/127497/630px_e_suba_2021_darkmode.png"
+                }
+            }
+        ],
+        "previous_matches": [],
+        "original_scheduled_at": "2026-08-05T14:00:00Z",
+        "game_advantage": null,
+        "streams_list": [
+            {
+                "main": false,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzoneup",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzoneup"
+            },
+            {
+                "main": true,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzonecz",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzonecz"
+            }
+        ]
+    },
+    {
+        "id": 1616704,
+        "name": "GamersLab Esports vs NAVI.J",
+        "status": "not_started",
+        "results": [
+            {
+                "score": 0,
+                "team_id": 126491
+            },
+            {
+                "score": 0,
+                "team_id": 139045
+            }
+        ],
+        "live": {
+            "supported": false,
+            "url": null,
+            "opens_at": null
+        },
+        "begin_at": "2026-08-05T14:00:00Z",
+        "detailed_stats": false,
+        "end_at": null,
+        "forfeit": false,
+        "winner_id": null,
+        "winner_type": "Team",
+        "slug": "gamerslab-esports-vs-navi-junior-2026-08-05",
+        "games": [
+            {
+                "complete": false,
+                "id": 225035,
+                "position": 1,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616704,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225036,
+                "position": 2,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616704,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225037,
+                "position": 3,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616704,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            }
+        ],
+        "draw": false,
+        "tournament_id": 21606,
+        "modified_at": "2026-08-02T07:14:46Z",
+        "match_type": "best_of",
+        "number_of_games": 3,
+        "scheduled_at": "2026-08-05T14:00:00Z",
+        "opponents": [
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 139045,
+                    "name": "GamersLab Esports",
+                    "location": "CZ",
+                    "slug": "gamerslab-esports",
+                    "modified_at": "2026-08-02T06:59:05Z",
+                    "acronym": null,
+                    "image_url": null,
+                    "dark_mode_image_url": null
+                }
+            },
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 126491,
+                    "name": "NAVI Junior",
+                    "location": "UA",
+                    "slug": "natus-vincere-junior",
+                    "modified_at": "2026-08-02T06:59:04Z",
+                    "acronym": "NAVI.J",
+                    "image_url": "https://cdn-api.pandascore.co/images/team/image/126491/630px_na_vi_jr.png",
+                    "dark_mode_image_url": null
+                }
+            }
+        ],
+        "previous_matches": [],
+        "original_scheduled_at": "2026-08-05T14:00:00Z",
+        "game_advantage": null,
+        "streams_list": [
+            {
+                "main": false,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzoneup",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzoneup"
+            },
+            {
+                "main": true,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzonecz",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzonecz"
+            }
+        ]
+    },
+    {
+        "id": 1616703,
+        "name": "NAVI.J vs maybe",
+        "status": "not_started",
+        "results": [
+            {
+                "score": 0,
+                "team_id": 138899
+            },
+            {
+                "score": 0,
+                "team_id": 126491
+            }
+        ],
+        "live": {
+            "supported": false,
+            "url": null,
+            "opens_at": null
+        },
+        "begin_at": "2026-08-05T11:00:00Z",
+        "detailed_stats": false,
+        "end_at": null,
+        "forfeit": false,
+        "winner_id": null,
+        "winner_type": "Team",
+        "slug": "navi-junior-vs-maybe-2026-08-05",
+        "games": [
+            {
+                "complete": false,
+                "id": 225032,
+                "position": 1,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616703,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225033,
+                "position": 2,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616703,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225034,
+                "position": 3,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616703,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            }
+        ],
+        "draw": false,
+        "tournament_id": 21606,
+        "modified_at": "2026-08-02T07:14:46Z",
+        "match_type": "best_of",
+        "number_of_games": 3,
+        "scheduled_at": "2026-08-05T11:00:00Z",
+        "opponents": [
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 126491,
+                    "name": "NAVI Junior",
+                    "location": "UA",
+                    "slug": "natus-vincere-junior",
+                    "modified_at": "2026-08-02T06:59:04Z",
+                    "acronym": "NAVI.J",
+                    "image_url": "https://cdn-api.pandascore.co/images/team/image/126491/630px_na_vi_jr.png",
+                    "dark_mode_image_url": null
+                }
+            },
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 138899,
+                    "name": "maybe",
+                    "location": "UA",
+                    "slug": "maybe-cs-go",
+                    "modified_at": "2026-08-02T06:59:04Z",
+                    "acronym": null,
+                    "image_url": "https://cdn-api.pandascore.co/images/team/image/138899/maybe__ukrainian_team__allmode.png",
+                    "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/138899/maybe__ukrainian_team__allmode.png"
+                }
+            }
+        ],
+        "previous_matches": [],
+        "original_scheduled_at": "2026-08-05T11:00:00Z",
+        "game_advantage": null,
+        "streams_list": [
+            {
+                "main": false,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzoneup",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzoneup"
+            },
+            {
+                "main": true,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzonecz",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzonecz"
+            }
+        ]
+    },
+    {
+        "id": 1616702,
+        "name": "GamersLab Esports vs ESB",
+        "status": "not_started",
+        "results": [
+            {
+                "score": 0,
+                "team_id": 127497
+            },
+            {
+                "score": 0,
+                "team_id": 139045
+            }
+        ],
+        "live": {
+            "supported": false,
+            "url": null,
+            "opens_at": null
+        },
+        "begin_at": "2026-08-05T11:00:00Z",
+        "detailed_stats": false,
+        "end_at": null,
+        "forfeit": false,
+        "winner_id": null,
+        "winner_type": "Team",
+        "slug": "gamerslab-esports-vs-esuba-2026-08-05",
+        "games": [
+            {
+                "complete": false,
+                "id": 225029,
+                "position": 1,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616702,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225030,
+                "position": 2,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616702,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            },
+            {
+                "complete": false,
+                "id": 225031,
+                "position": 3,
+                "status": "not_started",
+                "length": null,
+                "finished": false,
+                "begin_at": null,
+                "detailed_stats": false,
+                "end_at": null,
+                "forfeit": false,
+                "match_id": 1616702,
+                "winner_type": "Team",
+                "winner": {
+                    "id": null,
+                    "type": "Team"
+                }
+            }
+        ],
+        "draw": false,
+        "tournament_id": 21606,
+        "modified_at": "2026-08-02T07:14:46Z",
+        "match_type": "best_of",
+        "number_of_games": 3,
+        "scheduled_at": "2026-08-05T11:00:00Z",
+        "opponents": [
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 139045,
+                    "name": "GamersLab Esports",
+                    "location": "CZ",
+                    "slug": "gamerslab-esports",
+                    "modified_at": "2026-08-02T06:59:05Z",
+                    "acronym": null,
+                    "image_url": null,
+                    "dark_mode_image_url": null
+                }
+            },
+            {
+                "type": "Team",
+                "opponent": {
+                    "id": 127497,
+                    "name": "eSuba",
+                    "location": "CZ",
+                    "slug": "esuba-cs-go",
+                    "modified_at": "2026-08-02T06:58:59Z",
+                    "acronym": "ESB",
+                    "image_url": "https://cdn-api.pandascore.co/images/team/image/127497/e_suba_2021_lightmode.png",
+                    "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/127497/630px_e_suba_2021_darkmode.png"
+                }
+            }
+        ],
+        "previous_matches": [],
+        "original_scheduled_at": "2026-08-05T11:00:00Z",
+        "game_advantage": null,
+        "streams_list": [
+            {
+                "main": false,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzoneup",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzoneup"
+            },
+            {
+                "main": true,
+                "language": "cs",
+                "embed_url": "https://player.twitch.tv/?channel=playzonecz",
+                "official": true,
+                "raw_url": "https://www.twitch.tv/playzonecz"
+            }
+        ]
+    }
+]
