@@ -26,6 +26,7 @@ const (
 	SingleElim Kind = "single-elimination"
 	// DoubleElim is not fully supported yet. Only exists for upcoming only mode
 	DoubleElim Kind = "double-elimination"
+	Other      Kind = "other"
 )
 
 // MatchResult is the unified interface implemented by every per-format result
@@ -187,4 +188,43 @@ func DetectKindFromMatchNodes(nodes []sources.MatchNode) (Kind, error) {
 	default:
 		return "", fmt.Errorf("could not detect tournament format from match node sections")
 	}
+}
+
+// DetectKindFromBracket infers the tournament format from a slice of BracketMatch
+// returned by the PandaScore API
+// Priority: DoubleElim (upper + lower edges) > SingleElim (upper edges only) > Swiss (no edges) > Other (unknown or empty).
+func DetectKindFromBracket(matches []sources.BracketMatch, teamCount int) Kind {
+	if len(matches) == 0 {
+		return Other
+	}
+	var hasWinnerEdge, hasLoserEdge bool
+	for _, m := range matches {
+		for _, e := range m.PreviousMatches {
+			switch strings.ToLower(e.Type) {
+			case "winner":
+				hasWinnerEdge = true
+			case "loser":
+				hasLoserEdge = true
+			}
+		}
+	}
+	switch {
+	case hasLoserEdge:
+		return DoubleElim // a loser bracket only exists in double-elim
+	case hasWinnerEdge:
+		return SingleElim // a single winner-fed tree
+	default:
+		if isRoundRobin(len(matches), teamCount) {
+			return Other // round-robin is not a supported format, but we can detect it
+		}
+		return Swiss // no feeder edges anywhere -> standings-based
+	}
+}
+
+// isRoundRobin returns true if the given number of matches and teams corresponds
+func isRoundRobin(numMatches, teamCount int) bool {
+	if teamCount > 1 && numMatches == teamCount*(teamCount-1)/2 {
+		return true
+	}
+	return false
 }

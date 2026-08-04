@@ -93,3 +93,75 @@ func TestListVRSRankings_OrderedByStanding(t *testing.T) {
 	assert.Equal(t, 3, entries[2].Standing)
 	assert.Equal(t, "Vitality", entries[2].TeamName)
 }
+
+func TestSyncStandings_InsertsAndReports(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	date := time.Date(2026, 5, 4, 0, 0, 0, 0, time.UTC)
+	synced, err := s.SyncStandings(ctx, []VRSEntry{
+		{Standing: 1, Points: 2000, TeamName: "Vitality", Roster: []string{"ZywOo", "apEX"}, StandingsDate: date},
+		{Standing: 2, Points: 1800, TeamName: "FaZe", Roster: []string{"karrigan"}, StandingsDate: date},
+	})
+	require.NoError(t, err)
+	assert.True(t, synced)
+
+	got, err := s.ListVRSRankings(ctx)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.Equal(t, "Vitality", got[0].TeamName)
+	assert.Equal(t, 1, got[0].Standing)
+}
+
+func TestSyncStandings_SkipsWhenDateUnchanged(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	date := time.Date(2026, 5, 4, 0, 0, 0, 0, time.UTC)
+	entries := []VRSEntry{{Standing: 1, Points: 2000, TeamName: "Vitality", Roster: []string{"ZywOo"}, StandingsDate: date}}
+
+	synced, err := s.SyncStandings(ctx, entries)
+	require.NoError(t, err)
+	require.True(t, synced)
+
+	// Same snapshot date again is a no-op.
+	synced, err = s.SyncStandings(ctx, entries)
+	require.NoError(t, err)
+	assert.False(t, synced)
+}
+
+func TestSyncStandings_ReplacesOnNewerDate(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	oldDate := time.Date(2026, 5, 4, 0, 0, 0, 0, time.UTC)
+	_, err := s.SyncStandings(ctx, []VRSEntry{
+		{Standing: 1, Points: 2000, TeamName: "Vitality", Roster: []string{"ZywOo"}, StandingsDate: oldDate},
+		{Standing: 2, Points: 1800, TeamName: "FaZe", Roster: []string{"karrigan"}, StandingsDate: oldDate},
+	})
+	require.NoError(t, err)
+
+	newDate := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	synced, err := s.SyncStandings(ctx, []VRSEntry{
+		{Standing: 1, Points: 2100, TeamName: "Spirit", Roster: []string{"donk"}, StandingsDate: newDate},
+	})
+	require.NoError(t, err)
+	require.True(t, synced)
+
+	got, err := s.ListVRSRankings(ctx)
+	require.NoError(t, err)
+	require.Len(t, got, 1) // old rankings cleared, teams preserved
+	assert.Equal(t, "Spirit", got[0].TeamName)
+}
+
+func TestSyncStandings_EmptyEntriesError(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	_, err := s.SyncStandings(ctx, nil)
+	assert.Error(t, err)
+}

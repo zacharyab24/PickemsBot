@@ -23,6 +23,8 @@ type Interface interface {
 	ListRoundsForTournament(ctx context.Context, name string) ([]string, error)
 	GetTournamentByNameAndRound(ctx context.Context, name, round string) (Tournament, error)
 	GetTournament(ctx context.Context, id int) (Tournament, error)
+	SetTournamentFormat(ctx context.Context, id int, format string) error
+	SyncTournaments(ctx context.Context, active []TournamentCatalogEntry) error
 
 	// Guild config — new in v4, used by /config (#67)
 	EnsureGuild(ctx context.Context, guildID string) error
@@ -53,6 +55,7 @@ type Interface interface {
 
 	// VRS
 	ListVRSRankings(ctx context.Context) ([]VRSEntry, error)
+	SyncStandings(ctx context.Context, entries []VRSEntry) (bool, error)
 }
 
 // PostgresStore represents the database connection and configuration

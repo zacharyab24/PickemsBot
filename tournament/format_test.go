@@ -155,3 +155,101 @@ func TestFilterNodesByKind_DoubleElimPassesThrough(t *testing.T) {
 }
 
 // endregion
+
+// region DetectKindFromBracket
+
+// bm builds a BracketMatch whose previous_matches carry the given edge types.
+// Called with no arguments it is an entry-point match (empty previous_matches),
+// exactly how PandaScore represents an upper-round-1 / quarterfinal match.
+func bm(edgeTypes ...string) sources.BracketMatch {
+	var m sources.BracketMatch
+	for i, typ := range edgeTypes {
+		m.PreviousMatches = append(m.PreviousMatches, sources.BracketEdge{FromMatchID: i + 1, Type: typ})
+	}
+	return m
+}
+
+// edgelessBracket returns n entry-point matches (no feeder edges), the shape a
+// group stage (swiss / round-robin) has - pairings come from standings, not
+// from prior match outcomes.
+func edgelessBracket(n int) []sources.BracketMatch {
+	return make([]sources.BracketMatch, n)
+}
+
+func TestDetectKindFromBracket_DoubleElim(t *testing.T) {
+	// Entry matches with no edges, a winner-fed upper match, at least one
+	// loser-fed lower-bracket match, and a winner-fed grand final.
+	matches := []sources.BracketMatch{
+		bm(), bm(),
+		bm("winner", "winner"),
+		bm("loser", "winner"),
+		bm("winner", "winner"),
+	}
+	assert.Equal(t, DoubleElim, DetectKindFromBracket(matches, 8))
+}
+
+func TestDetectKindFromBracket_SingleElim(t *testing.T) {
+	// 8-team single elim: 4 entry-point quarterfinals, 2 semis, 1 final; winner edges only.
+	matches := []sources.BracketMatch{
+		bm(), bm(), bm(), bm(),
+		bm("winner", "winner"), bm("winner", "winner"),
+		bm("winner", "winner"),
+	}
+	assert.Equal(t, SingleElim, DetectKindFromBracket(matches, 8))
+}
+
+func TestDetectKindFromBracket_Swiss(t *testing.T) {
+	// 16-team swiss, 33 matches, no feeder edges. 33 != 16*15/2 (=120), so not round-robin.
+	assert.Equal(t, Swiss, DetectKindFromBracket(edgelessBracket(33), 16))
+}
+
+func TestDetectKindFromBracket_RoundRobinReportedAsOther(t *testing.T) {
+	// 4 teams, 6 matches (== 4*3/2), no edges -> round-robin -> Other (no scorer).
+	assert.Equal(t, Other, DetectKindFromBracket(edgelessBracket(6), 4))
+}
+
+func TestDetectKindFromBracket_EmptyIsOther(t *testing.T) {
+	assert.Equal(t, Other, DetectKindFromBracket(nil, 8))
+	assert.Equal(t, Other, DetectKindFromBracket([]sources.BracketMatch{}, 8))
+}
+
+func TestDetectKindFromBracket_LoserEdgeWinsOverWinnerEdges(t *testing.T) {
+	// A single loser edge means a lower bracket exists -> double-elim, even amid
+	// many winner edges. Guards the priority ordering.
+	matches := []sources.BracketMatch{
+		bm("winner", "winner"),
+		bm("winner", "winner"),
+		bm("loser", "winner"),
+	}
+	assert.Equal(t, DoubleElim, DetectKindFromBracket(matches, 8))
+}
+
+func TestDetectKindFromBracket_EntryPointMatchesDoNotForceGroup(t *testing.T) {
+	// Edge-less entry matches appearing before any edged match must not short-circuit
+	// to a group classification: the scan is over the whole set, order-independent.
+	matches := []sources.BracketMatch{
+		bm(), bm(), bm(),
+		bm("winner", "winner"),
+	}
+	assert.Equal(t, SingleElim, DetectKindFromBracket(matches, 8))
+}
+
+func TestDetectKindFromBracket_EdgeTypeCaseInsensitive(t *testing.T) {
+	assert.Equal(t, DoubleElim, DetectKindFromBracket([]sources.BracketMatch{bm("LOSER")}, 8))
+	assert.Equal(t, SingleElim, DetectKindFromBracket([]sources.BracketMatch{bm("Winner")}, 8))
+}
+
+// endregion
+
+// region isRoundRobin
+
+func TestIsRoundRobin(t *testing.T) {
+	assert.True(t, isRoundRobin(6, 4))    // 4 teams -> 6 matches
+	assert.True(t, isRoundRobin(10, 5))   // 5 teams -> 10 matches
+	assert.False(t, isRoundRobin(33, 16)) // swiss, far short of the full 120
+	assert.False(t, isRoundRobin(5, 4))   // wrong count for 4 teams
+	assert.False(t, isRoundRobin(0, 1))   // single team guarded out
+	assert.False(t, isRoundRobin(0, 0))   // no teams
+}
+
+// endregion

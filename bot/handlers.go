@@ -141,7 +141,7 @@ func (b *Bot) setInteractionHandler(session DiscordSession, i *discordgo.Interac
 			}},
 		}
 	default:
-		respondError(session, i.Interaction, "Unsupported tournament format.")
+		respondError(session, i.Interaction, "The selected tournament uses a format that does not support predictions.")
 		return
 	}
 

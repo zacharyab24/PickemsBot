@@ -23,6 +23,7 @@ import (
 	"pickems-bot/tournament"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -84,11 +85,24 @@ func NewApp(cfg config.Config, postgresURI string, log *slog.Logger) (*App, erro
 }
 
 // Allow calls the app's configured rate limiter's Allow() function.
+// Non-blocking: returns false immediately when no token is available. The poller
+// uses this to skip a tick rather than wait.
 func (a *App) Allow() bool {
 	if a.rateLimiter == nil {
 		return false
 	}
 	return a.rateLimiter.Allow()
+}
+
+// Wait blocks until the shared rate limiter permits another call, or ctx is
+// cancelled. Backed by the same limiter as Allow(), so background jobs that call
+// Wait and the poller that calls Allow() draw from one token bucket and together
+// stay within the API's rate limit. Batch jobs use this to pace instead of drop.
+func (a *App) Wait(ctx context.Context) error {
+	if a.rateLimiter == nil {
+		return nil
+	}
+	return a.rateLimiter.Wait(ctx)
 }
 
 // resolveConfig looks up the guild config and validates that a tournament and round are set.
@@ -478,12 +492,15 @@ func (a *App) SetConfigTournament(ctx context.Context, guildID, channelID, name,
 	if err != nil {
 		return store.Tournament{}, fmt.Errorf("SetConfigTournament: %w", err)
 	}
+
 	if err := a.upsertConfigField(ctx, guildID, channelID, func(c *store.GuildConfig) {
 		c.TournamentID = &t.ID
 		c.Round = &t.Round
 	}); err != nil {
 		return store.Tournament{}, err
 	}
+
+	go a.detectFormatAsync(t)
 	return t, nil
 }
 
@@ -539,12 +556,15 @@ func (a *App) SetConfigRound(ctx context.Context, guildID, channelID, round stri
 	if err != nil {
 		return store.Tournament{}, fmt.Errorf("SetConfigRound: %w", err)
 	}
+
 	if err := a.upsertConfigField(ctx, guildID, channelID, func(c *store.GuildConfig) {
 		c.TournamentID = &t.ID
 		c.Round = &t.Round
 	}); err != nil {
 		return store.Tournament{}, err
 	}
+
+	go a.detectFormatAsync(t)
 	return t, nil
 }
 
@@ -570,4 +590,46 @@ func (a *App) upsertConfigField(ctx context.Context, guildID, channelID string, 
 		return fmt.Errorf("upsertConfigField: %w", err)
 	}
 	return nil
+}
+
+// detectFormatAsync runs checkAndStoreFormat in the background after a config
+// change, logging (not returning) any failure. Detection waits on the shared
+// rate limiter and hits the network, so it must not block the Discord
+// interaction that triggered the config change. It uses a detached context
+// because the caller's request context may be cancelled once it responds.
+//
+// Consequence for the poller subscription pool (next v4 step): a just-configured
+// tournament may briefly have a NULL/undetected format, so the pool builder must
+// tolerate that (skip-and-log, or retry) rather than assume every configured
+// tournament already has a supported format.
+func (a *App) detectFormatAsync(t store.Tournament) {
+	if err := a.checkAndStoreFormat(context.Background(), t); err != nil {
+		a.logger().Warn("format detection failed",
+			"tournament_id", t.ID, "external_id", t.ExternalID, "error", err)
+	}
+}
+
+// checkAndStoreFormat fetches the PandaScore bracket for a tournament, infers its format kind, and persists that value in the db.
+func (a *App) checkAndStoreFormat(ctx context.Context, t store.Tournament) error {
+	if t.Source != "pandascore" || t.Format != nil {
+		return nil // only PandaScore has a format field, and it's already set
+	}
+
+	// external_id is stored as text but the bracket endpoint keys on the numeric
+	// PandaScore id; parse before spending a rate-limiter token.
+	extID, err := strconv.Atoi(t.ExternalID)
+	if err != nil {
+		return fmt.Errorf("checkAndStoreFormat: invalid external id %q: %w", t.ExternalID, err)
+	}
+
+	if err := a.Wait(ctx); err != nil {
+		return err
+	}
+
+	brackets, err := sources.GetPandaScoreBracket(os.Getenv("PANDASCORE_API_KEY"), extID)
+	if err != nil {
+		return fmt.Errorf("checkAndStoreFormat: %w", err)
+	}
+	kind := tournament.DetectKindFromBracket(brackets, sources.CountTeams(brackets))
+	return a.Store.SetTournamentFormat(ctx, t.ID, string(kind))
 }
