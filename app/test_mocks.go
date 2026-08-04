@@ -66,6 +66,10 @@ type MockStore struct {
 	SyncedStandings      []store.VRSEntry
 	SyncStandingsResult  bool
 	SyncStandingsError   error
+
+	SetFormatID              int
+	SetFormatValue           string
+	SetTournamentFormatError error
 }
 
 // NewMockStore creates a MockStore pre-wired for the given format and round.
@@ -184,6 +188,15 @@ func (m *MockStore) SyncTournaments(_ context.Context, active []store.Tournament
 		return m.SyncTournamentsError
 	}
 	m.SyncedTournaments = active
+	return nil
+}
+
+// SetTournamentFormat implements store.Interface, recording the last (id, format) set.
+func (m *MockStore) SetTournamentFormat(_ context.Context, id int, format string) error {
+	if m.SetTournamentFormatError != nil {
+		return m.SetTournamentFormatError
+	}
+	m.SetFormatID, m.SetFormatValue = id, format
 	return nil
 }
 

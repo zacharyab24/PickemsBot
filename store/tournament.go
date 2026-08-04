@@ -100,9 +100,14 @@ func (s *PostgresStore) SyncTournaments(ctx context.Context, active []Tournament
 // rows sharing a name within a series; it may be empty for sources that don't
 // split a tournament into stages.
 type Tournament struct {
-	ID    int
-	Name  string
-	Round string
+	ID         int
+	Source     string
+	ExternalID string
+	Round      string
+	Name       string
+	SeriesID   string
+	Format     *string
+	isFinished bool
 }
 
 // ListTournamentNames returns the distinct tournament names for the /config
@@ -166,10 +171,10 @@ func (s *PostgresStore) ListRoundsForTournament(ctx context.Context, name string
 func (s *PostgresStore) GetTournamentByNameAndRound(ctx context.Context, name, round string) (Tournament, error) {
 	var t Tournament
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, name, COALESCE(round, '') FROM tournaments
+		tournamentSelect+`
 		 WHERE name = $1 AND COALESCE(round, '') = $2
 		 ORDER BY id LIMIT 1`, name, round,
-	).Scan(&t.ID, &t.Name, &t.Round)
+	).Scan(&t.ID, &t.Source, &t.ExternalID, &t.Round, &t.Name, &t.SeriesID, &t.Format, &t.isFinished)
 	if err != nil {
 		return Tournament{}, fmt.Errorf("GetTournamentByNameAndRound: %w", err)
 	}
@@ -178,14 +183,31 @@ func (s *PostgresStore) GetTournamentByNameAndRound(ctx context.Context, name, r
 
 // GetTournament returns a single tournament by its internal DB id. Used by
 // /config set-round to recover the currently-configured tournament's name so
-// the round autocomplete can be scoped to that tournament.
+// the round autocomplete can be scoped to that tournament, and by the format
+// detection hook to read source/external_id/format.
 func (s *PostgresStore) GetTournament(ctx context.Context, id int) (Tournament, error) {
 	var t Tournament
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, name, COALESCE(round, '') FROM tournaments WHERE id = $1`, id,
-	).Scan(&t.ID, &t.Name, &t.Round)
+		tournamentSelect+` WHERE id = $1`, id,
+	).Scan(&t.ID, &t.Source, &t.ExternalID, &t.Round, &t.Name, &t.SeriesID, &t.Format, &t.isFinished)
 	if err != nil {
 		return Tournament{}, fmt.Errorf("GetTournament: %w", err)
 	}
 	return t, nil
+}
+
+// tournamentSelect is the shared column list for reading a full Tournament row.
+// Nullable text columns are COALESCEd to ""; format stays nullable (*string) so
+// callers can tell "not yet detected" (nil) from a real value.
+const tournamentSelect = `SELECT id, source, external_id, COALESCE(round, ''), name, COALESCE(series_id, ''), format, is_finished FROM tournaments`
+
+// SetTournamentFormat records the detected format for a tournament. The caller
+// decides when to run detection (e.g. only when format is currently unset); this
+// is a plain setter and will overwrite any existing value.
+func (s *PostgresStore) SetTournamentFormat(ctx context.Context, id int, format string) error {
+	if _, err := s.pool.Exec(ctx,
+		`UPDATE tournaments SET format = $1 WHERE id = $2`, format, id); err != nil {
+		return fmt.Errorf("SetTournamentFormat: %w", err)
+	}
+	return nil
 }
