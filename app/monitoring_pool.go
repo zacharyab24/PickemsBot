@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+
+	"pickems-bot/metrics"
 )
 
 type MonitoringPool struct {
@@ -75,12 +77,21 @@ func (a *App) Subscribe(ctx context.Context, tournamentID int) {
 		KnownScheduleKey:       "",
 	}
 	a.MonitoringPool.Entries[tournamentID] = PoolEntry
+	metrics.MonitoringPoolTournaments.WithLabelValues(
+		strconv.Itoa(tournamentID), strconv.Itoa(pandaScoreTournamentID), t.Round,
+	).Set(1)
 }
 
 // Unsubscribe removes a tournament from the monitoring pool, stopping it from being polled for updates.
 func (a *App) Unsubscribe(ctx context.Context, tournamentID int) {
 	a.MonitoringPool.mu.Lock()
 	defer a.MonitoringPool.mu.Unlock()
+
+	if entry, ok := a.MonitoringPool.Entries[tournamentID]; ok {
+		metrics.MonitoringPoolTournaments.DeleteLabelValues(
+			strconv.Itoa(tournamentID), strconv.Itoa(entry.PandascoreTournamentID), entry.Round,
+		)
+	}
 	delete(a.MonitoringPool.Entries, tournamentID)
 }
 
