@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
 	"time"
 
 	"pickems-bot/app"
@@ -115,21 +114,13 @@ func main() {
 
 	switch cfg.DataSource {
 	case "pandascore":
-		// Seeds config.toml's tournament into the catalog and populates its
-		// initial data so it's immediately usable via /config, without waiting
-		// on the hourly ingest.TournamentSync catalog sync to discover it. It
-		// isn't subscribed here - the poller only tracks what /config points a
-		// guild at (see BootstrapPool above and app.SetConfigTournament).
-		externalID := strconv.Itoa(cfg.PandaScore.TournamentID)
-		dbTournamentID, err := apiInstance.Store.EnsureTournament(context.Background(), externalID, "pandascore", cfg.TournamentName, cfg.PandaScore.SeriesID)
-		if err != nil {
-			logger.Error("failed to ensure tournament in database", "error", err)
-			os.Exit(1)
-		}
-		if err := apiInstance.PopulateMatches(context.Background(), dbTournamentID, cfg.Round, false); err != nil {
-			logger.Warn("startup populate failed, bot will retry on next poller tick", "error", err)
-		}
-		logger.Info("PandaScore tournament seeded", "db_tournament_id", dbTournamentID)
+		// The tournament catalog is populated by ingest.TournamentSync's
+		// startup sync (live PandaScore data), and match data by /config
+		// (app.SetConfigTournament / app.SetConfigRound) the moment a guild
+		// first tracks a tournament - config.toml has nothing left to seed
+		// here. This case only exists so an unrecognised data_source still
+		// falls through to the default/exit below.
+		logger.Info("PandaScore data source configured; tournaments are tracked via /config")
 	case "liquipedia":
 		dbTournamentID, err := apiInstance.Store.EnsureTournament(context.Background(), cfg.Liquipedia.Page, "liquipedia", cfg.TournamentName, 0)
 		if err != nil {

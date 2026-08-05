@@ -513,6 +513,7 @@ func (a *App) SetConfigTournament(ctx context.Context, guildID, channelID, name,
 
 	go a.detectFormatAsync(t)
 	go a.updatePoolAsync(prev, t.ID)
+	go a.populateMatchesAsync(t)
 	return t, nil
 }
 
@@ -578,6 +579,7 @@ func (a *App) SetConfigRound(ctx context.Context, guildID, channelID, round stri
 
 	go a.detectFormatAsync(t)
 	go a.updatePoolAsync(cfg, t.ID)
+	go a.populateMatchesAsync(t)
 
 	return t, nil
 }
@@ -650,6 +652,21 @@ func (a *App) updatePool(ctx context.Context, prev store.GuildConfig, newTournam
 		}
 	}
 	a.Subscribe(ctx, newTournamentID)
+}
+
+// populateMatchesAsync runs an initial full populate (schedule + results) in
+// the background the moment a guild first points at a tournament. The
+// poller's tick only detects a match transitioning to finished as it happens
+// going forward - a freshly-subscribed tournament starts with an empty
+// KnownStatus, so a match that was already finished before tracking began
+// would otherwise never get its results fetched. Like detectFormatAsync, this
+// uses a detached context because the caller's request context may be
+// cancelled once it responds.
+func (a *App) populateMatchesAsync(t store.Tournament) {
+	if err := a.PopulateMatches(context.Background(), t.ID, t.Round, false); err != nil {
+		a.logger().Warn("initial populate failed - results for matches already finished before tracking began may be missed until manually retried",
+			"tournament_id", t.ID, "round", t.Round, "error", err)
+	}
 }
 
 // checkAndStoreFormat fetches the PandaScore bracket for a tournament, infers its format kind, and persists that value in the db.
