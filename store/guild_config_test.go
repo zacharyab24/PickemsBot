@@ -162,3 +162,121 @@ func TestEnsureGuild_SatisfiesGuildConfigFK(t *testing.T) {
 	})
 	require.NoError(t, err)
 }
+
+func TestTournamentStillReferenced_TrueWhenOtherRowExists(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	seedGuild(t, "guild-1")
+	seedGuild(t, "guild-2")
+	tournamentID := seedTournament(t, "Shared Event", "swiss")
+	round := "Playoffs"
+
+	channel1 := "channel-1"
+	require.NoError(t, s.UpsertGuildConfig(ctx, GuildConfig{
+		GuildID: "guild-1", TournamentID: &tournamentID, Round: &round, ResultsChannelID: &channel1,
+	}))
+	thisConfig, err := s.GetGuildConfig(ctx, "guild-1", "channel-1")
+	require.NoError(t, err)
+
+	channel2 := "channel-2"
+	require.NoError(t, s.UpsertGuildConfig(ctx, GuildConfig{
+		GuildID: "guild-2", TournamentID: &tournamentID, Round: &round, ResultsChannelID: &channel2,
+	}))
+
+	referenced, err := s.TournamentStillReferenced(ctx, tournamentID, thisConfig.ID)
+	require.NoError(t, err)
+	assert.True(t, referenced, "guild-2's row still points at the tournament")
+}
+
+func TestTournamentStillReferenced_FalseWhenOnlyExcludedRowExists(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	seedGuild(t, "guild-1")
+	tournamentID := seedTournament(t, "Solo Event", "swiss")
+	round := "Playoffs"
+
+	channel1 := "channel-1"
+	require.NoError(t, s.UpsertGuildConfig(ctx, GuildConfig{
+		GuildID: "guild-1", TournamentID: &tournamentID, Round: &round, ResultsChannelID: &channel1,
+	}))
+	thisConfig, err := s.GetGuildConfig(ctx, "guild-1", "channel-1")
+	require.NoError(t, err)
+
+	referenced, err := s.TournamentStillReferenced(ctx, tournamentID, thisConfig.ID)
+	require.NoError(t, err)
+	assert.False(t, referenced, "only the excluded row references it")
+}
+
+func TestTournamentStillReferenced_FalseWhenNoRowsReferenceIt(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournament(t, "Untracked Event", "swiss")
+
+	referenced, err := s.TournamentStillReferenced(ctx, tournamentID, 0)
+	require.NoError(t, err)
+	assert.False(t, referenced)
+}
+
+func TestListTrackedTournamentIDs_ReturnsDistinctIDs(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	seedGuild(t, "guild-1")
+	seedGuild(t, "guild-2")
+	tournamentA := seedTournament(t, "Event A", "swiss")
+	tournamentB := seedTournament(t, "Event B", "swiss")
+	round := "Playoffs"
+
+	channel1 := "channel-1"
+	require.NoError(t, s.UpsertGuildConfig(ctx, GuildConfig{
+		GuildID: "guild-1", TournamentID: &tournamentA, Round: &round, ResultsChannelID: &channel1,
+	}))
+	// Second row on the SAME tournament as guild-1, from a different guild -
+	// must collapse to one id in the result.
+	channel2 := "channel-2"
+	require.NoError(t, s.UpsertGuildConfig(ctx, GuildConfig{
+		GuildID: "guild-2", TournamentID: &tournamentA, Round: &round, ResultsChannelID: &channel2,
+	}))
+	channel3 := "channel-3"
+	require.NoError(t, s.UpsertGuildConfig(ctx, GuildConfig{
+		GuildID: "guild-1", TournamentID: &tournamentB, Round: &round, ResultsChannelID: &channel3,
+	}))
+
+	ids, err := s.ListTrackedTournamentIDs(ctx)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []int{tournamentA, tournamentB}, ids)
+}
+
+func TestListTrackedTournamentIDs_ExcludesNullTournamentID(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	seedGuild(t, "guild-1")
+	round := "Playoffs"
+	channel1 := "channel-1"
+	require.NoError(t, s.UpsertGuildConfig(ctx, GuildConfig{
+		GuildID: "guild-1", Round: &round, ResultsChannelID: &channel1, // no TournamentID set
+	}))
+
+	ids, err := s.ListTrackedTournamentIDs(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, ids)
+}
+
+func TestListTrackedTournamentIDs_EmptyWhenNoConfigs(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	ids, err := s.ListTrackedTournamentIDs(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, ids)
+}
