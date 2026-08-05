@@ -620,6 +620,22 @@ func TestGetUpcomingMatches_DisplaysInChronologicalOrder(t *testing.T) {
 	}
 }
 
+func TestGetUpcomingMatches_NoScheduledMatches_ReturnsEmptyNotError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	// Deliberately no SetScheduledMatches - "nothing scheduled yet" must be an
+	// empty result, not an error, so the bot's "No upcoming matches at this
+	// time" UI renders instead of a generic failure message.
+	api := NewTestApp(mockStore)
+
+	matches, err := api.GetUpcomingMatches(bg(), testGuildID, testChannelID)
+	if err != nil {
+		t.Fatalf("expected no error when nothing is scheduled yet, got: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Errorf("expected no matches, got %d", len(matches))
+	}
+}
+
 func TestGetUpcomingMatches_GetScheduleError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})

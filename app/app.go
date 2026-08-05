@@ -52,19 +52,39 @@ func (a *App) logger() *slog.Logger {
 // postgresURI is the connection string for the PostgreSQL database.
 // log may be nil; if so the global slog default is used.
 func NewApp(cfg config.Config, postgresURI string, log *slog.Logger) (*App, error) {
-	var fetcher store.DataSourceFetcher
 	var limiter *rate.Limiter
 	switch cfg.DataSource {
 	case "liquipedia":
-		fetcher = store.NewLiquipediaFetcher(cfg.Liquipedia.APIURL, os.Getenv("LIQUIDPEDIADB_API_KEY"), cfg.Liquipedia.Page)
 		limiter = rate.NewLimiter(rate.Every(time.Minute), 10)
 
 	case "pandascore":
-		fetcher = store.NewPandaScoreFetcher(cfg.PandaScore.APIURL, os.Getenv("PANDASCORE_API_KEY"), cfg.PandaScore.SeriesID, cfg.PandaScore.TournamentID)
 		limiter = rate.NewLimiter(rate.Every(4*time.Second), 5)
 
 	default:
 		return nil, fmt.Errorf("unsupported data source: %s", cfg.DataSource)
+	}
+
+	// resolveFetcher builds a fetcher from the tournament actually being
+	// fetched, not from cfg.DataSource - guild_config is source-agnostic, so a
+	// store can end up fetching for tournaments of either source, and each
+	// fetch has to use that tournament's own identity (external id, series
+	// id), not whichever one config.toml happens to point at.
+	pandaScoreAPIURL, pandaScoreAPIKey := cfg.PandaScore.APIURL, os.Getenv("PANDASCORE_API_KEY")
+	liquipediaAPIURL, liquipediaAPIKey := cfg.Liquipedia.APIURL, os.Getenv("LIQUIDPEDIADB_API_KEY")
+	resolveFetcher := func(t store.Tournament) (store.DataSourceFetcher, error) {
+		switch t.Source {
+		case "pandascore":
+			extID, err := strconv.Atoi(t.ExternalID)
+			if err != nil {
+				return nil, fmt.Errorf("invalid pandascore external id %q: %w", t.ExternalID, err)
+			}
+			seriesID, _ := strconv.Atoi(t.SeriesID) // optional - 0 if unset
+			return store.NewPandaScoreFetcher(pandaScoreAPIURL, pandaScoreAPIKey, seriesID, extID), nil
+		case "liquipedia":
+			return store.NewLiquipediaFetcher(liquipediaAPIURL, liquipediaAPIKey, t.ExternalID), nil
+		default:
+			return nil, fmt.Errorf("unsupported tournament source: %s", t.Source)
+		}
 	}
 
 	var appLog, storeLog *slog.Logger
@@ -73,7 +93,7 @@ func NewApp(cfg config.Config, postgresURI string, log *slog.Logger) (*App, erro
 		storeLog = log.With("component", "store")
 	}
 
-	s, err := store.NewStore(postgresURI, fetcher, storeLog)
+	s, err := store.NewStore(postgresURI, resolveFetcher, storeLog)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize store: %w", err)
 	}
@@ -345,10 +365,10 @@ func (a *App) GetUpcomingMatches(ctx context.Context, guildID, channelID string)
 		return nil, err
 	}
 
-	if err := a.Store.EnsureScheduledMatches(ctx, *cfg.TournamentID); err != nil {
-		return nil, err
-	}
-
+	// Unlike SetUserPrediction/CheckPrediction, no EnsureScheduledMatches guard
+	// here - "nothing scheduled yet" is a legitimate, answerable state for this
+	// command (an empty list), not a failure. GetMatchSchedule already returns
+	// an empty slice cleanly when there's nothing to show.
 	scheduledMatches, err := a.Store.GetMatchSchedule(ctx, *cfg.TournamentID)
 	if err != nil {
 		return nil, err

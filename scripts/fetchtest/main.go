@@ -65,7 +65,9 @@ func main() {
 	}
 
 	fmt.Printf("=== FetchMatchData (round=%q) ===\n", round)
-	_, matchNodes, err := fetcher.FetchMatchData(round)
+	// No persisted format to pass through here - this is a standalone CLI
+	// tool with no DB/tournament context, so let it fall back to section-based detection.
+	_, matchNodes, err := fetcher.FetchMatchData(round, "")
 	if err != nil {
 		log.Fatalf("FetchMatchData error: %v", err)
 	}

@@ -38,10 +38,28 @@ func (s *PostgresStore) UpsertMatchResults(ctx context.Context, tournamentID int
 	return nil
 }
 
-// FetchAndSaveMatchResults fetches match data from the configured data source, writes match rows,
+// FetchAndSaveMatchResults fetches match data from tournamentID's own data source, writes match rows,
 // and materialises scores for all predictions on this tournament/round.
 func (s *PostgresStore) FetchAndSaveMatchResults(ctx context.Context, tournamentID int, round string) error {
-	result, nodes, err := s.fetcher.FetchMatchData(round)
+	t, err := s.GetTournament(ctx, tournamentID)
+	if err != nil {
+		return fmt.Errorf("FetchAndSaveMatchResults: %w", err)
+	}
+	fetcher, err := s.resolveFetcher(t)
+	if err != nil {
+		return fmt.Errorf("FetchAndSaveMatchResults: %w", err)
+	}
+
+	// t.Format is the already-persisted bracket-endpoint detection
+	// (checkAndStoreFormat); pass it through so FetchMatchData trusts it
+	// instead of re-deriving a kind from match node sections, which doesn't
+	// recognise every bracket shape (e.g. group-stage/double-elimination).
+	var knownKind tournament.Kind
+	if t.Format != nil {
+		knownKind = tournament.Kind(*t.Format)
+	}
+
+	result, nodes, err := fetcher.FetchMatchData(round, knownKind)
 	if err != nil {
 		return fmt.Errorf("FetchAndSaveMatchResults: fetch: %w", err)
 	}

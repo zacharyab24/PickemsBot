@@ -62,9 +62,16 @@ type Interface interface {
 
 // PostgresStore represents the database connection and configuration
 type PostgresStore struct {
-	pool    *pgxpool.Pool
-	fetcher DataSourceFetcher
-	log     *slog.Logger
+	pool *pgxpool.Pool
+	// resolveFetcher builds the DataSourceFetcher for a specific tournament,
+	// from that tournament's own source/external_id/series_id - not a single
+	// fixed fetcher for the whole store. A tournament's fetch has to use its
+	// own identity: a store tracking several tournaments (of possibly
+	// different sources) would otherwise always fetch whichever tournament's
+	// data the fetcher happened to be constructed with, mislabelled under
+	// whatever tournamentID the caller actually asked for.
+	resolveFetcher func(Tournament) (DataSourceFetcher, error)
+	log            *slog.Logger
 }
 
 // logger returns the store's logger, falling back to the global default when none was injected.
@@ -75,8 +82,10 @@ func (s *PostgresStore) logger() *slog.Logger {
 	return s.log
 }
 
-// NewStore initializes a new PostgresStore with the given connection string, data source fetcher, and logger.
-func NewStore(connString string, fetcher DataSourceFetcher, log *slog.Logger) (*PostgresStore, error) {
+// NewStore initializes a new PostgresStore with the given connection string, fetcher resolver, and logger.
+// resolveFetcher is called with the specific tournament being fetched, so it can return a fetcher built
+// from that tournament's own identity (source, external id, series id) rather than a fixed one.
+func NewStore(connString string, resolveFetcher func(Tournament) (DataSourceFetcher, error), log *slog.Logger) (*PostgresStore, error) {
 	if connString == "" {
 		return nil, fmt.Errorf("postgres connection string is empty: set POSTGRES_URI in .env")
 	}
@@ -86,9 +95,9 @@ func NewStore(connString string, fetcher DataSourceFetcher, log *slog.Logger) (*
 	}
 
 	return &PostgresStore{
-		pool:    pool,
-		fetcher: fetcher,
-		log:     log,
+		pool:           pool,
+		resolveFetcher: resolveFetcher,
+		log:            log,
 	}, nil
 }
 

@@ -20,7 +20,7 @@ type mockFetcher struct {
 	err    error
 }
 
-func (m mockFetcher) FetchMatchData(round string) (tournament.MatchResult, []sources.MatchNode, error) {
+func (m mockFetcher) FetchMatchData(round string, knownKind tournament.Kind) (tournament.MatchResult, []sources.MatchNode, error) {
 	return m.result, m.nodes, m.err
 }
 
@@ -178,6 +178,52 @@ func TestFetchAndSaveMatchResults_FetcherError(t *testing.T) {
 
 	err := s.FetchAndSaveMatchResults(ctx, tournamentID, "Stage 1")
 	assert.Error(t, err)
+}
+
+// identityEchoFetcher returns a single match node whose external id mirrors
+// whatever tournament it was resolved for, so a test can tell which
+// tournament's identity actually drove the fetch.
+type identityEchoFetcher struct {
+	externalID string
+}
+
+func (f identityEchoFetcher) FetchMatchData(round string, knownKind tournament.Kind) (tournament.MatchResult, []sources.MatchNode, error) {
+	nodes := []sources.MatchNode{{ID: f.externalID, Team1: "A", Team2: "B", Status: "not_started"}}
+	return tournament.SwissResult{Round: round, Teams: map[string]string{}}, nodes, nil
+}
+
+func (f identityEchoFetcher) FetchSchedule() ([]sources.ScheduledMatch, error) {
+	return nil, nil
+}
+
+// TestFetchAndSaveMatchResults_UsesEachTournamentsOwnIdentity is the
+// regression test for the bug where all fetches used one fixed fetcher
+// regardless of which tournament was actually being populated. With a
+// resolver keyed on the tournament passed in, tournament A's fetch must use
+// tournament A's own external id, not tournament B's (or vice versa).
+func TestFetchAndSaveMatchResults_UsesEachTournamentsOwnIdentity(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+
+	resolve := func(t Tournament) (DataSourceFetcher, error) {
+		return identityEchoFetcher{externalID: t.ExternalID}, nil
+	}
+	s := newTestStoreWithFetcherResolver(t, resolve)
+
+	tournamentA := seedTournamentNullFormat(t, "tournament-a")
+	tournamentB := seedTournamentNullFormat(t, "tournament-b")
+
+	require.NoError(t, s.FetchAndSaveMatchResults(ctx, tournamentA, "Stage 1"))
+	require.NoError(t, s.FetchAndSaveMatchResults(ctx, tournamentB, "Stage 1"))
+
+	var externalIDA, externalIDB string
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT external_id FROM matches WHERE tournament_id = $1`, tournamentA).Scan(&externalIDA))
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT external_id FROM matches WHERE tournament_id = $1`, tournamentB).Scan(&externalIDB))
+
+	assert.Equal(t, "tournament-a", externalIDA, "tournament A's fetch should have used its own external id")
+	assert.Equal(t, "tournament-b", externalIDB, "tournament B's fetch should have used its own external id")
 }
 
 // endregion

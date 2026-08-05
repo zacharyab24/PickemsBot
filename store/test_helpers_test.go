@@ -66,16 +66,31 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// newTestStore wraps testPool with nil fetcher and nil logger.
+// newTestStore wraps testPool with no fetcher resolver and nil logger.
 func newTestStore(t *testing.T) *PostgresStore {
 	t.Helper()
-	return &PostgresStore{pool: testPool, fetcher: nil, log: nil}
+	return &PostgresStore{pool: testPool, log: nil}
 }
 
-// newTestStoreWithFetcher wraps testPool with the provided fetcher.
+// newTestStoreWithFetcher wraps testPool with a resolver that returns f
+// regardless of the tournament passed in - fine for tests that don't care
+// about source-specific resolution, only about what FetchAndSaveSchedule/
+// FetchAndSaveMatchResults do with whatever the fetcher returns.
 func newTestStoreWithFetcher(t *testing.T, f DataSourceFetcher) *PostgresStore {
 	t.Helper()
-	return &PostgresStore{pool: testPool, fetcher: f, log: nil}
+	return &PostgresStore{
+		pool:           testPool,
+		resolveFetcher: func(Tournament) (DataSourceFetcher, error) { return f, nil },
+		log:            nil,
+	}
+}
+
+// newTestStoreWithFetcherResolver wraps testPool with a caller-provided
+// resolver, for tests that need the fetcher to depend on the tournament being
+// fetched (e.g. asserting each tournament's fetch uses its own identity).
+func newTestStoreWithFetcherResolver(t *testing.T, resolve func(Tournament) (DataSourceFetcher, error)) *PostgresStore {
+	t.Helper()
+	return &PostgresStore{pool: testPool, resolveFetcher: resolve, log: nil}
 }
 
 // seedTournamentNullFormat inserts a tournament with NULL format and returns its id.

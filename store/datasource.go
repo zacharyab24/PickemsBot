@@ -7,7 +7,16 @@ import (
 
 // DataSourceFetcher interface — two implementations: Liquipedia, PandaScore
 type DataSourceFetcher interface {
-	FetchMatchData(round string) (tournament.MatchResult, []sources.MatchNode, error)
+	// FetchMatchData fetches raw match data and builds a MatchResult for round.
+	// knownKind is the tournament's already-persisted format (from
+	// checkAndStoreFormat's bracket-based detection); pass "" if it isn't
+	// known yet. When set, it's trusted over re-deriving a kind from the
+	// fetched match nodes' Section strings - that keyword-based detection
+	// (DetectKindFromMatchNodes) doesn't recognise every bracket shape a
+	// tournament can take (e.g. group-stage/double-elimination naming
+	// conventions), so re-guessing it here can disagree with, and be less
+	// reliable than, the bracket-endpoint detection already done and stored.
+	FetchMatchData(round string, knownKind tournament.Kind) (tournament.MatchResult, []sources.MatchNode, error)
 	FetchSchedule() ([]sources.ScheduledMatch, error)
 }
 
@@ -31,8 +40,9 @@ func NewLiquipediaFetcher(apiURL, apiKey, page string) LiquipediaFetcher {
 	return LiquipediaFetcher{apiURL: apiURL, apiKey: apiKey, page: page}
 }
 
-// FetchMatchData fetches match data using liquipedia as a datasource, filtered to the current round of a tournament
-func (f LiquipediaFetcher) FetchMatchData(round string) (tournament.MatchResult, []sources.MatchNode, error) {
+// FetchMatchData fetches match data using liquipedia as a datasource, filtered to the current round of a tournament.
+// See DataSourceFetcher.FetchMatchData for knownKind.
+func (f LiquipediaFetcher) FetchMatchData(round string, knownKind tournament.Kind) (tournament.MatchResult, []sources.MatchNode, error) {
 	matchData, err := sources.GetLiquipediaMatchDataByPage(f.apiURL, f.apiKey, f.page)
 	if err != nil {
 		return nil, nil, err
@@ -43,9 +53,12 @@ func (f LiquipediaFetcher) FetchMatchData(round string) (tournament.MatchResult,
 		return nil, nil, err
 	}
 
-	kind, err := tournament.DetectKindFromMatchNodes(matchNodes)
-	if err != nil {
-		return nil, nil, err
+	kind := knownKind
+	if kind == "" {
+		kind, err = tournament.DetectKindFromMatchNodes(matchNodes)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	format, err := tournament.Get(kind)
@@ -78,8 +91,9 @@ func NewPandaScoreFetcher(apiURL string, apiKey string, seriesID int, tournament
 	return PandaScoreFetcher{apiURL: apiURL, apiKey: apiKey, seriesID: seriesID, tournamentID: tournamentID}
 }
 
-// FetchMatchData fetches match data using PandaSource as a datasource, filtered to the current round of a tournament
-func (f PandaScoreFetcher) FetchMatchData(round string) (tournament.MatchResult, []sources.MatchNode, error) {
+// FetchMatchData fetches match data using PandaSource as a datasource, filtered to the current round of a tournament.
+// See DataSourceFetcher.FetchMatchData for knownKind.
+func (f PandaScoreFetcher) FetchMatchData(round string, knownKind tournament.Kind) (tournament.MatchResult, []sources.MatchNode, error) {
 	matchData, err := sources.GetPandaScoreMatches(f.apiURL, f.apiKey, f.seriesID, f.tournamentID)
 	if err != nil {
 		return nil, nil, err
@@ -90,9 +104,12 @@ func (f PandaScoreFetcher) FetchMatchData(round string) (tournament.MatchResult,
 		return nil, nil, err
 	}
 
-	kind, err := tournament.DetectKindFromMatchNodes(matchNodes)
-	if err != nil {
-		return nil, nil, err
+	kind := knownKind
+	if kind == "" {
+		kind, err = tournament.DetectKindFromMatchNodes(matchNodes)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	format, err := tournament.Get(kind)

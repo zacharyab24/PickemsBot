@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"pickems-bot/tournament"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -56,6 +58,25 @@ const psMatchJSON = `[
   }
 ]`
 
+// Minimal PandaScore JSON shaped like a group-stage/double-elimination match -
+// its "name" ("Winners' match") contains none of the keywords
+// DetectKindFromMatchNodes looks for ("round", "final"/"quarterfinal"/
+// "semifinal", "upper", "lower"), so section-based auto-detection can't
+// classify it even though it's a perfectly real, already-known format.
+const psGroupStageJSON = `[
+  {
+    "id": 1,
+    "name": "Winners' match",
+    "status": "not_started",
+    "opponents": [
+      {"opponent": {"name": "Alpha", "id": 1}},
+      {"opponent": {"name": "Beta",  "id": 2}}
+    ],
+    "winner": null,
+    "results": []
+  }
+]`
+
 // Minimal PandaScore schedule JSON.
 const psScheduleJSON = `[
   {
@@ -91,7 +112,7 @@ func TestLiquipediaFetcher_FetchMatchData_Success(t *testing.T) {
 	defer srv.Close()
 
 	f := NewLiquipediaFetcher(srv.URL, "test-key", "Test/Page")
-	result, nodes, err := f.FetchMatchData("Round 1")
+	result, nodes, err := f.FetchMatchData("Round 1", "")
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.NotEmpty(t, nodes)
@@ -104,7 +125,7 @@ func TestLiquipediaFetcher_FetchMatchData_HTTPError(t *testing.T) {
 	defer srv.Close()
 
 	f := NewLiquipediaFetcher(srv.URL, "key", "Test/Page")
-	_, _, err := f.FetchMatchData("Round 1")
+	_, _, err := f.FetchMatchData("Round 1", "")
 	require.Error(t, err)
 }
 
@@ -146,7 +167,7 @@ func TestPandaScoreFetcher_FetchMatchData_Success(t *testing.T) {
 	defer srv.Close()
 
 	f := NewPandaScoreFetcher(srv.URL, "test-key", 99001, 0)
-	result, nodes, err := f.FetchMatchData("Round 1")
+	result, nodes, err := f.FetchMatchData("Round 1", "")
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.NotEmpty(t, nodes)
@@ -159,8 +180,41 @@ func TestPandaScoreFetcher_FetchMatchData_Unauthorized(t *testing.T) {
 	defer srv.Close()
 
 	f := NewPandaScoreFetcher(srv.URL, "key", 99001, 0)
-	_, _, err := f.FetchMatchData("Round 1")
+	_, _, err := f.FetchMatchData("Round 1", "")
 	require.Error(t, err)
+}
+
+// TestPandaScoreFetcher_FetchMatchData_UnrecognisedSection_FailsWithoutKnownKind
+// and the "_KnownKindBypassesDetection" test below are the regression pair for
+// the bug where FetchMatchData re-derived a format from match node sections
+// even when the tournament's real format was already known - section-based
+// detection doesn't recognise every bracket shape (e.g. this group-stage
+// naming), even though the already-persisted format is perfectly valid.
+func TestPandaScoreFetcher_FetchMatchData_UnrecognisedSection_FailsWithoutKnownKind(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(psGroupStageJSON))
+	}))
+	defer srv.Close()
+
+	f := NewPandaScoreFetcher(srv.URL, "test-key", 99001, 0)
+	_, _, err := f.FetchMatchData("Group B", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "could not detect tournament format")
+}
+
+func TestPandaScoreFetcher_FetchMatchData_KnownKindBypassesDetection(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(psGroupStageJSON))
+	}))
+	defer srv.Close()
+
+	f := NewPandaScoreFetcher(srv.URL, "test-key", 99001, 0)
+	_, _, err := f.FetchMatchData("Group B", tournament.DoubleElim)
+	// Detection is skipped entirely - this reaches the registered
+	// unsupported-format placeholder instead of the section-detection error.
+	require.ErrorIs(t, err, tournament.ErrPredictionsUnsupported)
 }
 
 func TestPandaScoreFetcher_FetchSchedule_Success(t *testing.T) {
