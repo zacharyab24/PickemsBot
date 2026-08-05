@@ -24,12 +24,14 @@ type Interface interface {
 	GetTournamentByNameAndRound(ctx context.Context, name, round string) (Tournament, error)
 	GetTournament(ctx context.Context, id int) (Tournament, error)
 	SetTournamentFormat(ctx context.Context, id int, format string) error
-	SyncTournaments(ctx context.Context, active []TournamentCatalogEntry) error
+	SyncTournaments(ctx context.Context, active []TournamentCatalogEntry) ([]int, error)
 
 	// Guild config — new in v4, used by /config (#67)
 	EnsureGuild(ctx context.Context, guildID string) error
 	GetGuildConfig(ctx context.Context, guildID, channelID string) (GuildConfig, error)
 	UpsertGuildConfig(ctx context.Context, cfg GuildConfig) error
+	TournamentStillReferenced(ctx context.Context, tournamentID, excludeConfigID int) (bool, error)
+	ListTrackedTournamentIDs(ctx context.Context) ([]int, error)
 
 	// Match data
 	EnsureScheduledMatches(ctx context.Context, tournamentID int) error

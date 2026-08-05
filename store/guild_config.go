@@ -64,3 +64,45 @@ func (s *PostgresStore) EnsureGuild(ctx context.Context, guildID string) error {
 	}
 	return nil
 }
+
+// ListTrackedTournamentIDs returns the distinct tournament ids referenced
+// across every guild_config row. Used once at startup to re-seed the poller's
+// monitoring pool after a restart, since the pool itself starts empty and has
+// no memory of what was being tracked before the process stopped.
+func (s *PostgresStore) ListTrackedTournamentIDs(ctx context.Context) ([]int, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT DISTINCT tournament_id FROM guild_config WHERE tournament_id IS NOT NULL`)
+	if err != nil {
+		return nil, fmt.Errorf("ListTrackedTournamentIDs: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("ListTrackedTournamentIDs: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("ListTrackedTournamentIDs: %w", err)
+	}
+	return ids, nil
+}
+
+// TournamentStillReferenced reports whether any guild_config row other than
+// excludeConfigID still points at tournamentID. Used before dropping a
+// tournament from the poller's monitoring pool when a guild switches away
+// from it, so a tournament another guild is still tracking isn't stopped.
+func (s *PostgresStore) TournamentStillReferenced(ctx context.Context, tournamentID, excludeConfigID int) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM guild_config WHERE tournament_id = $1 AND id <> $2)`,
+		tournamentID, excludeConfigID,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("TournamentStillReferenced: %w", err)
+	}
+	return exists, nil
+}

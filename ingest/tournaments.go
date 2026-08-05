@@ -78,11 +78,18 @@ func (s *TournamentSync) runOnce(ctx context.Context) {
 		s.logger().Warn("no active tournaments returned, skipping sync")
 		return
 	}
-	if err := s.app.Store.SyncTournaments(ctx, active); err != nil {
+	newlyFinished, err := s.app.Store.SyncTournaments(ctx, active)
+	if err != nil {
 		s.logger().Warn("tournament sync failed", "error", err)
 		return
 	}
-	s.logger().Info("tournament catalog synced", "count", len(active))
+	// A tournament that just finished is done for good - drop it from the
+	// poller's monitoring pool regardless of how many guilds still have it
+	// configured, rather than keep burning API calls on a decided bracket.
+	for _, id := range newlyFinished {
+		s.app.Unsubscribe(ctx, id)
+	}
+	s.logger().Info("tournament catalog synced", "count", len(active), "newly_finished", len(newlyFinished))
 }
 
 // fetchActive returns the combined upcoming + running tournament set, each fetch

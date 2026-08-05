@@ -35,9 +35,10 @@ import (
 
 // App provides methods for interacting with the pickems bot data layer.
 type App struct {
-	Store       store.Interface
-	rateLimiter *rate.Limiter
-	log         *slog.Logger
+	Store          store.Interface
+	rateLimiter    *rate.Limiter
+	log            *slog.Logger
+	MonitoringPool *MonitoringPool
 }
 
 func (a *App) logger() *slog.Logger {
@@ -78,9 +79,10 @@ func NewApp(cfg config.Config, postgresURI string, log *slog.Logger) (*App, erro
 	}
 
 	return &App{
-		Store:       s,
-		rateLimiter: limiter,
-		log:         appLog,
+		Store:          s,
+		rateLimiter:    limiter,
+		log:            appLog,
+		MonitoringPool: newMonitoringPool(),
 	}, nil
 }
 
@@ -488,6 +490,15 @@ func (a *App) GetConfig(ctx context.Context, guildID, channelID string) (store.G
 // resolved tournament for the confirmation message. An unrecognised pair (e.g.
 // free-typed text that matched no row) surfaces as an error.
 func (a *App) SetConfigTournament(ctx context.Context, guildID, channelID, name, round string) (store.Tournament, error) {
+	// Read the pre-change config so updatePoolAsync knows what tournament (if
+	// any) this guild/channel is switching away from. A missing row just means
+	// first-time setup - prev.TournamentID stays nil, so there's nothing to
+	// unsubscribe.
+	prev, err := a.Store.GetGuildConfig(ctx, guildID, channelID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return store.Tournament{}, fmt.Errorf("SetConfigTournament: %w", err)
+	}
+
 	t, err := a.Store.GetTournamentByNameAndRound(ctx, name, round)
 	if err != nil {
 		return store.Tournament{}, fmt.Errorf("SetConfigTournament: %w", err)
@@ -501,6 +512,7 @@ func (a *App) SetConfigTournament(ctx context.Context, guildID, channelID, name,
 	}
 
 	go a.detectFormatAsync(t)
+	go a.updatePoolAsync(prev, t.ID)
 	return t, nil
 }
 
@@ -565,6 +577,8 @@ func (a *App) SetConfigRound(ctx context.Context, guildID, channelID, round stri
 	}
 
 	go a.detectFormatAsync(t)
+	go a.updatePoolAsync(cfg, t.ID)
+
 	return t, nil
 }
 
@@ -607,6 +621,35 @@ func (a *App) detectFormatAsync(t store.Tournament) {
 		a.logger().Warn("format detection failed",
 			"tournament_id", t.ID, "external_id", t.ExternalID, "error", err)
 	}
+}
+
+// updatePoolAsync runs updatePool in the background after a config change.
+// Like detectFormatAsync, it uses a detached context because the caller's
+// request context may be cancelled once it responds.
+func (a *App) updatePoolAsync(prev store.GuildConfig, newTournamentID int) {
+	a.updatePool(context.Background(), prev, newTournamentID)
+}
+
+// updatePool reconciles the monitoring pool with a guild's config change.
+// prev is the guild_config row read before the switch: if it was already
+// pointed at a different tournament, that tournament is unsubscribed - but
+// only once TournamentStillReferenced confirms no other guild_config row
+// still points at it, so switching one guild away doesn't stop polling for
+// another guild still tracking the same tournament. On a
+// TournamentStillReferenced error, the old tournament is left subscribed
+// rather than risking dropping one still in use. newTournamentID is always
+// subscribed, whether or not there was a previous tournament to unsubscribe.
+func (a *App) updatePool(ctx context.Context, prev store.GuildConfig, newTournamentID int) {
+	if prev.TournamentID != nil && *prev.TournamentID != newTournamentID {
+		stillReferenced, err := a.Store.TournamentStillReferenced(ctx, *prev.TournamentID, prev.ID)
+		if err != nil {
+			a.logger().Warn("failed to check if tournament is still referenced, leaving it subscribed",
+				"tournament_id", *prev.TournamentID, "error", err)
+		} else if !stillReferenced {
+			a.Unsubscribe(ctx, *prev.TournamentID)
+		}
+	}
+	a.Subscribe(ctx, newTournamentID)
 }
 
 // checkAndStoreFormat fetches the PandaScore bracket for a tournament, infers its format kind, and persists that value in the db.

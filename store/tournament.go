@@ -53,14 +53,20 @@ type TournamentCatalogEntry struct {
 // this owns round/series_id for pandascore catalog rows and overwrites them, and
 // resets is_finished to false: anything in the active set is by definition live,
 // so a previously-swept tournament that reappears is reactivated.
-func (s *PostgresStore) SyncTournaments(ctx context.Context, active []TournamentCatalogEntry) error {
+//
+// Returns the internal DB ids of any row the finished-sweep just flipped to
+// finished, so the caller (ingest.TournamentSync) can drop them from the
+// poller's monitoring pool - a tournament already finished before this run
+// isn't included, since it doesn't transition here and this call has no way
+// to tell that apart from one that's been finished all along.
+func (s *PostgresStore) SyncTournaments(ctx context.Context, active []TournamentCatalogEntry) ([]int, error) {
 	if len(active) == 0 {
-		return fmt.Errorf("SyncTournaments: empty active set, refusing to run finished-sweep")
+		return nil, fmt.Errorf("SyncTournaments: empty active set, refusing to run finished-sweep")
 	}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("SyncTournaments: begin tx: %w", err)
+		return nil, fmt.Errorf("SyncTournaments: begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
@@ -77,21 +83,40 @@ func (s *PostgresStore) SyncTournaments(ctx context.Context, active []Tournament
 				series_id   = EXCLUDED.series_id,
 				is_finished = false
 		`, t.ExternalID, t.Name, t.Round, t.SeriesID); err != nil {
-			return fmt.Errorf("SyncTournaments: upsert %q: %w", t.Name, err)
+			return nil, fmt.Errorf("SyncTournaments: upsert %q: %w", t.Name, err)
 		}
 	}
 
-	if _, err := tx.Exec(ctx, `
+	rows, err := tx.Query(ctx, `
 		UPDATE tournaments
 		   SET is_finished = true
 		 WHERE source = 'pandascore'
 		   AND is_finished = false
 		   AND external_id <> ALL($1)
-	`, activeIDs); err != nil {
-		return fmt.Errorf("SyncTournaments: finished-sweep: %w", err)
+		RETURNING id
+	`, activeIDs)
+	if err != nil {
+		return nil, fmt.Errorf("SyncTournaments: finished-sweep: %w", err)
 	}
+	var newlyFinished []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("SyncTournaments: finished-sweep scan: %w", err)
+		}
+		newlyFinished = append(newlyFinished, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("SyncTournaments: finished-sweep: %w", err)
+	}
+	rows.Close()
 
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("SyncTournaments: commit: %w", err)
+	}
+	return newlyFinished, nil
 }
 
 // Tournament is a lightweight view of a tournament row, used to populate the
@@ -107,7 +132,7 @@ type Tournament struct {
 	Name       string
 	SeriesID   string
 	Format     *string
-	isFinished bool
+	IsFinished bool
 }
 
 // ListTournamentNames returns the distinct tournament names for the /config
@@ -174,7 +199,7 @@ func (s *PostgresStore) GetTournamentByNameAndRound(ctx context.Context, name, r
 		tournamentSelect+`
 		 WHERE name = $1 AND COALESCE(round, '') = $2
 		 ORDER BY id LIMIT 1`, name, round,
-	).Scan(&t.ID, &t.Source, &t.ExternalID, &t.Round, &t.Name, &t.SeriesID, &t.Format, &t.isFinished)
+	).Scan(&t.ID, &t.Source, &t.ExternalID, &t.Round, &t.Name, &t.SeriesID, &t.Format, &t.IsFinished)
 	if err != nil {
 		return Tournament{}, fmt.Errorf("GetTournamentByNameAndRound: %w", err)
 	}
@@ -189,7 +214,7 @@ func (s *PostgresStore) GetTournament(ctx context.Context, id int) (Tournament, 
 	var t Tournament
 	err := s.pool.QueryRow(ctx,
 		tournamentSelect+` WHERE id = $1`, id,
-	).Scan(&t.ID, &t.Source, &t.ExternalID, &t.Round, &t.Name, &t.SeriesID, &t.Format, &t.isFinished)
+	).Scan(&t.ID, &t.Source, &t.ExternalID, &t.Round, &t.Name, &t.SeriesID, &t.Format, &t.IsFinished)
 	if err != nil {
 		return Tournament{}, fmt.Errorf("GetTournament: %w", err)
 	}

@@ -107,10 +107,11 @@ func TestSyncTournaments_UpsertsActiveSet(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
 
-	require.NoError(t, s.SyncTournaments(ctx, []TournamentCatalogEntry{
+	_, err := s.SyncTournaments(ctx, []TournamentCatalogEntry{
 		{ExternalID: "21474", Name: "BLAST Bounty Summer 2026", Round: "Qualifier", SeriesID: "10801"},
 		{ExternalID: "21475", Name: "BLAST Bounty Summer 2026", Round: "Playoffs", SeriesID: "10801"},
-	}))
+	})
+	require.NoError(t, err)
 
 	names, err := s.ListTournamentNames(ctx)
 	require.NoError(t, err)
@@ -126,18 +127,21 @@ func TestSyncTournaments_MarksDroppedAsFinished(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
 
-	require.NoError(t, s.SyncTournaments(ctx, []TournamentCatalogEntry{
+	_, err := s.SyncTournaments(ctx, []TournamentCatalogEntry{
 		{ExternalID: "1", Name: "Event A", Round: "Playoffs", SeriesID: "100"},
 		{ExternalID: "2", Name: "Event B", Round: "Playoffs", SeriesID: "200"},
-	}))
+	})
+	require.NoError(t, err)
 
 	// Event B drops out of the active set -> swept to finished; A stays active.
-	require.NoError(t, s.SyncTournaments(ctx, []TournamentCatalogEntry{
+	newlyFinished, err := s.SyncTournaments(ctx, []TournamentCatalogEntry{
 		{ExternalID: "1", Name: "Event A", Round: "Playoffs", SeriesID: "100"},
-	}))
+	})
+	require.NoError(t, err)
 
 	assert.False(t, tournamentFinished(t, ctx, "1"), "Event A still active")
 	assert.True(t, tournamentFinished(t, ctx, "2"), "Event B dropped -> finished")
+	assert.Equal(t, []int{tournamentID(t, ctx, "2")}, newlyFinished, "sweep returns Event B's id")
 }
 
 func TestSyncTournaments_ReactivatesReturningTournament(t *testing.T) {
@@ -145,19 +149,23 @@ func TestSyncTournaments_ReactivatesReturningTournament(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
 
-	require.NoError(t, s.SyncTournaments(ctx, []TournamentCatalogEntry{
+	_, err := s.SyncTournaments(ctx, []TournamentCatalogEntry{
 		{ExternalID: "1", Name: "Event A", Round: "Playoffs", SeriesID: "100"},
 		{ExternalID: "2", Name: "Event B", Round: "Playoffs", SeriesID: "200"},
-	}))
-	require.NoError(t, s.SyncTournaments(ctx, []TournamentCatalogEntry{
+	})
+	require.NoError(t, err)
+	_, err = s.SyncTournaments(ctx, []TournamentCatalogEntry{
 		{ExternalID: "1", Name: "Event A", Round: "Playoffs", SeriesID: "100"},
-	})) // B -> finished
-	require.NoError(t, s.SyncTournaments(ctx, []TournamentCatalogEntry{
+	}) // B -> finished
+	require.NoError(t, err)
+	newlyFinished, err := s.SyncTournaments(ctx, []TournamentCatalogEntry{
 		{ExternalID: "1", Name: "Event A", Round: "Playoffs", SeriesID: "100"},
 		{ExternalID: "2", Name: "Event B", Round: "Playoffs", SeriesID: "200"},
-	})) // B reappears in the active set
+	}) // B reappears in the active set
+	require.NoError(t, err)
 
 	assert.False(t, tournamentFinished(t, ctx, "2"), "Event B reappeared -> reactivated")
+	assert.Empty(t, newlyFinished, "reactivation is not a finished-sweep transition")
 }
 
 func TestSyncTournaments_EmptyActiveError(t *testing.T) {
@@ -165,7 +173,8 @@ func TestSyncTournaments_EmptyActiveError(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
 
-	assert.Error(t, s.SyncTournaments(ctx, nil))
+	_, err := s.SyncTournaments(ctx, nil)
+	assert.Error(t, err)
 }
 
 func tournamentFinished(t *testing.T, ctx context.Context, externalID string) bool {
@@ -175,4 +184,13 @@ func tournamentFinished(t *testing.T, ctx context.Context, externalID string) bo
 		`SELECT is_finished FROM tournaments WHERE source='pandascore' AND external_id=$1`, externalID).Scan(&finished)
 	require.NoError(t, err)
 	return finished
+}
+
+func tournamentID(t *testing.T, ctx context.Context, externalID string) int {
+	t.Helper()
+	var id int
+	err := testPool.QueryRow(ctx,
+		`SELECT id FROM tournaments WHERE source='pandascore' AND external_id=$1`, externalID).Scan(&id)
+	require.NoError(t, err)
+	return id
 }

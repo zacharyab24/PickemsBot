@@ -99,8 +99,27 @@ func main() {
 		}
 	}()
 
+	// The poller tracks every tournament in the monitoring pool, not just one
+	// fixed at startup - guilds add/remove tournaments via /config, which
+	// Subscribes/Unsubscribes them at runtime (see app.SetConfigTournament,
+	// app.SetConfigRound). BootstrapPool re-seeds the pool (which itself starts
+	// empty) from whatever guild_config already points at, so tournaments
+	// configured before a restart don't sit unpolled until reconfigured.
+	if err := apiInstance.BootstrapPool(context.Background()); err != nil {
+		logger.Error("failed to bootstrap monitoring pool", "error", err)
+		os.Exit(1)
+	}
+	poller := web.NewPoller(apiInstance, os.Getenv("PANDASCORE_API_KEY"), cfg.PandaScore.APIURL, logger)
+	go poller.Start()
+	logger.Info("PandaScore poller started")
+
 	switch cfg.DataSource {
 	case "pandascore":
+		// Seeds config.toml's tournament into the catalog and populates its
+		// initial data so it's immediately usable via /config, without waiting
+		// on the hourly ingest.TournamentSync catalog sync to discover it. It
+		// isn't subscribed here - the poller only tracks what /config points a
+		// guild at (see BootstrapPool above and app.SetConfigTournament).
 		externalID := strconv.Itoa(cfg.PandaScore.TournamentID)
 		dbTournamentID, err := apiInstance.Store.EnsureTournament(context.Background(), externalID, "pandascore", cfg.TournamentName, cfg.PandaScore.SeriesID)
 		if err != nil {
@@ -110,9 +129,7 @@ func main() {
 		if err := apiInstance.PopulateMatches(context.Background(), dbTournamentID, cfg.Round, false); err != nil {
 			logger.Warn("startup populate failed, bot will retry on next poller tick", "error", err)
 		}
-		poller := web.NewPoller(apiInstance, cfg.PandaScore.SeriesID, cfg.PandaScore.TournamentID, dbTournamentID, cfg.Round, os.Getenv("PANDASCORE_API_KEY"), cfg.PandaScore.APIURL, logger)
-		go poller.Start()
-		logger.Info("PandaScore poller started", "db_tournament_id", dbTournamentID)
+		logger.Info("PandaScore tournament seeded", "db_tournament_id", dbTournamentID)
 	case "liquipedia":
 		dbTournamentID, err := apiInstance.Store.EnsureTournament(context.Background(), cfg.Liquipedia.Page, "liquipedia", cfg.TournamentName, 0)
 		if err != nil {

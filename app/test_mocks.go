@@ -32,27 +32,33 @@ type MockStore struct {
 	GuildConfig      store.GuildConfig
 	// UpsertedGuildConfig captures the last config passed to UpsertGuildConfig, for assertions.
 	UpsertedGuildConfig *store.GuildConfig
+	// TournamentStillReferencedResult is returned by TournamentStillReferenced.
+	TournamentStillReferencedResult bool
+	// ListTrackedTournamentIDsResult is returned by ListTrackedTournamentIDs.
+	ListTrackedTournamentIDsResult []int
 
 	// Error injection
-	EnsureTournamentError         error
-	PingError                     error
-	GetGuildConfigError           error
-	UpsertGuildConfigError        error
-	EnsureScheduledMatchesError   error
-	ListValidTeamsError           error
-	GetMatchResultsError          error
-	UpsertMatchResultsError       error
-	FetchAndSaveMatchResultsError error
-	GetMatchNodesError            error
-	GetMatchScheduleError         error
-	UpsertMatchScheduleError      error
-	FetchAndSaveScheduleError     error
-	UpsertPredictionError         error
-	GetPredictionError            error
-	GetPredictionByUsernameError  error
-	ListPredictionsError          error
-	GetLeaderboardError           error
-	ListVRSRankingsError          error
+	EnsureTournamentError          error
+	PingError                      error
+	GetGuildConfigError            error
+	UpsertGuildConfigError         error
+	TournamentStillReferencedError error
+	ListTrackedTournamentIDsError  error
+	EnsureScheduledMatchesError    error
+	ListValidTeamsError            error
+	GetMatchResultsError           error
+	UpsertMatchResultsError        error
+	FetchAndSaveMatchResultsError  error
+	GetMatchNodesError             error
+	GetMatchScheduleError          error
+	UpsertMatchScheduleError       error
+	FetchAndSaveScheduleError      error
+	UpsertPredictionError          error
+	GetPredictionError             error
+	GetPredictionByUsernameError   error
+	ListPredictionsError           error
+	GetLeaderboardError            error
+	ListVRSRankingsError           error
 
 	StoreMatchScheduleCallCount int
 	Tournaments                 []store.Tournament
@@ -61,11 +67,12 @@ type MockStore struct {
 	GetTournamentError          error
 	EnsureGuildError            error
 
-	SyncedTournaments    []store.TournamentCatalogEntry
-	SyncTournamentsError error
-	SyncedStandings      []store.VRSEntry
-	SyncStandingsResult  bool
-	SyncStandingsError   error
+	SyncedTournaments            []store.TournamentCatalogEntry
+	SyncTournamentsError         error
+	SyncTournamentsNewlyFinished []int
+	SyncedStandings              []store.VRSEntry
+	SyncStandingsResult          bool
+	SyncStandingsError           error
 
 	SetFormatID              int
 	SetFormatValue           string
@@ -120,6 +127,16 @@ func (m *MockStore) UpsertGuildConfig(ctx context.Context, cfg store.GuildConfig
 // EnsureGuild implements store.Interface.
 func (m *MockStore) EnsureGuild(ctx context.Context, guildID string) error {
 	return m.EnsureGuildError
+}
+
+// TournamentStillReferenced implements store.Interface.
+func (m *MockStore) TournamentStillReferenced(ctx context.Context, tournamentID, excludeConfigID int) (bool, error) {
+	return m.TournamentStillReferencedResult, m.TournamentStillReferencedError
+}
+
+// ListTrackedTournamentIDs implements store.Interface.
+func (m *MockStore) ListTrackedTournamentIDs(ctx context.Context) ([]int, error) {
+	return m.ListTrackedTournamentIDsResult, m.ListTrackedTournamentIDsError
 }
 
 // ListTournamentNames implements store.Interface, deriving distinct names from
@@ -182,13 +199,14 @@ func (m *MockStore) GetTournament(_ context.Context, id int) (store.Tournament, 
 	return store.Tournament{}, fmt.Errorf("tournament not found: id=%d", id)
 }
 
-// SyncTournaments implements store.Interface, recording the active set it was given.
-func (m *MockStore) SyncTournaments(_ context.Context, active []store.TournamentCatalogEntry) error {
+// SyncTournaments implements store.Interface, recording the active set it was
+// given and returning the configured SyncTournamentsNewlyFinished ids.
+func (m *MockStore) SyncTournaments(_ context.Context, active []store.TournamentCatalogEntry) ([]int, error) {
 	if m.SyncTournamentsError != nil {
-		return m.SyncTournamentsError
+		return nil, m.SyncTournamentsError
 	}
 	m.SyncedTournaments = active
-	return nil
+	return m.SyncTournamentsNewlyFinished, nil
 }
 
 // SetTournamentFormat implements store.Interface, recording the last (id, format) set.
@@ -381,7 +399,8 @@ func (m *MockStore) SetVRSEntries(entries []store.VRSEntry) {
 // NewTestApp creates a minimal App for unit tests with an unlimited rate limiter.
 func NewTestApp(s store.Interface) *App {
 	return &App{
-		Store:       s,
-		rateLimiter: rate.NewLimiter(rate.Inf, 1),
+		Store:          s,
+		rateLimiter:    rate.NewLimiter(rate.Inf, 1),
+		MonitoringPool: newMonitoringPool(),
 	}
 }
