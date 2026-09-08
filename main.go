@@ -61,10 +61,8 @@ func main() {
 	}
 	defer apiInstance.Store.Close()
 
-	// Background ingestion jobs: keep the tournament catalog (/config picklist) and
-	// VRS rankings fresh, independent of the live-match poller. They run for the
-	// lifetime of the process on their own schedules; the tournament job shares the
-	// app's PandaScore rate limiter via app.Wait.
+	// Background ingestion jobs keep the tournament catalog (/config picklist)
+	// and VRS rankings fresh, independent of the live-match poller.
 	ingestCtx := context.Background()
 	if pandaKey := os.Getenv("PANDASCORE_API_KEY"); pandaKey != "" {
 		go ingest.NewTournamentSync(apiInstance, pandaKey, time.Hour, logger).Start(ingestCtx)
@@ -99,12 +97,8 @@ func main() {
 		}
 	}()
 
-	// The poller tracks every tournament in the monitoring pool, not just one
-	// fixed at startup - guilds add/remove tournaments via /config, which
-	// Subscribes/Unsubscribes them at runtime (see app.SetConfigTournament,
-	// app.SetConfigRound). BootstrapPool re-seeds the pool (which itself starts
-	// empty) from whatever guild_config already points at, so tournaments
-	// configured before a restart don't sit unpolled until reconfigured.
+	// BootstrapPool re-seeds the monitoring pool (which starts empty on each
+	// restart) from guild_config before the poller starts.
 	if err := apiInstance.BootstrapPool(context.Background()); err != nil {
 		logger.Error("failed to bootstrap monitoring pool", "error", err)
 		os.Exit(1)
@@ -115,12 +109,10 @@ func main() {
 
 	switch cfg.DataSource {
 	case "pandascore":
-		// The tournament catalog is populated by ingest.TournamentSync's
-		// startup sync (live PandaScore data), and match data by /config
-		// (app.SetConfigTournament / app.SetConfigRound) the moment a guild
-		// first tracks a tournament - config.toml has nothing left to seed
-		// here. This case only exists so an unrecognised data_source still
-		// falls through to the default/exit below.
+		// PandaScore tournaments and match data are populated via
+		// ingest.TournamentSync and /config, not from config.toml. This case
+		// exists only so an unrecognised data_source still falls through to
+		// default/exit below.
 		logger.Info("PandaScore data source configured; tournaments are tracked via /config")
 	case "liquipedia":
 		dbTournamentID, err := apiInstance.Store.EnsureTournament(context.Background(), cfg.Liquipedia.Page, "liquipedia", cfg.TournamentName, 0)

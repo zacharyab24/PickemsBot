@@ -51,9 +51,8 @@ func (s *PostgresStore) FetchAndSaveMatchResults(ctx context.Context, tournament
 	}
 
 	// t.Format is the already-persisted bracket-endpoint detection
-	// (checkAndStoreFormat); pass it through so FetchMatchData trusts it
-	// instead of re-deriving a kind from match node sections, which doesn't
-	// recognise every bracket shape (e.g. group-stage/double-elimination).
+	// (checkAndStoreFormat) - pass it through so FetchMatchData trusts it
+	// instead of re-deriving a kind from match node sections.
 	var knownKind tournament.Kind
 	if t.Format != nil {
 		knownKind = tournament.Kind(*t.Format)

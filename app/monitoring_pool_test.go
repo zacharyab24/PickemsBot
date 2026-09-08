@@ -58,9 +58,8 @@ func TestSubscribe_AlreadyTracked_NoOp(t *testing.T) {
 	existing := &PoolEntry{DBTournamentID: 1, KnownStatus: map[string]string{"m1": "finished"}}
 	api.MonitoringPool.Entries[1] = existing
 
-	// No Tournaments seeded - if Subscribe fell through to GetTournament this
-	// would fail loudly (the mock returns "tournament not found"), which is
-	// how we know the already-tracked check really did short-circuit first.
+	// No Tournaments seeded - if Subscribe fell through to GetTournament it
+	// would fail loudly, confirming the already-tracked check short-circuited first.
 	api.Subscribe(bg(), 1)
 
 	if api.MonitoringPool.Entries[1] != existing {

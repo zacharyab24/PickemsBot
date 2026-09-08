@@ -484,11 +484,8 @@ func (b *Bot) configSetTournament(session DiscordSession, i *discordgo.Interacti
 	name := subOptionString(sub, "tournament")
 	round := subOptionString(sub, "round")
 
-	// Defer before the DB call - SetConfigTournament does several sequential
-	// queries (and, under transient DB slowness, may take longer than
-	// Discord's 3s window for an undeferred response), so respond after the
-	// work completes rather than risk an initial InteractionRespond that
-	// arrives too late and gets silently rejected.
+	// Defer before the DB call - SetConfigTournament may take longer than
+	// Discord's 3s window for an undeferred response.
 	if err := deferEphemeral(session, i.Interaction); err != nil {
 		b.logger().Error("failed to defer config set-tournament", "error", fmt.Errorf("configSetTournament: %w", err))
 		return
@@ -697,10 +694,8 @@ func (b *Bot) newAutocompleteInteractionHandler(session DiscordSession, i *disco
 	}
 }
 
-// configAutocomplete serves both autocompleted options on /config. The tournament
-// option offers distinct tournament names; the round option offers only the rounds
-// that belong to the tournament in scope - the sibling `tournament` value for
-// set-tournament, or the already-configured tournament for set-round.
+// configAutocomplete serves both autocompleted options on /config: the tournament
+// option offers distinct names, and round is scoped to the tournament in context.
 func (b *Bot) configAutocomplete(session DiscordSession, i *discordgo.InteractionCreate) {
 	data := i.ApplicationCommandData()
 	if len(data.Options) == 0 {

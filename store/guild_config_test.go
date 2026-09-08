@@ -142,15 +142,15 @@ func TestEnsureGuild_Idempotent(t *testing.T) {
 	assert.Equal(t, 1, count)
 }
 
-// TestEnsureGuild_SatisfiesGuildConfigFK is the reason this method exists: on a
-// brand-new guild with no seeded row, EnsureGuild must create the parent guilds
-// row so a first-time /config upsert doesn't fail the guild_config FK.
+// TestEnsureGuild_SatisfiesGuildConfigFK verifies EnsureGuild creates the
+// parent guilds row so a first-time /config upsert doesn't fail the
+// guild_config FK.
 func TestEnsureGuild_SatisfiesGuildConfigFK(t *testing.T) {
 	cleanDB(t)
 	ctx := context.Background()
 	s := newTestStore(t)
 
-	// Deliberately no seedGuild — EnsureGuild is the only thing creating the parent.
+	// Deliberately no seedGuild - EnsureGuild is the only thing creating the parent.
 	require.NoError(t, s.EnsureGuild(ctx, "guild-1"))
 
 	round := "Stage 1"

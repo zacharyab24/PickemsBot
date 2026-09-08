@@ -66,9 +66,7 @@ func NewApp(cfg config.Config, postgresURI string, log *slog.Logger) (*App, erro
 
 	// resolveFetcher builds a fetcher from the tournament actually being
 	// fetched, not from cfg.DataSource - guild_config is source-agnostic, so a
-	// store can end up fetching for tournaments of either source, and each
-	// fetch has to use that tournament's own identity (external id, series
-	// id), not whichever one config.toml happens to point at.
+	// store can end up fetching for tournaments of either source.
 	pandaScoreAPIURL, pandaScoreAPIKey := cfg.PandaScore.APIURL, os.Getenv("PANDASCORE_API_KEY")
 	liquipediaAPIURL, liquipediaAPIKey := cfg.Liquipedia.APIURL, os.Getenv("LIQUIDPEDIADB_API_KEY")
 	resolveFetcher := func(t store.Tournament) (store.DataSourceFetcher, error) {
@@ -117,9 +115,8 @@ func (a *App) Allow() bool {
 }
 
 // Wait blocks until the shared rate limiter permits another call, or ctx is
-// cancelled. Backed by the same limiter as Allow(), so background jobs that call
-// Wait and the poller that calls Allow() draw from one token bucket and together
-// stay within the API's rate limit. Batch jobs use this to pace instead of drop.
+// cancelled. Backed by the same limiter as Allow(); batch jobs use this to
+// pace instead of drop.
 func (a *App) Wait(ctx context.Context) error {
 	if a.rateLimiter == nil {
 		return nil
@@ -366,9 +363,8 @@ func (a *App) GetUpcomingMatches(ctx context.Context, guildID, channelID string)
 	}
 
 	// Unlike SetUserPrediction/CheckPrediction, no EnsureScheduledMatches guard
-	// here - "nothing scheduled yet" is a legitimate, answerable state for this
-	// command (an empty list), not a failure. GetMatchSchedule already returns
-	// an empty slice cleanly when there's nothing to show.
+	// here - "nothing scheduled yet" is a legitimate, answerable state (an
+	// empty list), not a failure.
 	scheduledMatches, err := a.Store.GetMatchSchedule(ctx, *cfg.TournamentID)
 	if err != nil {
 		return nil, err
@@ -505,15 +501,11 @@ func (a *App) GetConfig(ctx context.Context, guildID, channelID string) (store.G
 
 // SetConfigTournament points a guild/channel at a specific tournament stage,
 // identified by the (name, round) pair the admin picked in /config set-tournament.
-// The pair resolves to one tournament row; its internal id and round are stored
-// together so guild_config.round always matches the chosen row. Returns the
-// resolved tournament for the confirmation message. An unrecognised pair (e.g.
-// free-typed text that matched no row) surfaces as an error.
+// Returns the resolved tournament for the confirmation message. An unrecognised
+// pair (e.g. free-typed text that matched no row) surfaces as an error.
 func (a *App) SetConfigTournament(ctx context.Context, guildID, channelID, name, round string) (store.Tournament, error) {
-	// Read the pre-change config so updatePoolAsync knows what tournament (if
-	// any) this guild/channel is switching away from. A missing row just means
-	// first-time setup - prev.TournamentID stays nil, so there's nothing to
-	// unsubscribe.
+	// Read the pre-change config so updatePoolAsync can unsubscribe the old
+	// tournament, if any, once the switch is made.
 	prev, err := a.Store.GetGuildConfig(ctx, guildID, channelID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return store.Tournament{}, fmt.Errorf("SetConfigTournament: %w", err)
@@ -550,9 +542,8 @@ func (a *App) ListRoundsForTournament(ctx context.Context, name string) ([]strin
 }
 
 // RoundsForConfiguredTournament returns the rounds available for the tournament
-// currently configured on this guild/channel, so /config set-round can prefill
-// only valid rounds without the admin re-picking the tournament. Errors if no
-// tournament is configured yet.
+// currently configured on this guild/channel. Errors if no tournament is
+// configured yet.
 func (a *App) RoundsForConfiguredTournament(ctx context.Context, guildID, channelID string) ([]string, error) {
 	cfg, err := a.Store.GetGuildConfig(ctx, guildID, channelID)
 	if err != nil {
@@ -568,9 +559,8 @@ func (a *App) RoundsForConfiguredTournament(ctx context.Context, guildID, channe
 	return a.Store.ListRoundsForTournament(ctx, t.Name)
 }
 
-// SetConfigRound changes only the round for this guild/channel, keeping the same
-// tournament. Because each (name, round) is a distinct row, switching round means
-// repointing tournament_id at the sibling row for the new round, so this resolves
+// SetConfigRound changes only the round for this guild/channel, keeping the
+// same tournament. Each (name, round) pair is a distinct row, so this resolves
 // the current tournament's name plus the new round to that row and stores both.
 // Errors if no tournament is configured, or the round isn't valid for it.
 func (a *App) SetConfigRound(ctx context.Context, guildID, channelID, round string) (store.Tournament, error) {
@@ -606,19 +596,19 @@ func (a *App) SetConfigRound(ctx context.Context, guildID, channelID, round stri
 
 // upsertConfigField is a helper for updating a single field in the guild config.
 func (a *App) upsertConfigField(ctx context.Context, guildID, channelID string, mutate func(*store.GuildConfig)) error {
-	// Read current state; a missing row just means first-time setup — start empty.
+	// Read current state; a missing row just means first-time setup - start empty.
 	cfg, err := a.Store.GetGuildConfig(ctx, guildID, channelID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("upsertConfigField: %w", err)
 	}
 
-	// results_channel_id is the ON CONFLICT key — must be set for the upsert to match.
+	// results_channel_id is the ON CONFLICT key - must be set for the upsert to match.
 	cfg.GuildID = guildID
 	cfg.ResultsChannelID = &channelID
 
 	mutate(&cfg) // caller's one-field change
 
-	// guild_config.guild_id has an FK to guilds — ensure the parent row first.
+	// guild_config.guild_id has an FK to guilds - ensure the parent row first.
 	if err := a.Store.EnsureGuild(ctx, guildID); err != nil {
 		return fmt.Errorf("upsertConfigField: %w", err)
 	}
@@ -629,15 +619,8 @@ func (a *App) upsertConfigField(ctx context.Context, guildID, channelID string, 
 }
 
 // detectFormatAsync runs checkAndStoreFormat in the background after a config
-// change, logging (not returning) any failure. Detection waits on the shared
-// rate limiter and hits the network, so it must not block the Discord
-// interaction that triggered the config change. It uses a detached context
-// because the caller's request context may be cancelled once it responds.
-//
-// Consequence for the poller subscription pool (next v4 step): a just-configured
-// tournament may briefly have a NULL/undetected format, so the pool builder must
-// tolerate that (skip-and-log, or retry) rather than assume every configured
-// tournament already has a supported format.
+// change, logging (not returning) any failure. Uses a detached context since
+// the caller's request context may be cancelled once it responds.
 func (a *App) detectFormatAsync(t store.Tournament) {
 	if err := a.checkAndStoreFormat(context.Background(), t); err != nil {
 		a.logger().Warn("format detection failed",
@@ -653,14 +636,10 @@ func (a *App) updatePoolAsync(prev store.GuildConfig, newTournamentID int) {
 }
 
 // updatePool reconciles the monitoring pool with a guild's config change.
-// prev is the guild_config row read before the switch: if it was already
-// pointed at a different tournament, that tournament is unsubscribed - but
+// If prev pointed at a different tournament, that tournament is unsubscribed
 // only once TournamentStillReferenced confirms no other guild_config row
-// still points at it, so switching one guild away doesn't stop polling for
-// another guild still tracking the same tournament. On a
-// TournamentStillReferenced error, the old tournament is left subscribed
-// rather than risking dropping one still in use. newTournamentID is always
-// subscribed, whether or not there was a previous tournament to unsubscribe.
+// still points at it; on error it's left subscribed rather than risking an
+// early drop. newTournamentID is always subscribed.
 func (a *App) updatePool(ctx context.Context, prev store.GuildConfig, newTournamentID int) {
 	if prev.TournamentID != nil && *prev.TournamentID != newTournamentID {
 		stillReferenced, err := a.Store.TournamentStillReferenced(ctx, *prev.TournamentID, prev.ID)
@@ -675,12 +654,9 @@ func (a *App) updatePool(ctx context.Context, prev store.GuildConfig, newTournam
 }
 
 // populateMatchesAsync runs an initial full populate (schedule + results) in
-// the background the moment a guild first points at a tournament. The
-// poller's tick only detects a match transitioning to finished as it happens
-// going forward - a freshly-subscribed tournament starts with an empty
-// KnownStatus, so a match that was already finished before tracking began
-// would otherwise never get its results fetched. Like detectFormatAsync, this
-// uses a detached context because the caller's request context may be
+// the background when a guild first points at a tournament, so matches
+// already finished before tracking began still get their results fetched.
+// Uses a detached context because the caller's request context may be
 // cancelled once it responds.
 func (a *App) populateMatchesAsync(t store.Tournament) {
 	if err := a.PopulateMatches(context.Background(), t.ID, t.Round, false); err != nil {

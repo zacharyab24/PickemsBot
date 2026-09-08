@@ -17,7 +17,7 @@ type Interface interface {
 	Ping(ctx context.Context) error
 	Close()
 
-	// Tournament lifecycle — format is detected lazily from match data, not stored at creation
+	// Tournament lifecycle - format is detected lazily from match data, not stored at creation
 	EnsureTournament(ctx context.Context, externalID, source, name string, seriesID int) (int, error)
 	ListTournamentNames(ctx context.Context) ([]string, error)
 	ListRoundsForTournament(ctx context.Context, name string) ([]string, error)
@@ -26,7 +26,7 @@ type Interface interface {
 	SetTournamentFormat(ctx context.Context, id int, format string) error
 	SyncTournaments(ctx context.Context, active []TournamentCatalogEntry) ([]int, error)
 
-	// Guild config — new in v4, used by /config (#67)
+	// Guild config - new in v4, used by /config (#67)
 	EnsureGuild(ctx context.Context, guildID string) error
 	GetGuildConfig(ctx context.Context, guildID, channelID string) (GuildConfig, error)
 	UpsertGuildConfig(ctx context.Context, cfg GuildConfig) error
@@ -52,7 +52,7 @@ type Interface interface {
 	GetPredictionByUsername(ctx context.Context, username, guildID string, tournamentID int, round string) (models.Prediction, error)
 	ListPredictions(ctx context.Context, guildID string, tournamentID int, round string) ([]models.Prediction, error)
 
-	// Leaderboard — scores are materialised on match result insert, not stored separately
+	// Leaderboard - scores are materialised on match result insert, not stored separately
 	GetLeaderboard(ctx context.Context, guildID string, tournamentID int) ([]LeaderboardEntry, error)
 
 	// VRS
@@ -65,11 +65,7 @@ type PostgresStore struct {
 	pool *pgxpool.Pool
 	// resolveFetcher builds the DataSourceFetcher for a specific tournament,
 	// from that tournament's own source/external_id/series_id - not a single
-	// fixed fetcher for the whole store. A tournament's fetch has to use its
-	// own identity: a store tracking several tournaments (of possibly
-	// different sources) would otherwise always fetch whichever tournament's
-	// data the fetcher happened to be constructed with, mislabelled under
-	// whatever tournamentID the caller actually asked for.
+	// fixed fetcher for the whole store.
 	resolveFetcher func(Tournament) (DataSourceFetcher, error)
 	log            *slog.Logger
 }
@@ -83,8 +79,6 @@ func (s *PostgresStore) logger() *slog.Logger {
 }
 
 // NewStore initializes a new PostgresStore with the given connection string, fetcher resolver, and logger.
-// resolveFetcher is called with the specific tournament being fetched, so it can return a fetcher built
-// from that tournament's own identity (source, external id, series id) rather than a fixed one.
 func NewStore(connString string, resolveFetcher func(Tournament) (DataSourceFetcher, error), log *slog.Logger) (*PostgresStore, error) {
 	if connString == "" {
 		return nil, fmt.Errorf("postgres connection string is empty: set POSTGRES_URI in .env")

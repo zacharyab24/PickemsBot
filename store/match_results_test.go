@@ -170,10 +170,8 @@ func TestFetchAndSaveMatchResults_WritesNodes(t *testing.T) {
 	assert.Equal(t, 2, count)
 }
 
-// TestFetchAndSaveMatchResults_UnsupportedFormat_StillWritesNodes is the
-// regression test for /results showing nothing for a double-elimination
-// tournament: raw match nodes must still be persisted (for display) even
-// when the format has no scoreable MatchResult.
+// TestFetchAndSaveMatchResults_UnsupportedFormat_StillWritesNodes verifies raw
+// match nodes are persisted even when the format has no scoreable MatchResult.
 func TestFetchAndSaveMatchResults_UnsupportedFormat_StillWritesNodes(t *testing.T) {
 	cleanDB(t)
 	ctx := context.Background()
@@ -218,11 +216,8 @@ func (f identityEchoFetcher) FetchSchedule() ([]sources.ScheduledMatch, error) {
 	return nil, nil
 }
 
-// TestFetchAndSaveMatchResults_UsesEachTournamentsOwnIdentity is the
-// regression test for the bug where all fetches used one fixed fetcher
-// regardless of which tournament was actually being populated. With a
-// resolver keyed on the tournament passed in, tournament A's fetch must use
-// tournament A's own external id, not tournament B's (or vice versa).
+// TestFetchAndSaveMatchResults_UsesEachTournamentsOwnIdentity verifies each
+// tournament's fetch uses its own external id, not another tournament's.
 func TestFetchAndSaveMatchResults_UsesEachTournamentsOwnIdentity(t *testing.T) {
 	cleanDB(t)
 	ctx := context.Background()

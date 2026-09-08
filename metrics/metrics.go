@@ -19,10 +19,7 @@ var MongoOpsTotal = newCounterVec("mongodb_operations_total", "Total number of c
 
 // MonitoringPoolTournaments is set to 1 for each tournament currently tracked
 // by the poller's monitoring pool, labelled by internal id, external PandaScore
-// id, and round. A tournament's label set is removed entirely (not set to 0)
-// once it's unsubscribed, so count(monitoring_pool_tournaments) always
-// reflects what's actually being polled right now, and the individual rows
-// show exactly which tournaments those are - not just a count.
+// id, and round. The label set is removed (not set to 0) once unsubscribed.
 var MonitoringPoolTournaments = newGaugeVec("monitoring_pool_tournaments",
 	"Tournaments currently tracked by the poller's monitoring pool (value 1 while tracked).",
 	"tournament_id", "pandascore_id", "round")

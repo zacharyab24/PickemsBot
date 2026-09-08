@@ -17,9 +17,8 @@ import (
 )
 
 // TournamentSync periodically refreshes the tournament catalog (upcoming +
-// running PandaScore tournaments) that /config picks from. It shares the app's
-// PandaScore rate limiter via app.Wait, so its calls and the live-match poller's
-// draw from one token bucket and together stay within the API limit.
+// running PandaScore tournaments) that /config picks from, sharing the app's
+// PandaScore rate limiter via app.Wait.
 type TournamentSync struct {
 	app      *app.App
 	apiKey   string
@@ -83,9 +82,8 @@ func (s *TournamentSync) runOnce(ctx context.Context) {
 		s.logger().Warn("tournament sync failed", "error", err)
 		return
 	}
-	// A tournament that just finished is done for good - drop it from the
-	// poller's monitoring pool regardless of how many guilds still have it
-	// configured, rather than keep burning API calls on a decided bracket.
+	// A tournament that just finished is done for good - unsubscribe it from
+	// the monitoring pool regardless of how many guilds still have it configured.
 	for _, id := range newlyFinished {
 		s.app.Unsubscribe(ctx, id)
 	}

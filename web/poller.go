@@ -81,7 +81,6 @@ func (p *Poller) Start() {
 // tournament. Returns false if this tournament should be dropped from the
 // monitoring pool (e.g. an unrecoverable fetch error), true otherwise.
 func (p *Poller) tick(entry *app.PoolEntry) bool {
-	// make sure we are not exceeding our rate limiter limitation
 	if !p.app.Allow() {
 		p.logger().Warn("rate limit reached, skipping tick")
 		return true

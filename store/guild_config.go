@@ -56,7 +56,7 @@ func (s *PostgresStore) UpsertGuildConfig(ctx context.Context, cfg GuildConfig) 
 }
 
 // EnsureGuild inserts a guilds row if one does not already exist.
-// Must be called before UpsertGuildConfig — guild_config.guild_id has an FK to guilds.
+// Must be called before UpsertGuildConfig - guild_config.guild_id has an FK to guilds.
 func (s *PostgresStore) EnsureGuild(ctx context.Context, guildID string) error {
 	if _, err := s.pool.Exec(ctx,
 		`INSERT INTO guilds (guild_id) VALUES ($1) ON CONFLICT DO NOTHING`, guildID); err != nil {
@@ -66,9 +66,7 @@ func (s *PostgresStore) EnsureGuild(ctx context.Context, guildID string) error {
 }
 
 // ListTrackedTournamentIDs returns the distinct tournament ids referenced
-// across every guild_config row. Used once at startup to re-seed the poller's
-// monitoring pool after a restart, since the pool itself starts empty and has
-// no memory of what was being tracked before the process stopped.
+// across every guild_config row.
 func (s *PostgresStore) ListTrackedTournamentIDs(ctx context.Context) ([]int, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT DISTINCT tournament_id FROM guild_config WHERE tournament_id IS NOT NULL`)
@@ -92,9 +90,7 @@ func (s *PostgresStore) ListTrackedTournamentIDs(ctx context.Context) ([]int, er
 }
 
 // TournamentStillReferenced reports whether any guild_config row other than
-// excludeConfigID still points at tournamentID. Used before dropping a
-// tournament from the poller's monitoring pool when a guild switches away
-// from it, so a tournament another guild is still tracking isn't stopped.
+// excludeConfigID still points at tournamentID.
 func (s *PostgresStore) TournamentStillReferenced(ctx context.Context, tournamentID, excludeConfigID int) (bool, error) {
 	var exists bool
 	err := s.pool.QueryRow(ctx,

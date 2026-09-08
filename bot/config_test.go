@@ -212,11 +212,9 @@ func TestConfigSetRound_Success(t *testing.T) {
 	}
 }
 
-// TestConfigSetRound_DefersBeforeResponding is the regression test for
-// "The application did not respond" showing in Discord even though the
-// underlying SetConfigRound call succeeded: the handler must send a deferred
-// ephemeral ack immediately, before doing any Store work, rather than a
-// single-shot InteractionRespond that could arrive after Discord's 3s window.
+// TestConfigSetRound_DefersBeforeResponding verifies the handler defers
+// immediately, before any Store work, instead of a single-shot response that
+// could arrive after Discord's 3s window.
 func TestConfigSetRound_DefersBeforeResponding(t *testing.T) {
 	bot, session := newInteractionTestBot(t)
 	seedBlast(bot)

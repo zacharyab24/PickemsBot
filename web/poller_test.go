@@ -92,7 +92,7 @@ func TestPoolEntry_StatusTransition_NoTriggerIfAlreadyFinished(t *testing.T) {
 }
 
 func TestPoolEntry_StatusTransition_NoTriggerForFirstSeen(t *testing.T) {
-	// A brand-new match seen as "finished" (never tracked before) should not trigger —
+	// A brand-new match seen as "finished" (never tracked before) should not trigger -
 	// we only react to transitions, not initial state.
 	entry := &app.PoolEntry{KnownStatus: map[string]string{}}
 
