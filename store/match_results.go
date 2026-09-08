@@ -108,8 +108,8 @@ func (s *PostgresStore) upsertMatchNodes(ctx context.Context, tournamentID int, 
 		}
 
 		_, err := tx.Exec(ctx, `
-			INSERT INTO matches (tournament_id, round, section, team1_name, team2_name, score, external_id, status, completed_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			INSERT INTO matches (tournament_id, round, section, team1_name, team2_name, score, external_id, status, completed_at, scheduled_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			ON CONFLICT (tournament_id, external_id) WHERE external_id IS NOT NULL
 			DO UPDATE SET
 				round        = EXCLUDED.round,
@@ -118,9 +118,10 @@ func (s *PostgresStore) upsertMatchNodes(ctx context.Context, tournamentID int, 
 				section      = EXCLUDED.section,
 				score        = EXCLUDED.score,
 				status       = EXCLUDED.status,
-				completed_at = EXCLUDED.completed_at
+				completed_at = EXCLUDED.completed_at,
+				scheduled_at = COALESCE(EXCLUDED.scheduled_at, matches.scheduled_at)
 		`, tournamentID, round, section, n.Team1, n.Team2, score, extID, status,
-			completedAt(status))
+			completedAt(status), epochToTime(n.Timestamp))
 		if err != nil {
 			return fmt.Errorf("upsertMatchNodes: insert %q vs %q: %w", n.Team1, n.Team2, err)
 		}
@@ -226,4 +227,13 @@ func completedAt(status string) *time.Time {
 		return &t
 	}
 	return nil
+}
+
+// epochToTime converts a unix epoch to a *time.Time, nil if epoch is 0.
+func epochToTime(epoch int64) *time.Time {
+	if epoch == 0 {
+		return nil
+	}
+	t := time.Unix(epoch, 0).UTC()
+	return &t
 }

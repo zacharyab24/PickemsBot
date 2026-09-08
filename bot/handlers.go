@@ -403,7 +403,8 @@ func (b *Bot) resultsInteractionHandler(session DiscordSession, i *discordgo.Int
 		resp = &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
-				Embeds: []*discordgo.MessageEmbed{buildSwissResultEmbed(nodes)},
+				Flags:      discordgo.MessageFlagsIsComponentsV2,
+				Components: buildSwissResultComponents(nodes),
 			},
 		}
 	case tournament.SingleElim:
@@ -415,14 +416,13 @@ func (b *Bot) resultsInteractionHandler(session DiscordSession, i *discordgo.Int
 			},
 		}
 	default:
-		session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		resp = &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
-				Flags:   discordgo.MessageFlagsEphemeral,
-				Content: "Unsupported tournament format.",
+				Flags:      discordgo.MessageFlagsIsComponentsV2,
+				Components: buildChronologicalResultComponents(nodes),
 			},
-		})
-		return
+		}
 	}
 
 	if err := session.InteractionRespond(i.Interaction, resp); err != nil {
@@ -537,14 +537,21 @@ func subOptionString(sub *discordgo.ApplicationCommandInteractionDataOption, nam
 	return ""
 }
 
+// isDecidedWinner reports whether winner is a real, resolved winner for team -
+// "TBD" is used as a placeholder for both an unresolved bracket slot and an
+// undecided match, so it never counts as a winner even if team is also "TBD".
+func isDecidedWinner(winner, team string) bool {
+	return winner != "" && winner != "TBD" && winner == team
+}
+
 // buildResultMatchSection returns a Section component for a single match node.
 // The text shows the winner bolded (if known); the button accessory shows the score.
 func buildResultMatchSection(n sources.MatchNode, buttonID int) discordgo.Section {
 	var text string
 	switch {
-	case n.Winner == n.Team1:
+	case isDecidedWinner(n.Winner, n.Team1):
 		text = fmt.Sprintf("**%s** vs %s", n.Team1, n.Team2)
-	case n.Winner == n.Team2:
+	case isDecidedWinner(n.Winner, n.Team2):
 		text = fmt.Sprintf("%s vs **%s**", n.Team1, n.Team2)
 	default:
 		text = fmt.Sprintf("%s vs %s", n.Team1, n.Team2)
@@ -633,7 +640,16 @@ func buildSingleElimResultComponents(nodes []sources.MatchNode) []discordgo.Mess
 	return containers
 }
 
-func buildSwissResultEmbed(nodes []sources.MatchNode) *discordgo.MessageEmbed {
+// buildChronologicalResultComponents renders results for formats without a dedicated
+// renderer: a flat, ungrouped list in the order nodes were given (chronological, per
+// GetMatchNodes), with no bracket structure or overall winner.
+func buildChronologicalResultComponents(nodes []sources.MatchNode) []discordgo.MessageComponent {
+	return []discordgo.MessageComponent{buildRoundContainer("Results", nodes, 0)}
+}
+
+// buildSwissResultComponents groups Swiss results by round, sorted numerically,
+// into the same card-style containers used by single-elimination results.
+func buildSwissResultComponents(nodes []sources.MatchNode) []discordgo.MessageComponent {
 	byRound := make(map[string][]sources.MatchNode)
 	var roundOrder []string
 	seen := make(map[string]bool)
@@ -652,37 +668,14 @@ func buildSwissResultEmbed(nodes []sources.MatchNode) *discordgo.MessageEmbed {
 		return na < nb
 	})
 
-	var fields []*discordgo.MessageEmbedField
+	var containers []discordgo.MessageComponent
+	idx := 0
 	for _, round := range roundOrder {
-		var lines []string
-		for _, n := range byRound[round] {
-			t1, t2 := n.Team1, n.Team2
-			if n.Winner == n.Team1 {
-				t1 = "**" + t1 + "**"
-			} else if n.Winner == n.Team2 {
-				t2 = "**" + t2 + "**"
-			}
-			score := n.Score
-			if parts := strings.SplitN(score, "-", 2); len(parts) == 2 {
-				score = parts[0] + " - " + parts[1]
-			}
-			if score != "" {
-				lines = append(lines, fmt.Sprintf("%s vs %s (%s)", t1, t2, score))
-			} else {
-				lines = append(lines, fmt.Sprintf("%s vs %s", t1, t2))
-			}
-		}
-		fields = append(fields, &discordgo.MessageEmbedField{
-			Name:  round,
-			Value: strings.Join(lines, "\n"),
-		})
+		matches := byRound[round]
+		containers = append(containers, buildRoundContainer(round, matches, idx))
+		idx += len(matches)
 	}
-
-	return &discordgo.MessageEmbed{
-		Title:  "Results",
-		Color:  0x5865F2,
-		Fields: fields,
-	}
+	return containers
 }
 
 func (b *Bot) newAutocompleteInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {

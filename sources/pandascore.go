@@ -190,14 +190,23 @@ func parsePandaScoreMatch(result interface{}) (*MatchNode, error) {
 		}
 	}
 
+	// scheduled_at may be missing or unparseable; timestamp just stays 0 in that case.
+	var timestamp int64
+	if scheduledAt, ok := match["scheduled_at"].(string); ok {
+		if parsedTime, err := time.Parse(time.RFC3339, scheduledAt); err == nil {
+			timestamp = parsedTime.Unix()
+		}
+	}
+
 	return &MatchNode{
-		ID:      id,
-		Team1:   teams[0],
-		Team2:   teams[1],
-		Winner:  winner,
-		Score:   score,
-		Section: section,
-		Status:  status,
+		ID:        id,
+		Team1:     teams[0],
+		Team2:     teams[1],
+		Winner:    winner,
+		Score:     score,
+		Section:   section,
+		Status:    status,
+		Timestamp: timestamp,
 	}, nil
 }
 

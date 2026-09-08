@@ -5,6 +5,7 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 
 	"pickems-bot/sources"
 	"pickems-bot/tournament"
@@ -145,6 +146,24 @@ func TestUpsertMatchNodes_UpdatesCompletedMatch(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "completed", status)
 	assert.Equal(t, "2-1", score)
+}
+
+func TestUpsertMatchNodes_WritesScheduledAtFromTimestamp(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournamentNullFormat(t, "test-scheduled-at")
+
+	nodes := []sources.MatchNode{
+		{ID: "m1", Team1: "TeamA", Team2: "TeamB", Status: "not_started", Timestamp: 1763215200},
+	}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Swiss))
+
+	var scheduledAt time.Time
+	err := testPool.QueryRow(ctx, `SELECT scheduled_at FROM matches WHERE tournament_id = $1`, tournamentID).Scan(&scheduledAt)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1763215200), scheduledAt.Unix())
 }
 
 // endregion

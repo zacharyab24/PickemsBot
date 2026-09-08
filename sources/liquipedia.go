@@ -229,13 +229,22 @@ func parseLiquipediaMatch(result interface{}) (*MatchNode, error) {
 
 	section, _ := match["section"].(string)
 
+	// date may be missing or unparseable; timestamp just stays 0 in that case.
+	var timestamp int64
+	if dateStr, ok := match["date"].(string); ok {
+		if parsedTime, err := time.Parse("2006-01-02 15:04:05", dateStr); err == nil {
+			timestamp = parsedTime.Unix()
+		}
+	}
+
 	return &MatchNode{
-		ID:      matchIDStr,
-		Team1:   teams[0],
-		Team2:   teams[1],
-		Winner:  winner,
-		Score:   score,
-		Section: section,
+		ID:        matchIDStr,
+		Team1:     teams[0],
+		Team2:     teams[1],
+		Winner:    winner,
+		Score:     score,
+		Section:   section,
+		Timestamp: timestamp,
 	}, nil
 }
 
