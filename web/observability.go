@@ -14,33 +14,37 @@ import (
 
 // TelemetryConfig holds the config for the telemetry server
 type TelemetryConfig struct {
-	Addr      string
-	App       *app.App
-	Discord   interface{ IsConnected() bool }
-	StartTime time.Time
-	Logger    *slog.Logger
+	Addr       string
+	App        *app.App
+	DataSource string
+	Discord    interface{ IsConnected() bool }
+	StartTime  time.Time
+	Logger     *slog.Logger
 }
 
 // TelemetryServer is the HTTP server that handles telemetry (health + metrics) requests
 type TelemetryServer struct {
-	app       *app.App
-	discord   interface{ IsConnected() bool }
-	startTime time.Time
-	log       *slog.Logger
+	app        *app.App
+	dataSource string
+	discord    interface{ IsConnected() bool }
+	startTime  time.Time
+	log        *slog.Logger
 }
 
 // StartTelemetryServer initializes and starts the HTTP server with the passed config
 func StartTelemetryServer(cfg TelemetryConfig) error {
 	s := &TelemetryServer{
-		app:       cfg.App,
-		discord:   cfg.Discord,
-		startTime: cfg.StartTime,
-		log:       cfg.Logger,
+		app:        cfg.App,
+		dataSource: cfg.DataSource,
+		discord:    cfg.Discord,
+		startTime:  cfg.StartTime,
+		log:        cfg.Logger,
 	}
 
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/health", s.healthHandler)
+	mux.HandleFunc("/poller", s.pollerStatusHandler)
 
 	srv := &http.Server{
 		Addr:         cfg.Addr,
@@ -114,6 +118,72 @@ func (s *TelemetryServer) healthHandler(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(response)
+}
+
+// PollerStatusResponse is the JSON response body returned by the /poller endpoint.
+type PollerStatusResponse struct {
+	Enabled    bool                `json:"enabled"`
+	Message    string              `json:"message,omitempty"`
+	LastPollAt *time.Time          `json:"last_poll_at,omitempty"`
+	Tracked    []TrackedTournament `json:"tracked_tournaments"`
+}
+
+// TrackedTournament is one tournament currently tracked by the poller.
+type TrackedTournament struct {
+	TournamentID           int    `json:"tournament_id"`
+	Name                   string `json:"name"`
+	PandascoreTournamentID int    `json:"pandascore_tournament_id"`
+	SeriesID               int    `json:"series_id"`
+	Round                  string `json:"round"`
+}
+
+// pollerStatusHandler reports the poller's monitoring pool contents and last poll time.
+func (s *TelemetryServer) pollerStatusHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if s.dataSource != "pandascore" {
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(PollerStatusResponse{
+			Enabled: false,
+			Message: "PandaScore polling is not enabled for this deployment.",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	entries := s.app.Snapshot()
+	tracked := make([]TrackedTournament, 0, len(entries))
+	for _, e := range entries {
+		name := ""
+		if t, err := s.app.Store.GetTournament(ctx, e.DBTournamentID); err == nil {
+			name = t.Name
+		}
+		tracked = append(tracked, TrackedTournament{
+			TournamentID:           e.DBTournamentID,
+			Name:                   name,
+			PandascoreTournamentID: e.PandascoreTournamentID,
+			SeriesID:               e.SeriesID,
+			Round:                  e.Round,
+		})
+	}
+
+	response := PollerStatusResponse{
+		Enabled: true,
+		Tracked: tracked,
+	}
+	if lastPoll, ok := s.app.LastPollTime(); ok {
+		response.LastPollAt = &lastPoll
+	}
+
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
 

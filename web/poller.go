@@ -73,6 +73,7 @@ func (p *Poller) Start() {
 			}(entry)
 		}
 		wg.Wait()
+		p.app.RecordPoll()
 	}
 }
 

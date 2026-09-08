@@ -8,6 +8,7 @@ package app
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"pickems-bot/store"
 )
@@ -352,6 +353,35 @@ func TestUpdatePool_TournamentStillReferencedError_LeavesOldSubscribed(t *testin
 	}
 	if _, ok := api.MonitoringPool.Entries[2]; !ok {
 		t.Error("expected the new tournament to be subscribed regardless")
+	}
+}
+
+// endregion
+
+// region RecordPoll / LastPollTime
+
+func TestLastPollTime_NeverPolled_ReturnsFalse(t *testing.T) {
+	api := NewTestApp(NewMockStore("swiss", "test_round"))
+
+	_, ok := api.LastPollTime()
+
+	if ok {
+		t.Error("expected ok=false before any poll has completed")
+	}
+}
+
+func TestRecordPoll_SetsLastPollTime(t *testing.T) {
+	api := NewTestApp(NewMockStore("swiss", "test_round"))
+	before := time.Now()
+
+	api.RecordPoll()
+
+	got, ok := api.LastPollTime()
+	if !ok {
+		t.Fatal("expected ok=true after RecordPoll")
+	}
+	if got.Before(before) {
+		t.Errorf("expected LastPollTime >= %v, got %v", before, got)
 	}
 }
 

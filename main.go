@@ -87,11 +87,12 @@ func main() {
 
 	go func() {
 		if err := web.StartTelemetryServer(web.TelemetryConfig{
-			Addr:      ":9090",
-			App:       apiInstance,
-			Discord:   botInstance,
-			StartTime: startTime,
-			Logger:    logger,
+			Addr:       ":9090",
+			App:        apiInstance,
+			DataSource: cfg.DataSource,
+			Discord:    botInstance,
+			StartTime:  startTime,
+			Logger:     logger,
 		}); err != nil {
 			logger.Error("telemetry server exited", "error", err)
 			os.Exit(1)
