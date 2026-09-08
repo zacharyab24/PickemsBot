@@ -59,19 +59,25 @@ func (s *PostgresStore) FetchAndSaveMatchResults(ctx context.Context, tournament
 		knownKind = tournament.Kind(*t.Format)
 	}
 
-	result, nodes, err := fetcher.FetchMatchData(round, knownKind)
+	result, nodes, kind, err := fetcher.FetchMatchData(round, knownKind)
 	if err != nil {
 		return fmt.Errorf("FetchAndSaveMatchResults: fetch: %w", err)
 	}
 
-	if result.GetType() == tournament.Swiss {
+	if kind == tournament.Swiss {
 		nodes = tournament.NormalizeSwissSections(nodes)
-	} else if result.GetType() == tournament.SingleElim {
+	} else if kind == tournament.SingleElim {
 		nodes = tournament.NormalizeSingleElimSections(nodes)
 	}
 
-	if err := s.upsertMatchNodes(ctx, tournamentID, round, nodes, result.GetType()); err != nil {
+	if err := s.upsertMatchNodes(ctx, tournamentID, round, nodes, kind); err != nil {
 		return fmt.Errorf("FetchAndSaveMatchResults: %w", err)
+	}
+
+	// result is nil when the format doesn't support predictions (e.g.
+	// double-elimination) - raw match data is still saved above, just nothing to score.
+	if result == nil {
+		return nil
 	}
 
 	if err := s.updateScores(ctx, tournamentID, round, result); err != nil {

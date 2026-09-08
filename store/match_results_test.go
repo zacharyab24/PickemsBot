@@ -17,11 +17,12 @@ import (
 type mockFetcher struct {
 	result tournament.MatchResult
 	nodes  []sources.MatchNode
+	kind   tournament.Kind
 	err    error
 }
 
-func (m mockFetcher) FetchMatchData(round string, knownKind tournament.Kind) (tournament.MatchResult, []sources.MatchNode, error) {
-	return m.result, m.nodes, m.err
+func (m mockFetcher) FetchMatchData(round string, knownKind tournament.Kind) (tournament.MatchResult, []sources.MatchNode, tournament.Kind, error) {
+	return m.result, m.nodes, m.kind, m.err
 }
 
 func (m mockFetcher) FetchSchedule() ([]sources.ScheduledMatch, error) {
@@ -159,7 +160,7 @@ func TestFetchAndSaveMatchResults_WritesNodes(t *testing.T) {
 		{ID: "m2", Team1: "TeamC", Team2: "TeamD", Status: "not_started"},
 	}
 	result := tournament.SwissResult{Round: "Stage 1", Teams: map[string]string{}}
-	s := newTestStoreWithFetcher(t, mockFetcher{result: result, nodes: nodes})
+	s := newTestStoreWithFetcher(t, mockFetcher{result: result, nodes: nodes, kind: tournament.Swiss})
 
 	tournamentID := seedTournamentNullFormat(t, "test-fetch-writes")
 	require.NoError(t, s.FetchAndSaveMatchResults(ctx, tournamentID, "Stage 1"))
@@ -167,6 +168,27 @@ func TestFetchAndSaveMatchResults_WritesNodes(t *testing.T) {
 	var count int
 	require.NoError(t, testPool.QueryRow(ctx, `SELECT COUNT(*) FROM matches WHERE tournament_id = $1`, tournamentID).Scan(&count))
 	assert.Equal(t, 2, count)
+}
+
+// TestFetchAndSaveMatchResults_UnsupportedFormat_StillWritesNodes is the
+// regression test for /results showing nothing for a double-elimination
+// tournament: raw match nodes must still be persisted (for display) even
+// when the format has no scoreable MatchResult.
+func TestFetchAndSaveMatchResults_UnsupportedFormat_StillWritesNodes(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+
+	nodes := []sources.MatchNode{
+		{ID: "m1", Team1: "TeamA", Team2: "TeamB", Status: "not_started"},
+	}
+	s := newTestStoreWithFetcher(t, mockFetcher{result: nil, nodes: nodes, kind: tournament.DoubleElim})
+
+	tournamentID := seedTournamentNullFormat(t, "test-fetch-unsupported")
+	require.NoError(t, s.FetchAndSaveMatchResults(ctx, tournamentID, "Group B"))
+
+	var count int
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT COUNT(*) FROM matches WHERE tournament_id = $1`, tournamentID).Scan(&count))
+	assert.Equal(t, 1, count)
 }
 
 func TestFetchAndSaveMatchResults_FetcherError(t *testing.T) {
@@ -187,9 +209,9 @@ type identityEchoFetcher struct {
 	externalID string
 }
 
-func (f identityEchoFetcher) FetchMatchData(round string, knownKind tournament.Kind) (tournament.MatchResult, []sources.MatchNode, error) {
+func (f identityEchoFetcher) FetchMatchData(round string, knownKind tournament.Kind) (tournament.MatchResult, []sources.MatchNode, tournament.Kind, error) {
 	nodes := []sources.MatchNode{{ID: f.externalID, Team1: "A", Team2: "B", Status: "not_started"}}
-	return tournament.SwissResult{Round: round, Teams: map[string]string{}}, nodes, nil
+	return tournament.SwissResult{Round: round, Teams: map[string]string{}}, nodes, tournament.Swiss, nil
 }
 
 func (f identityEchoFetcher) FetchSchedule() ([]sources.ScheduledMatch, error) {
