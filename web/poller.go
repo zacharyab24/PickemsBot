@@ -86,7 +86,7 @@ func (p *Poller) tick(entry *app.PoolEntry) bool {
 		return true
 	}
 
-	raw, err := sources.GetPandaScoreMatches(p.apiURL, p.apiKey, entry.SeriesId, entry.PandascoreTournamentID)
+	raw, err := sources.GetPandaScoreMatches(p.apiURL, p.apiKey, entry.SeriesID, entry.PandascoreTournamentID)
 	if err != nil {
 		if errors.Is(err, sources.ErrUnrecoverable) {
 			p.logger().Error("unrecoverable fetch error, stopping poller", "error", fmt.Errorf("poller.tick: %w", err))

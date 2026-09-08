@@ -9,18 +9,44 @@ import (
 	"pickems-bot/metrics"
 )
 
+// MonitoringPool is the in-memory set of tournaments the poller is currently
+// tracking. Guilds add/remove tournaments via App.Subscribe/App.Unsubscribe
+// (called from /config), and Poller.Start reads it each tick via App.Snapshot
+// - the pool starts empty on every process start and has no memory of what
+// was tracked before a restart, so App.BootstrapPool re-seeds it from
+// guild_config at startup. mu guards Entries (insert/delete/lookup); it does
+// not guard the fields inside a *PoolEntry - see PoolEntry's doc comment.
 type MonitoringPool struct {
-	mu      sync.RWMutex
+	mu sync.RWMutex
+	// Entries maps a tournament's internal DB id to its tracked state.
 	Entries map[int]*PoolEntry
 }
 
+// PoolEntry is one tournament the poller is tracking: the identifiers it
+// needs to call PandaScore, plus its own per-tournament dedupe state.
+// Subscribe only ever creates a fresh entry; it never mutates one already in
+// the pool, and Unsubscribe only ever removes a map key. Because of that,
+// KnownStatus/KnownScheduleKey are safe for the poller goroutine to mutate
+// directly on a *PoolEntry obtained from Snapshot, without holding
+// MonitoringPool's lock for the rest of that tick.
 type PoolEntry struct {
-	DBTournamentID         int
+	// DBTournamentID is the internal DB id, used for all store operations.
+	DBTournamentID int
+	// PandascoreTournamentID is the external PandaScore id, used for API filtering.
 	PandascoreTournamentID int
-	SeriesId               int
-	Round                  string
-	KnownStatus            map[string]string
-	KnownScheduleKey       string
+	// SeriesID is the external PandaScore series id, used for API filtering.
+	SeriesID int
+	// Round is this tournament's stage label (e.g. "Playoffs"), fixed at
+	// subscribe time - switching round repoints at a different tournament row
+	// entirely, so it's never mutated in place.
+	Round string
+	// KnownStatus maps a match's external id to its last-seen status, so the
+	// poller can detect a match transitioning to finished without re-reporting
+	// one it's already seen.
+	KnownStatus map[string]string
+	// KnownScheduleKey is a fingerprint of the last stored schedule, so the
+	// poller can skip writing to the DB when nothing has actually changed.
+	KnownScheduleKey string
 }
 
 // newMonitoringPool creates a new instance of MonitoringPool.
@@ -71,7 +97,7 @@ func (a *App) Subscribe(ctx context.Context, tournamentID int) {
 	PoolEntry := &PoolEntry{
 		DBTournamentID:         t.ID,
 		PandascoreTournamentID: pandaScoreTournamentID,
-		SeriesId:               seriesID,
+		SeriesID:               seriesID,
 		Round:                  t.Round,
 		KnownStatus:            make(map[string]string),
 		KnownScheduleKey:       "",

@@ -33,8 +33,8 @@ func TestSubscribe_Success_PopulatesEntryFields(t *testing.T) {
 	if entry.PandascoreTournamentID != 555 {
 		t.Errorf("expected PandascoreTournamentID 555, got %d", entry.PandascoreTournamentID)
 	}
-	if entry.SeriesId != 999 {
-		t.Errorf("expected SeriesId 999, got %d", entry.SeriesId)
+	if entry.SeriesID != 999 {
+		t.Errorf("expected SeriesID 999, got %d", entry.SeriesID)
 	}
 	if entry.Round != "Playoffs" {
 		t.Errorf("expected Round %q, got %q", "Playoffs", entry.Round)
