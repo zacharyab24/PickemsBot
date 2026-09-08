@@ -483,24 +483,50 @@ func (b *Bot) configSetTournament(session DiscordSession, i *discordgo.Interacti
 	// offered choices, so the (name, round) pair is validated by resolving it to a row.
 	name := subOptionString(sub, "tournament")
 	round := subOptionString(sub, "round")
+
+	// Defer before the DB call - SetConfigTournament does several sequential
+	// queries (and, under transient DB slowness, may take longer than
+	// Discord's 3s window for an undeferred response), so respond after the
+	// work completes rather than risk an initial InteractionRespond that
+	// arrives too late and gets silently rejected.
+	if err := deferEphemeral(session, i.Interaction); err != nil {
+		b.logger().Error("failed to defer config set-tournament", "error", fmt.Errorf("configSetTournament: %w", err))
+		return
+	}
+
 	t, err := b.APIPtr.SetConfigTournament(context.Background(), i.GuildID, i.ChannelID, name, round)
 	if err != nil {
 		b.logger().Error("failed to set config tournament", "tournament", name, "round", round, "error", fmt.Errorf("configSetTournament: %w", err))
-		respondEphemeral(session, i.Interaction, "Could not set that tournament - please pick a tournament and round from the lists.")
+		msg := "Could not set that tournament - please pick a tournament and round from the lists."
+		session.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Content: &msg})
 		return
 	}
-	respondEphemeral(session, i.Interaction, fmt.Sprintf("Tournament set to **%s - %s** for this channel.", t.Name, t.Round))
+	msg := fmt.Sprintf("Tournament set to **%s - %s** for this channel.", t.Name, t.Round)
+	if _, err := session.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Content: &msg}); err != nil {
+		b.logger().Error("failed to edit config set-tournament response", "error", fmt.Errorf("configSetTournament: %w", err))
+	}
 }
 
 func (b *Bot) configSetRound(session DiscordSession, i *discordgo.InteractionCreate, sub *discordgo.ApplicationCommandInteractionDataOption) {
 	round := subOptionString(sub, "round")
+
+	// See configSetTournament - same defer-before-DB-work reasoning.
+	if err := deferEphemeral(session, i.Interaction); err != nil {
+		b.logger().Error("failed to defer config set-round", "error", fmt.Errorf("configSetRound: %w", err))
+		return
+	}
+
 	t, err := b.APIPtr.SetConfigRound(context.Background(), i.GuildID, i.ChannelID, round)
 	if err != nil {
 		b.logger().Error("failed to set config round", "round", round, "error", fmt.Errorf("configSetRound: %w", err))
-		respondEphemeral(session, i.Interaction, "Could not set that round - set a tournament first, then pick a round from the list.")
+		msg := "Could not set that round - set a tournament first, then pick a round from the list."
+		session.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Content: &msg})
 		return
 	}
-	respondEphemeral(session, i.Interaction, fmt.Sprintf("Round set to **%s** for **%s**.", t.Round, t.Name))
+	msg := fmt.Sprintf("Round set to **%s** for **%s**.", t.Round, t.Name)
+	if _, err := session.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Content: &msg}); err != nil {
+		b.logger().Error("failed to edit config set-round response", "error", fmt.Errorf("configSetRound: %w", err))
+	}
 }
 
 // subOptionString returns the string value of a named option under a subcommand,

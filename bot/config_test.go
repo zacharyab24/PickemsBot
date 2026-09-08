@@ -76,8 +76,15 @@ func makeConfigAutocomplete(sub, focused string, opts ...*discordgo.ApplicationC
 	}
 }
 
+// lastContent returns the meaningful final message content, whether the
+// handler responded in one shot (InteractionRespond) or deferred first and
+// finalised via InteractionResponseEdit (see deferEphemeral) - in the latter
+// case the deferred ack itself carries no content, so the edit is what matters.
 func lastContent(t *testing.T, session *MockDiscordSession) string {
 	t.Helper()
+	if len(session.EditedResponses) > 0 {
+		return session.EditedResponses[len(session.EditedResponses)-1]
+	}
 	if len(session.SentInteractions) != 1 {
 		t.Fatalf("expected 1 interaction response, got %d", len(session.SentInteractions))
 	}
@@ -202,6 +209,31 @@ func TestConfigSetRound_Success(t *testing.T) {
 	}
 	if *ms.UpsertedGuildConfig.TournamentID != 2 {
 		t.Errorf("expected tournament id 2 (Playoffs row), got %d", *ms.UpsertedGuildConfig.TournamentID)
+	}
+}
+
+// TestConfigSetRound_DefersBeforeResponding is the regression test for
+// "The application did not respond" showing in Discord even though the
+// underlying SetConfigRound call succeeded: the handler must send a deferred
+// ephemeral ack immediately, before doing any Store work, rather than a
+// single-shot InteractionRespond that could arrive after Discord's 3s window.
+func TestConfigSetRound_DefersBeforeResponding(t *testing.T) {
+	bot, session := newInteractionTestBot(t)
+	seedBlast(bot)
+	bot.newInteractionHandler(session, makeConfigInteraction(adminPerms, configSub("set-round", strArg("round", "Playoffs"))))
+
+	if len(session.SentInteractions) != 1 {
+		t.Fatalf("expected exactly 1 initial response (the deferred ack), got %d", len(session.SentInteractions))
+	}
+	resp := session.SentInteractions[0].Response
+	if resp.Type != discordgo.InteractionResponseDeferredChannelMessageWithSource {
+		t.Errorf("expected a deferred ack, got response type %v", resp.Type)
+	}
+	if resp.Data == nil || resp.Data.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Error("expected the deferred ack to be ephemeral")
+	}
+	if len(session.EditedResponses) != 1 {
+		t.Fatalf("expected exactly 1 edit finalising the response, got %d", len(session.EditedResponses))
 	}
 }
 

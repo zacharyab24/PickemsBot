@@ -22,6 +22,10 @@ type MockDiscordSession struct {
 	SentFiles []MockFileMessage
 	// SentInteractions stores all interaction responses sent during tests
 	SentInteractions []MockInteractionResponse
+	// EditedResponses stores the Content of every InteractionResponseEdit call
+	// during tests - the finalising message for a handler that defers first
+	// (see deferEphemeral), since the deferred ack itself carries no content.
+	EditedResponses []string
 	// ErrorToReturn allows tests to simulate errors
 	ErrorToReturn error
 }
@@ -134,6 +138,9 @@ func NewMockDiscordSession() *MockDiscordSession {
 
 // InteractionResponseEdit implements DiscordSession.InteractionResponseEdit.
 func (m *MockDiscordSession) InteractionResponseEdit(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit, options ...discordgo.RequestOption) (*discordgo.Message, error) {
+	if newresp.Content != nil {
+		m.EditedResponses = append(m.EditedResponses, *newresp.Content)
+	}
 	return &discordgo.Message{}, m.ErrorToReturn
 }
 

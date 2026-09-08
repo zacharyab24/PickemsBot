@@ -107,6 +107,20 @@ func respondEphemeral(session DiscordSession, i *discordgo.Interaction, msg stri
 	})
 }
 
+// deferEphemeral acknowledges an interaction with an ephemeral "thinking..."
+// state, so a handler that does DB work has more than Discord's 3-second
+// initial-response window before it has to reply. The caller finalises with
+// session.InteractionResponseEdit once its work completes; if it can't defer
+// (rare - usually a dead session), the caller should log and bail out rather
+// than attempt a slow synchronous InteractionRespond that Discord will most
+// likely reject anyway.
+func deferEphemeral(session DiscordSession, i *discordgo.Interaction) error {
+	return session.InteractionRespond(i, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{Flags: discordgo.MessageFlagsEphemeral},
+	})
+}
+
 // sendError sends a red error embed to the given channel.
 func sendError(session DiscordSession, channelID string, msg string) {
 	embed := &discordgo.MessageEmbed{
