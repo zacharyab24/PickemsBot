@@ -5,6 +5,7 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 
 	"pickems-bot/sources"
 	"pickems-bot/tournament"
@@ -17,11 +18,12 @@ import (
 type mockFetcher struct {
 	result tournament.MatchResult
 	nodes  []sources.MatchNode
+	kind   tournament.Kind
 	err    error
 }
 
-func (m mockFetcher) FetchMatchData(round string) (tournament.MatchResult, []sources.MatchNode, error) {
-	return m.result, m.nodes, m.err
+func (m mockFetcher) FetchMatchData(round string, knownKind tournament.Kind) (tournament.MatchResult, []sources.MatchNode, tournament.Kind, error) {
+	return m.result, m.nodes, m.kind, m.err
 }
 
 func (m mockFetcher) FetchSchedule() ([]sources.ScheduledMatch, error) {
@@ -146,6 +148,49 @@ func TestUpsertMatchNodes_UpdatesCompletedMatch(t *testing.T) {
 	assert.Equal(t, "2-1", score)
 }
 
+func TestUpsertMatchNodes_CompletedAt_NotBumpedOnReUpsert(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournamentNullFormat(t, "test-completed-at-stable")
+
+	finished := []sources.MatchNode{{ID: "m1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA", Score: "2-1", Status: "finished"}}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", finished, tournament.Swiss))
+
+	var firstCompletedAt time.Time
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT completed_at FROM matches WHERE tournament_id = $1`, tournamentID).Scan(&firstCompletedAt))
+	require.False(t, firstCompletedAt.IsZero())
+
+	time.Sleep(10 * time.Millisecond)
+
+	// A sibling match finishing in the same round re-upserts every node,
+	// including this already-completed one - completed_at must not move.
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", finished, tournament.Swiss))
+
+	var secondCompletedAt time.Time
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT completed_at FROM matches WHERE tournament_id = $1`, tournamentID).Scan(&secondCompletedAt))
+	assert.True(t, firstCompletedAt.Equal(secondCompletedAt), "completed_at changed on re-upsert: %v -> %v", firstCompletedAt, secondCompletedAt)
+}
+
+func TestUpsertMatchNodes_WritesScheduledAtFromTimestamp(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournamentNullFormat(t, "test-scheduled-at")
+
+	nodes := []sources.MatchNode{
+		{ID: "m1", Team1: "TeamA", Team2: "TeamB", Status: "not_started", Timestamp: 1763215200},
+	}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Swiss))
+
+	var scheduledAt time.Time
+	err := testPool.QueryRow(ctx, `SELECT scheduled_at FROM matches WHERE tournament_id = $1`, tournamentID).Scan(&scheduledAt)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1763215200), scheduledAt.Unix())
+}
+
 // endregion
 
 // region FetchAndSaveMatchResults
@@ -159,7 +204,7 @@ func TestFetchAndSaveMatchResults_WritesNodes(t *testing.T) {
 		{ID: "m2", Team1: "TeamC", Team2: "TeamD", Status: "not_started"},
 	}
 	result := tournament.SwissResult{Round: "Stage 1", Teams: map[string]string{}}
-	s := newTestStoreWithFetcher(t, mockFetcher{result: result, nodes: nodes})
+	s := newTestStoreWithFetcher(t, mockFetcher{result: result, nodes: nodes, kind: tournament.Swiss})
 
 	tournamentID := seedTournamentNullFormat(t, "test-fetch-writes")
 	require.NoError(t, s.FetchAndSaveMatchResults(ctx, tournamentID, "Stage 1"))
@@ -167,6 +212,25 @@ func TestFetchAndSaveMatchResults_WritesNodes(t *testing.T) {
 	var count int
 	require.NoError(t, testPool.QueryRow(ctx, `SELECT COUNT(*) FROM matches WHERE tournament_id = $1`, tournamentID).Scan(&count))
 	assert.Equal(t, 2, count)
+}
+
+// TestFetchAndSaveMatchResults_UnsupportedFormat_StillWritesNodes verifies raw
+// match nodes are persisted even when the format has no scoreable MatchResult.
+func TestFetchAndSaveMatchResults_UnsupportedFormat_StillWritesNodes(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+
+	nodes := []sources.MatchNode{
+		{ID: "m1", Team1: "TeamA", Team2: "TeamB", Status: "not_started"},
+	}
+	s := newTestStoreWithFetcher(t, mockFetcher{result: nil, nodes: nodes, kind: tournament.DoubleElim})
+
+	tournamentID := seedTournamentNullFormat(t, "test-fetch-unsupported")
+	require.NoError(t, s.FetchAndSaveMatchResults(ctx, tournamentID, "Group B"))
+
+	var count int
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT COUNT(*) FROM matches WHERE tournament_id = $1`, tournamentID).Scan(&count))
+	assert.Equal(t, 1, count)
 }
 
 func TestFetchAndSaveMatchResults_FetcherError(t *testing.T) {
@@ -178,6 +242,49 @@ func TestFetchAndSaveMatchResults_FetcherError(t *testing.T) {
 
 	err := s.FetchAndSaveMatchResults(ctx, tournamentID, "Stage 1")
 	assert.Error(t, err)
+}
+
+// identityEchoFetcher returns a single match node whose external id mirrors
+// whatever tournament it was resolved for, so a test can tell which
+// tournament's identity actually drove the fetch.
+type identityEchoFetcher struct {
+	externalID string
+}
+
+func (f identityEchoFetcher) FetchMatchData(round string, knownKind tournament.Kind) (tournament.MatchResult, []sources.MatchNode, tournament.Kind, error) {
+	nodes := []sources.MatchNode{{ID: f.externalID, Team1: "A", Team2: "B", Status: "not_started"}}
+	return tournament.SwissResult{Round: round, Teams: map[string]string{}}, nodes, tournament.Swiss, nil
+}
+
+func (f identityEchoFetcher) FetchSchedule() ([]sources.ScheduledMatch, error) {
+	return nil, nil
+}
+
+// TestFetchAndSaveMatchResults_UsesEachTournamentsOwnIdentity verifies each
+// tournament's fetch uses its own external id, not another tournament's.
+func TestFetchAndSaveMatchResults_UsesEachTournamentsOwnIdentity(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+
+	resolve := func(t Tournament) (DataSourceFetcher, error) {
+		return identityEchoFetcher{externalID: t.ExternalID}, nil
+	}
+	s := newTestStoreWithFetcherResolver(t, resolve)
+
+	tournamentA := seedTournamentNullFormat(t, "tournament-a")
+	tournamentB := seedTournamentNullFormat(t, "tournament-b")
+
+	require.NoError(t, s.FetchAndSaveMatchResults(ctx, tournamentA, "Stage 1"))
+	require.NoError(t, s.FetchAndSaveMatchResults(ctx, tournamentB, "Stage 1"))
+
+	var externalIDA, externalIDB string
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT external_id FROM matches WHERE tournament_id = $1`, tournamentA).Scan(&externalIDA))
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT external_id FROM matches WHERE tournament_id = $1`, tournamentB).Scan(&externalIDB))
+
+	assert.Equal(t, "tournament-a", externalIDA, "tournament A's fetch should have used its own external id")
+	assert.Equal(t, "tournament-b", externalIDB, "tournament B's fetch should have used its own external id")
 }
 
 // endregion

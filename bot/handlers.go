@@ -397,34 +397,23 @@ func (b *Bot) resultsInteractionHandler(session DiscordSession, i *discordgo.Int
 		return
 	}
 
-	var resp *discordgo.InteractionResponse
+	var components []discordgo.MessageComponent
 	switch kind {
 	case tournament.Swiss:
-		resp = &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Embeds: []*discordgo.MessageEmbed{buildSwissResultEmbed(nodes)},
-			},
-		}
+		components = buildSwissResultComponents(nodes)
 	case tournament.SingleElim:
-		resp = &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Flags:      discordgo.MessageFlagsIsComponentsV2,
-				Components: buildSingleElimResultComponents(nodes),
-			},
-		}
+		components = buildSingleElimResultComponents(nodes)
 	default:
-		session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Flags:   discordgo.MessageFlagsEphemeral,
-				Content: "Unsupported tournament format.",
-			},
-		})
-		return
+		components = buildChronologicalResultComponents(nodes)
 	}
 
+	resp := &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Flags:      discordgo.MessageFlagsIsComponentsV2,
+			Components: components,
+		},
+	}
 	if err := session.InteractionRespond(i.Interaction, resp); err != nil {
 		b.logger().Error("failed to respond to results interaction", "error", fmt.Errorf("resultsInteractionHandler: %w", err))
 	}
@@ -483,24 +472,39 @@ func (b *Bot) configSetTournament(session DiscordSession, i *discordgo.Interacti
 	// offered choices, so the (name, round) pair is validated by resolving it to a row.
 	name := subOptionString(sub, "tournament")
 	round := subOptionString(sub, "round")
+
+	// Defer before the DB call - SetConfigTournament may take longer than
+	// Discord's 3s window for an undeferred response.
+	if err := deferEphemeral(session, i.Interaction); err != nil {
+		b.logger().Error("failed to defer config set-tournament", "error", fmt.Errorf("configSetTournament: %w", err))
+		return
+	}
+
 	t, err := b.APIPtr.SetConfigTournament(context.Background(), i.GuildID, i.ChannelID, name, round)
 	if err != nil {
 		b.logger().Error("failed to set config tournament", "tournament", name, "round", round, "error", fmt.Errorf("configSetTournament: %w", err))
-		respondEphemeral(session, i.Interaction, "Could not set that tournament - please pick a tournament and round from the lists.")
+		b.finalizeDeferred(session, i.Interaction, "configSetTournament", "Could not set that tournament - please pick a tournament and round from the lists.")
 		return
 	}
-	respondEphemeral(session, i.Interaction, fmt.Sprintf("Tournament set to **%s - %s** for this channel.", t.Name, t.Round))
+	b.finalizeDeferred(session, i.Interaction, "configSetTournament", fmt.Sprintf("Tournament set to **%s - %s** for this channel.", t.Name, t.Round))
 }
 
 func (b *Bot) configSetRound(session DiscordSession, i *discordgo.InteractionCreate, sub *discordgo.ApplicationCommandInteractionDataOption) {
 	round := subOptionString(sub, "round")
+
+	// See configSetTournament - same defer-before-DB-work reasoning.
+	if err := deferEphemeral(session, i.Interaction); err != nil {
+		b.logger().Error("failed to defer config set-round", "error", fmt.Errorf("configSetRound: %w", err))
+		return
+	}
+
 	t, err := b.APIPtr.SetConfigRound(context.Background(), i.GuildID, i.ChannelID, round)
 	if err != nil {
 		b.logger().Error("failed to set config round", "round", round, "error", fmt.Errorf("configSetRound: %w", err))
-		respondEphemeral(session, i.Interaction, "Could not set that round - set a tournament first, then pick a round from the list.")
+		b.finalizeDeferred(session, i.Interaction, "configSetRound", "Could not set that round - set a tournament first, then pick a round from the list.")
 		return
 	}
-	respondEphemeral(session, i.Interaction, fmt.Sprintf("Round set to **%s** for **%s**.", t.Round, t.Name))
+	b.finalizeDeferred(session, i.Interaction, "configSetRound", fmt.Sprintf("Round set to **%s** for **%s**.", t.Round, t.Name))
 }
 
 // subOptionString returns the string value of a named option under a subcommand,
@@ -514,14 +518,21 @@ func subOptionString(sub *discordgo.ApplicationCommandInteractionDataOption, nam
 	return ""
 }
 
+// isDecidedWinner reports whether winner is a real, resolved winner for team -
+// "TBD" is used as a placeholder for both an unresolved bracket slot and an
+// undecided match, so it never counts as a winner even if team is also "TBD".
+func isDecidedWinner(winner, team string) bool {
+	return winner != "" && winner != "TBD" && winner == team
+}
+
 // buildResultMatchSection returns a Section component for a single match node.
 // The text shows the winner bolded (if known); the button accessory shows the score.
 func buildResultMatchSection(n sources.MatchNode, buttonID int) discordgo.Section {
 	var text string
 	switch {
-	case n.Winner == n.Team1:
+	case isDecidedWinner(n.Winner, n.Team1):
 		text = fmt.Sprintf("**%s** vs %s", n.Team1, n.Team2)
-	case n.Winner == n.Team2:
+	case isDecidedWinner(n.Winner, n.Team2):
 		text = fmt.Sprintf("%s vs **%s**", n.Team1, n.Team2)
 	default:
 		text = fmt.Sprintf("%s vs %s", n.Team1, n.Team2)
@@ -590,16 +601,14 @@ func canonicalElimRound(section string) string {
 
 var singleElimRoundOrder = []string{"Round of 32", "Round of 16", "Quarter-finals", "Semi-finals", "Grand Final"}
 
-func buildSingleElimResultComponents(nodes []sources.MatchNode) []discordgo.MessageComponent {
-	byRound := make(map[string][]sources.MatchNode)
-	for _, n := range nodes {
-		label := canonicalElimRound(n.Section)
-		byRound[label] = append(byRound[label], n)
-	}
-
+// buildOrderedRoundContainers renders one Container per round label in order,
+// reading from byRound (already bucketed by the caller) and skipping any
+// label with no matches. Threads a running button-index offset across
+// containers so every match's accessory button gets a unique CustomID.
+func buildOrderedRoundContainers(byRound map[string][]sources.MatchNode, order []string) []discordgo.MessageComponent {
 	var containers []discordgo.MessageComponent
 	idx := 0
-	for _, round := range singleElimRoundOrder {
+	for _, round := range order {
 		matches, ok := byRound[round]
 		if !ok {
 			continue
@@ -610,7 +619,25 @@ func buildSingleElimResultComponents(nodes []sources.MatchNode) []discordgo.Mess
 	return containers
 }
 
-func buildSwissResultEmbed(nodes []sources.MatchNode) *discordgo.MessageEmbed {
+func buildSingleElimResultComponents(nodes []sources.MatchNode) []discordgo.MessageComponent {
+	byRound := make(map[string][]sources.MatchNode)
+	for _, n := range nodes {
+		label := canonicalElimRound(n.Section)
+		byRound[label] = append(byRound[label], n)
+	}
+	return buildOrderedRoundContainers(byRound, singleElimRoundOrder)
+}
+
+// buildChronologicalResultComponents renders results for formats without a dedicated
+// renderer: a flat, ungrouped list in the order nodes were given (chronological, per
+// GetMatchNodes), with no bracket structure or overall winner.
+func buildChronologicalResultComponents(nodes []sources.MatchNode) []discordgo.MessageComponent {
+	return []discordgo.MessageComponent{buildRoundContainer("Results", nodes, 0)}
+}
+
+// buildSwissResultComponents groups Swiss results by round, sorted numerically,
+// into the same card-style containers used by single-elimination results.
+func buildSwissResultComponents(nodes []sources.MatchNode) []discordgo.MessageComponent {
 	byRound := make(map[string][]sources.MatchNode)
 	var roundOrder []string
 	seen := make(map[string]bool)
@@ -629,37 +656,7 @@ func buildSwissResultEmbed(nodes []sources.MatchNode) *discordgo.MessageEmbed {
 		return na < nb
 	})
 
-	var fields []*discordgo.MessageEmbedField
-	for _, round := range roundOrder {
-		var lines []string
-		for _, n := range byRound[round] {
-			t1, t2 := n.Team1, n.Team2
-			if n.Winner == n.Team1 {
-				t1 = "**" + t1 + "**"
-			} else if n.Winner == n.Team2 {
-				t2 = "**" + t2 + "**"
-			}
-			score := n.Score
-			if parts := strings.SplitN(score, "-", 2); len(parts) == 2 {
-				score = parts[0] + " - " + parts[1]
-			}
-			if score != "" {
-				lines = append(lines, fmt.Sprintf("%s vs %s (%s)", t1, t2, score))
-			} else {
-				lines = append(lines, fmt.Sprintf("%s vs %s", t1, t2))
-			}
-		}
-		fields = append(fields, &discordgo.MessageEmbedField{
-			Name:  round,
-			Value: strings.Join(lines, "\n"),
-		})
-	}
-
-	return &discordgo.MessageEmbed{
-		Title:  "Results",
-		Color:  0x5865F2,
-		Fields: fields,
-	}
+	return buildOrderedRoundContainers(byRound, roundOrder)
 }
 
 func (b *Bot) newAutocompleteInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
@@ -671,10 +668,8 @@ func (b *Bot) newAutocompleteInteractionHandler(session DiscordSession, i *disco
 	}
 }
 
-// configAutocomplete serves both autocompleted options on /config. The tournament
-// option offers distinct tournament names; the round option offers only the rounds
-// that belong to the tournament in scope - the sibling `tournament` value for
-// set-tournament, or the already-configured tournament for set-round.
+// configAutocomplete serves both autocompleted options on /config: the tournament
+// option offers distinct names, and round is scoped to the tournament in context.
 func (b *Bot) configAutocomplete(session DiscordSession, i *discordgo.InteractionCreate) {
 	data := i.ApplicationCommandData()
 	if len(data.Options) == 0 {
@@ -861,16 +856,11 @@ func (b *Bot) setSubmitHandler(session DiscordSession, i *discordgo.InteractionC
 		return
 	}
 
-	errContent := func(msg string) {
-		session.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Content: &msg})
-	}
-
 	user := models.User{UserID: i.Member.User.ID, Username: i.Member.User.Username}
 	prediction, err := b.APIPtr.SetUserPrediction(context.Background(), i.GuildID, i.ChannelID, user, userPreds)
 	if err != nil {
 		b.logger().Error("failed to set user prediction", "user", user.Username, "error", fmt.Errorf("setSubmitHandler: %w", err))
-		msg := fmt.Sprintf("Failed to save Pick'Ems: %s", err.Error())
-		errContent(msg)
+		b.finalizeDeferred(session, i.Interaction, "setSubmitHandler", fmt.Sprintf("Failed to save Pick'Ems: %s", err.Error()))
 		return
 	}
 
@@ -881,7 +871,7 @@ func (b *Bot) setSubmitHandler(session DiscordSession, i *discordgo.InteractionC
 	fields, err := predictionFields(prediction)
 	if err != nil {
 		b.logger().Error("failed to build prediction fields", "user", user.Username, "error", fmt.Errorf("setSubmitHandler: %w", err))
-		errContent("An error occurred displaying your Pick'Ems.")
+		b.finalizeDeferred(session, i.Interaction, "setSubmitHandler", "An error occurred displaying your Pick'Ems.")
 		return
 	}
 

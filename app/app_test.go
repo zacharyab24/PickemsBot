@@ -620,6 +620,22 @@ func TestGetUpcomingMatches_DisplaysInChronologicalOrder(t *testing.T) {
 	}
 }
 
+func TestGetUpcomingMatches_NoScheduledMatches_ReturnsEmptyNotError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	// Deliberately no SetScheduledMatches - "nothing scheduled yet" must be an
+	// empty result, not an error, so the bot's "No upcoming matches at this
+	// time" UI renders instead of a generic failure message.
+	api := NewTestApp(mockStore)
+
+	matches, err := api.GetUpcomingMatches(bg(), testGuildID, testChannelID)
+	if err != nil {
+		t.Fatalf("expected no error when nothing is scheduled yet, got: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Errorf("expected no matches, got %d", len(matches))
+	}
+}
+
 func TestGetUpcomingMatches_GetScheduleError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
@@ -719,18 +735,18 @@ func TestGetTournamentInfo_NoGuildConfig(t *testing.T) {
 
 func TestPopulateMatches_ScheduleOnly_Success(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	api := &App{Store: mockStore, rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
+	api := &App{Store: mockStore, pandaScoreLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
 
-	if err := api.PopulateMatches(bg(), 1, "test_round", true); err != nil {
+	if err := api.PopulateMatches(bg(), 1, "test_round", "pandascore", true); err != nil {
 		t.Errorf("expected no error for scheduleOnly=true, got: %v", err)
 	}
 }
 
 func TestPopulateMatches_FullUpdate_Success(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	api := &App{Store: mockStore, rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
+	api := &App{Store: mockStore, pandaScoreLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
 
-	if err := api.PopulateMatches(bg(), 1, "test_round", false); err != nil {
+	if err := api.PopulateMatches(bg(), 1, "test_round", "pandascore", false); err != nil {
 		t.Errorf("expected no error for scheduleOnly=false, got: %v", err)
 	}
 }
@@ -738,10 +754,10 @@ func TestPopulateMatches_FullUpdate_Success(t *testing.T) {
 func TestPopulateMatches_ScheduleError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.FetchAndSaveScheduleError = fmt.Errorf("schedule fetch failed")
-	api := &App{Store: mockStore, rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
+	api := &App{Store: mockStore, pandaScoreLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
 
 	// Schedule errors are non-fatal — PopulateMatches warns and continues.
-	if err := api.PopulateMatches(bg(), 1, "test_round", true); err != nil {
+	if err := api.PopulateMatches(bg(), 1, "test_round", "pandascore", true); err != nil {
 		t.Errorf("expected nil when schedule fetch fails (non-fatal), got: %v", err)
 	}
 }
@@ -749,18 +765,18 @@ func TestPopulateMatches_ScheduleError(t *testing.T) {
 func TestPopulateMatches_ResultsError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.FetchAndSaveMatchResultsError = fmt.Errorf("results fetch failed")
-	api := &App{Store: mockStore, rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
+	api := &App{Store: mockStore, pandaScoreLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
 
-	if err := api.PopulateMatches(bg(), 1, "test_round", false); err == nil {
+	if err := api.PopulateMatches(bg(), 1, "test_round", "pandascore", false); err == nil {
 		t.Error("expected error when results fetch fails, got nil")
 	}
 }
 
 func TestPopulateMatches_RateLimiterNil(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	api := &App{Store: mockStore, rateLimiter: nil}
+	api := &App{Store: mockStore, pandaScoreLimiter: nil}
 
-	err := api.PopulateMatches(bg(), 1, "test_round", true)
+	err := api.PopulateMatches(bg(), 1, "test_round", "pandascore", true)
 	if err == nil || !strings.Contains(err.Error(), "rate limiter") {
 		t.Errorf("expected rate limiter error, got: %v", err)
 	}
@@ -770,9 +786,9 @@ func TestPopulateMatches_RateLimitExceeded(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	limiter := rate.NewLimiter(rate.Every(time.Hour), 1)
 	limiter.Allow()
-	api := &App{Store: mockStore, rateLimiter: limiter}
+	api := &App{Store: mockStore, pandaScoreLimiter: limiter}
 
-	err := api.PopulateMatches(bg(), 1, "test_round", true)
+	err := api.PopulateMatches(bg(), 1, "test_round", "pandascore", true)
 	if err == nil || !strings.Contains(err.Error(), "rate limiter limit reached") {
 		t.Errorf("expected rate limiter error, got: %v", err)
 	}
@@ -784,9 +800,9 @@ func TestPopulateMatches_RateLimitExceeded(t *testing.T) {
 
 func TestUpdateMatchSchedule_Success(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	api := &App{Store: mockStore, rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
+	api := &App{Store: mockStore, pandaScoreLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
 
-	if err := api.UpdateMatchSchedule(bg(), 1); err != nil {
+	if err := api.UpdateMatchSchedule(bg(), 1, "pandascore"); err != nil {
 		t.Errorf("expected no error, got: %v", err)
 	}
 }
@@ -795,9 +811,9 @@ func TestUpdateMatchSchedule_RateLimitExceeded(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	limiter := rate.NewLimiter(rate.Every(time.Hour), 1)
 	limiter.Allow()
-	api := &App{Store: mockStore, rateLimiter: limiter}
+	api := &App{Store: mockStore, pandaScoreLimiter: limiter}
 
-	err := api.UpdateMatchSchedule(bg(), 1)
+	err := api.UpdateMatchSchedule(bg(), 1, "pandascore")
 	if err == nil || !strings.Contains(err.Error(), "rate limiter exceeded") {
 		t.Errorf("expected rate limiter error, got: %v", err)
 	}
@@ -806,9 +822,9 @@ func TestUpdateMatchSchedule_RateLimitExceeded(t *testing.T) {
 func TestUpdateMatchSchedule_StoreError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.FetchAndSaveScheduleError = fmt.Errorf("schedule fetch failed")
-	api := &App{Store: mockStore, rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
+	api := &App{Store: mockStore, pandaScoreLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
 
-	err := api.UpdateMatchSchedule(bg(), 1)
+	err := api.UpdateMatchSchedule(bg(), 1, "pandascore")
 	if err == nil || !strings.Contains(err.Error(), "schedule fetch failed") {
 		t.Errorf("expected store error, got: %v", err)
 	}
@@ -845,18 +861,18 @@ func TestStoreSchedule_StoreError(t *testing.T) {
 
 func TestUpdateMatchResults_Success(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	api := &App{Store: mockStore, rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
+	api := &App{Store: mockStore, pandaScoreLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
 
-	if err := api.UpdateMatchResults(bg(), 1, "test_round"); err != nil {
+	if err := api.UpdateMatchResults(bg(), 1, "test_round", "pandascore"); err != nil {
 		t.Errorf("expected no error, got: %v", err)
 	}
 }
 
 func TestUpdateMatchResults_RateLimiterNil(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
-	api := &App{Store: mockStore, rateLimiter: nil}
+	api := &App{Store: mockStore, pandaScoreLimiter: nil}
 
-	err := api.UpdateMatchResults(bg(), 1, "test_round")
+	err := api.UpdateMatchResults(bg(), 1, "test_round", "pandascore")
 	if err == nil || !strings.Contains(err.Error(), "rate limiter") {
 		t.Errorf("expected rate limiter error, got: %v", err)
 	}
@@ -866,9 +882,9 @@ func TestUpdateMatchResults_RateLimitExceeded(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	limiter := rate.NewLimiter(rate.Every(time.Hour), 1)
 	limiter.Allow()
-	api := &App{Store: mockStore, rateLimiter: limiter}
+	api := &App{Store: mockStore, pandaScoreLimiter: limiter}
 
-	err := api.UpdateMatchResults(bg(), 1, "test_round")
+	err := api.UpdateMatchResults(bg(), 1, "test_round", "pandascore")
 	if err == nil || !strings.Contains(err.Error(), "rate limiter exceeded") {
 		t.Errorf("expected rate limiter error, got: %v", err)
 	}
@@ -877,9 +893,9 @@ func TestUpdateMatchResults_RateLimitExceeded(t *testing.T) {
 func TestUpdateMatchResults_StoreError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.FetchAndSaveMatchResultsError = fmt.Errorf("store error")
-	api := &App{Store: mockStore, rateLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
+	api := &App{Store: mockStore, pandaScoreLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
 
-	err := api.UpdateMatchResults(bg(), 1, "test_round")
+	err := api.UpdateMatchResults(bg(), 1, "test_round", "pandascore")
 	if err == nil || !strings.Contains(err.Error(), "store error") {
 		t.Errorf("expected store error, got: %v", err)
 	}
@@ -891,8 +907,11 @@ func TestUpdateMatchResults_StoreError(t *testing.T) {
 
 func TestNewTestApp_HasRateLimiter(t *testing.T) {
 	a := NewTestApp(NewMockStore("swiss", "test_round"))
-	if !a.Allow() {
-		t.Error("expected NewTestApp to return an App with a working rate limiter")
+	if !a.Allow("pandascore") {
+		t.Error("expected NewTestApp to return an App with a working pandascore rate limiter")
+	}
+	if !a.Allow("liquipedia") {
+		t.Error("expected NewTestApp to return an App with a working liquipedia rate limiter")
 	}
 }
 
@@ -908,6 +927,129 @@ func TestMockStore_SetEliminationResults(t *testing.T) {
 	mockStore.SetEliminationResults(map[string]models.TeamProgress{"Team A": {Round: "final", Status: "advanced"}})
 	if mockStore.MatchResults == nil {
 		t.Error("expected MatchResults to be set")
+	}
+}
+
+// endregion
+
+// region SetConfigTournament / SetConfigRound
+
+func TestSetConfigTournament_Success_UpdatesConfigAndPool(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	// Format is pre-set so the background finishConfigChange goroutine's
+	// checkAndStoreFormat no-ops instead of reaching out to the real
+	// PandaScore bracket endpoint.
+	format := "swiss"
+	mockStore.Tournaments = []store.Tournament{
+		{ID: 2, Source: "pandascore", ExternalID: "2", SeriesID: "2", Name: "New Event", Round: "Playoffs", Format: &format},
+	}
+	api := NewTestApp(mockStore)
+
+	got, err := api.SetConfigTournament(bg(), testGuildID, testChannelID, "New Event", "Playoffs")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if got.ID != 2 {
+		t.Errorf("expected resolved tournament id 2, got %d", got.ID)
+	}
+	if mockStore.UpsertedGuildConfig == nil || mockStore.UpsertedGuildConfig.TournamentID == nil || *mockStore.UpsertedGuildConfig.TournamentID != 2 {
+		t.Error("expected guild config to be upserted pointing at the new tournament")
+	}
+	// updatePool runs synchronously (see SetConfigTournament) - the new
+	// tournament must already be subscribed by the time this call returns,
+	// with no need to wait for a background goroutine.
+	if _, ok := api.MonitoringPool.Entries[2]; !ok {
+		t.Error("expected the new tournament to be subscribed synchronously before SetConfigTournament returns")
+	}
+}
+
+func TestSetConfigTournament_UnknownTournament_Errors(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	api := NewTestApp(mockStore)
+
+	if _, err := api.SetConfigTournament(bg(), testGuildID, testChannelID, "Nonexistent", "Playoffs"); err == nil {
+		t.Error("expected an error for an unrecognised (name, round) pair")
+	}
+}
+
+func TestSetConfigRound_Success_UpdatesConfigAndPool(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	// Format is pre-set - see TestSetConfigTournament_Success_UpdatesConfigAndPool.
+	format := "swiss"
+	mockStore.Tournaments = []store.Tournament{
+		{ID: 1, Source: "pandascore", ExternalID: "1", SeriesID: "1", Name: "Existing Event", Round: "test_round", Format: &format},
+		{ID: 2, Source: "pandascore", ExternalID: "1", SeriesID: "1", Name: "Existing Event", Round: "Grand Final", Format: &format},
+	}
+	api := NewTestApp(mockStore)
+
+	got, err := api.SetConfigRound(bg(), testGuildID, testChannelID, "Grand Final")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if got.Round != "Grand Final" {
+		t.Errorf("expected round Grand Final, got %q", got.Round)
+	}
+	if _, ok := api.MonitoringPool.Entries[2]; !ok {
+		t.Error("expected the new round's tournament row to be subscribed synchronously")
+	}
+}
+
+func TestSetConfigRound_NoTournamentConfigured_Errors(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.GuildConfig = store.GuildConfig{GuildID: testGuildID} // no TournamentID set
+	api := NewTestApp(mockStore)
+
+	if _, err := api.SetConfigRound(bg(), testGuildID, testChannelID, "Grand Final"); err == nil {
+		t.Error("expected an error when no tournament is configured")
+	}
+}
+
+// configLock backs the mutex that serialises SetConfigTournament/
+// SetConfigRound per (guildID, channelID) - see updatePool's ordering note.
+func TestConfigLock_SameChannel_ReturnsSameMutex(t *testing.T) {
+	api := NewTestApp(NewMockStore("swiss", "test_round"))
+
+	l1 := api.configLock("guild-1", "chan-1")
+	l2 := api.configLock("guild-1", "chan-1")
+	if l1 != l2 {
+		t.Error("expected the same (guildID, channelID) pair to return the same mutex instance")
+	}
+}
+
+func TestConfigLock_DifferentChannels_ReturnDifferentMutexes(t *testing.T) {
+	api := NewTestApp(NewMockStore("swiss", "test_round"))
+
+	l1 := api.configLock("guild-1", "chan-1")
+	l2 := api.configLock("guild-1", "chan-2")
+	if l1 == l2 {
+		t.Error("expected different channels to get independent mutexes")
+	}
+}
+
+// endregion
+
+// region finishConfigChange
+
+// finishConfigChange runs format detection and populate one after another,
+// not concurrently - populate reads the tournament's format fresh from the
+// DB, so running them concurrently could race a still-NULL format against
+// detection persisting it (see the comment on finishConfigChange). A
+// liquipedia tournament skips checkAndStoreFormat's PandaScore-only bracket
+// fetch (only pandascore has a format field to detect), so this stays a fast,
+// network-free unit test while still exercising both steps in sequence.
+func TestFinishConfigChange_RunsFormatDetectionThenPopulate(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	tourney := store.Tournament{ID: 1, Source: "liquipedia", ExternalID: "some-page", Round: "Playoffs"}
+	mockStore.Tournaments = []store.Tournament{tourney}
+	api := NewTestApp(mockStore)
+
+	api.finishConfigChange(tourney)
+
+	if mockStore.SetFormatID != 0 {
+		t.Errorf("expected checkAndStoreFormat to no-op for a non-pandascore tournament, got SetFormatID=%d", mockStore.SetFormatID)
+	}
+	if mockStore.FetchAndSaveMatchResultsCallCount != 1 {
+		t.Errorf("expected populate to run exactly once, got %d calls", mockStore.FetchAndSaveMatchResultsCallCount)
 	}
 }
 

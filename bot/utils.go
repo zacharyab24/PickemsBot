@@ -107,6 +107,27 @@ func respondEphemeral(session DiscordSession, i *discordgo.Interaction, msg stri
 	})
 }
 
+// deferEphemeral acknowledges an interaction with an ephemeral "thinking..."
+// state, giving the caller more than Discord's 3-second window before it must
+// finalise via session.InteractionResponseEdit.
+func deferEphemeral(session DiscordSession, i *discordgo.Interaction) error {
+	return session.InteractionRespond(i, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{Flags: discordgo.MessageFlagsEphemeral},
+	})
+}
+
+// finalizeDeferred edits a previously-deferred response (see deferEphemeral)
+// with msg, on both the success and failure outcome of whatever ran in
+// between - action names the caller for the log line if the edit itself
+// fails, which would otherwise leave Discord showing "thinking..." forever
+// with no server-side record of why.
+func (b *Bot) finalizeDeferred(session DiscordSession, i *discordgo.Interaction, action, msg string) {
+	if _, err := session.InteractionResponseEdit(i, &discordgo.WebhookEdit{Content: &msg}); err != nil {
+		b.logger().Error("failed to edit deferred response", "action", action, "error", err)
+	}
+}
+
 // sendError sends a red error embed to the given channel.
 func sendError(session DiscordSession, channelID string, msg string) {
 	embed := &discordgo.MessageEmbed{

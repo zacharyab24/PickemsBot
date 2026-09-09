@@ -149,6 +149,39 @@ func TestParsePandaScoreMatch_RunningStatus(t *testing.T) {
 	assert.Equal(t, "running", node.Status)
 }
 
+func TestParsePandaScoreMatch_ParsesTimestampFromScheduledAt(t *testing.T) {
+	match := map[string]interface{}{
+		"id":           float64(12348),
+		"name":         "Round 1",
+		"status":       "not_started",
+		"scheduled_at": "2025-11-15T14:00:00Z",
+		"opponents":    []interface{}{},
+		"winner":       nil,
+		"results":      []interface{}{},
+	}
+
+	node, err := parsePandaScoreMatch(match)
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(1763215200), node.Timestamp)
+}
+
+func TestParsePandaScoreMatch_MissingScheduledAt_TimestampZero(t *testing.T) {
+	match := map[string]interface{}{
+		"id":        float64(12349),
+		"name":      "Round 1",
+		"status":    "not_started",
+		"opponents": []interface{}{},
+		"winner":    nil,
+		"results":   []interface{}{},
+	}
+
+	node, err := parsePandaScoreMatch(match)
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), node.Timestamp)
+}
+
 func TestParsePandaScoreMatch_TBDOpponents(t *testing.T) {
 	// Matches with no opponents yet should default to "TBD"
 	match := map[string]interface{}{

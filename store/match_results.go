@@ -38,22 +38,45 @@ func (s *PostgresStore) UpsertMatchResults(ctx context.Context, tournamentID int
 	return nil
 }
 
-// FetchAndSaveMatchResults fetches match data from the configured data source, writes match rows,
+// FetchAndSaveMatchResults fetches match data from tournamentID's own data source, writes match rows,
 // and materialises scores for all predictions on this tournament/round.
 func (s *PostgresStore) FetchAndSaveMatchResults(ctx context.Context, tournamentID int, round string) error {
-	result, nodes, err := s.fetcher.FetchMatchData(round)
+	t, err := s.GetTournament(ctx, tournamentID)
+	if err != nil {
+		return fmt.Errorf("FetchAndSaveMatchResults: %w", err)
+	}
+	fetcher, err := s.resolveFetcher(t)
+	if err != nil {
+		return fmt.Errorf("FetchAndSaveMatchResults: %w", err)
+	}
+
+	// t.Format is the already-persisted bracket-endpoint detection
+	// (checkAndStoreFormat) - pass it through so FetchMatchData trusts it
+	// instead of re-deriving a kind from match node sections.
+	var knownKind tournament.Kind
+	if t.Format != nil {
+		knownKind = tournament.Kind(*t.Format)
+	}
+
+	result, nodes, kind, err := fetcher.FetchMatchData(round, knownKind)
 	if err != nil {
 		return fmt.Errorf("FetchAndSaveMatchResults: fetch: %w", err)
 	}
 
-	if result.GetType() == tournament.Swiss {
+	if kind == tournament.Swiss {
 		nodes = tournament.NormalizeSwissSections(nodes)
-	} else if result.GetType() == tournament.SingleElim {
+	} else if kind == tournament.SingleElim {
 		nodes = tournament.NormalizeSingleElimSections(nodes)
 	}
 
-	if err := s.upsertMatchNodes(ctx, tournamentID, round, nodes, result.GetType()); err != nil {
+	if err := s.upsertMatchNodes(ctx, tournamentID, round, nodes, kind); err != nil {
 		return fmt.Errorf("FetchAndSaveMatchResults: %w", err)
+	}
+
+	// result is nil when the format doesn't support predictions (e.g.
+	// double-elimination) - raw match data is still saved above, just nothing to score.
+	if result == nil {
+		return nil
 	}
 
 	if err := s.updateScores(ctx, tournamentID, round, result); err != nil {
@@ -85,8 +108,8 @@ func (s *PostgresStore) upsertMatchNodes(ctx context.Context, tournamentID int, 
 		}
 
 		_, err := tx.Exec(ctx, `
-			INSERT INTO matches (tournament_id, round, section, team1_name, team2_name, score, external_id, status, completed_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			INSERT INTO matches (tournament_id, round, section, team1_name, team2_name, score, external_id, status, completed_at, scheduled_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			ON CONFLICT (tournament_id, external_id) WHERE external_id IS NOT NULL
 			DO UPDATE SET
 				round        = EXCLUDED.round,
@@ -95,9 +118,10 @@ func (s *PostgresStore) upsertMatchNodes(ctx context.Context, tournamentID int, 
 				section      = EXCLUDED.section,
 				score        = EXCLUDED.score,
 				status       = EXCLUDED.status,
-				completed_at = EXCLUDED.completed_at
+				completed_at = COALESCE(matches.completed_at, EXCLUDED.completed_at),
+				scheduled_at = COALESCE(EXCLUDED.scheduled_at, matches.scheduled_at)
 		`, tournamentID, round, section, n.Team1, n.Team2, score, extID, status,
-			completedAt(status))
+			completedAt(status), epochToTime(n.Timestamp))
 		if err != nil {
 			return fmt.Errorf("upsertMatchNodes: insert %q vs %q: %w", n.Team1, n.Team2, err)
 		}
@@ -203,4 +227,13 @@ func completedAt(status string) *time.Time {
 		return &t
 	}
 	return nil
+}
+
+// epochToTime converts a unix epoch to a *time.Time, nil if epoch is 0.
+func epochToTime(epoch int64) *time.Time {
+	if epoch == 0 {
+		return nil
+	}
+	t := time.Unix(epoch, 0).UTC()
+	return &t
 }

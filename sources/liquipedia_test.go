@@ -18,39 +18,39 @@ import (
 
 func TestParseLiquipediaMatches(t *testing.T) {
 	expectedResult := []MatchNode{
-		{ID: "AmF15pUfHd_0001", Team1: "Aurora Gaming", Team2: "SAW", Winner: "TBD", Score: "", Section: "Round 4"},
-		{ID: "AmF15pUfHd_0002", Team1: "Team Liquid", Team2: "FlyQuest", Winner: "TBD", Score: "", Section: "Round 4"},
-		{ID: "AmF15pUfHd_0003", Team1: "B8", Team2: "Legacy", Winner: "TBD", Score: "", Section: "Round 4"},
-		{ID: "IykJinz1G8_0001", Team1: "GamerLegion", Team2: "SAW", Winner: "SAW", Score: "1-2", Section: "Round 3"},
-		{ID: "IykJinz1G8_0002", Team1: "Team Liquid", Team2: "BetBoom Team", Winner: "Team Liquid", Score: "2-1", Section: "Round 3"},
-		{ID: "IykJinz1G8_0003", Team1: "3DMAX", Team2: "FlyQuest", Winner: "FlyQuest", Score: "1-2", Section: "Round 3"},
-		{ID: "IykJinz1G8_0004", Team1: "Astralis", Team2: "Legacy", Winner: "Legacy", Score: "0-2", Section: "Round 3"},
-		{ID: "U7JeCe3nrs_0001", Team1: "GamerLegion", Team2: "PaiN Gaming", Winner: "PaiN Gaming", Score: "1-2", Section: "Round 2"},
-		{ID: "U7JeCe3nrs_0002", Team1: "HEROIC", Team2: "BetBoom Team", Winner: "HEROIC", Score: "2-0", Section: "Round 2"},
-		{ID: "U7JeCe3nrs_0003", Team1: "Aurora Gaming", Team2: "Team Liquid", Winner: "Aurora Gaming", Score: "2-1", Section: "Round 2"},
-		{ID: "U7JeCe3nrs_0004", Team1: "3DMAX", Team2: "B8", Winner: "B8", Score: "0-2", Section: "Round 2"},
-		{ID: "VKTHpS7s0x_0001", Team1: "Aurora Gaming", Team2: "HEROIC", Winner: "HEROIC", Score: "0-2", Section: "Round 3"},
-		{ID: "VKTHpS7s0x_0002", Team1: "B8", Team2: "PaiN Gaming", Winner: "PaiN Gaming", Score: "0-2", Section: "Round 3"},
-		{ID: "ayB546T4zZ_0001", Team1: "PaiN Gaming", Team2: "Gentle Mates", Winner: "PaiN Gaming", Score: "2-0", Section: "Round 1"},
-		{ID: "ayB546T4zZ_0002", Team1: "Legacy", Team2: "Team Liquid", Winner: "Team Liquid", Score: "1-2", Section: "Round 1"},
-		{ID: "ayB546T4zZ_0003", Team1: "HEROIC", Team2: "Ninjas in Pyjamas", Winner: "HEROIC", Score: "2-0", Section: "Round 1"},
-		{ID: "ayB546T4zZ_0004", Team1: "GamerLegion", Team2: "FlyQuest", Winner: "GamerLegion", Score: "2-0", Section: "Round 1"},
-		{ID: "ayB546T4zZ_0005", Team1: "3DMAX", Team2: "SAW", Winner: "3DMAX", Score: "2-0", Section: "Round 1"},
-		{ID: "ayB546T4zZ_0006", Team1: "BetBoom Team", Team2: "MIBR", Winner: "BetBoom Team", Score: "2-1", Section: "Round 1"},
-		{ID: "ayB546T4zZ_0007", Team1: "Aurora Gaming", Team2: "Fnatic", Winner: "Aurora Gaming", Score: "2-0", Section: "Round 1"},
-		{ID: "ayB546T4zZ_0008", Team1: "Astralis", Team2: "B8", Winner: "B8", Score: "0-2", Section: "Round 1"},
-		{ID: "f3Ubb66fCx_0001", Team1: "3DMAX", Team2: "Astralis", Winner: "TBD", Score: "", Section: "Round 4"},
-		{ID: "f3Ubb66fCx_0002", Team1: "BetBoom Team", Team2: "Gentle Mates", Winner: "TBD", Score: "", Section: "Round 4"},
-		{ID: "f3Ubb66fCx_0003", Team1: "GamerLegion", Team2: "Fnatic", Winner: "TBD", Score: "", Section: "Round 4"},
-		{ID: "ilPVE8BYF6_0001", Team1: "Ninjas in Pyjamas", Team2: "Gentle Mates", Winner: "Gentle Mates", Score: "1-2", Section: "Round 3"},
-		{ID: "ilPVE8BYF6_0002", Team1: "Fnatic", Team2: "MIBR", Winner: "Fnatic", Score: "2-0", Section: "Round 3"},
-		{ID: "vINHUV3all_0001", Team1: "Legacy", Team2: "Gentle Mates", Winner: "Legacy", Score: "2-0", Section: "Round 2"},
-		{ID: "vINHUV3all_0002", Team1: "SAW", Team2: "Ninjas in Pyjamas", Winner: "SAW", Score: "2-1", Section: "Round 2"},
-		{ID: "vINHUV3all_0003", Team1: "Fnatic", Team2: "FlyQuest", Winner: "FlyQuest", Score: "0-2", Section: "Round 2"},
-		{ID: "vINHUV3all_0004", Team1: "Astralis", Team2: "MIBR", Winner: "Astralis", Score: "2-0", Section: "Round 2"},
-		{ID: "zIiQwLgw83_0001", Team1: "TBD", Team2: "TBD", Winner: "TBD", Score: "", Section: "Round 5"},
-		{ID: "zIiQwLgw83_0002", Team1: "TBD", Team2: "TBD", Winner: "TBD", Score: "", Section: "Round 5"},
-		{ID: "zIiQwLgw83_0003", Team1: "TBD", Team2: "TBD", Winner: "TBD", Score: "", Section: "Round 5"},
+		{ID: "AmF15pUfHd_0001", Team1: "Aurora Gaming", Team2: "SAW", Winner: "TBD", Score: "", Section: "Round 4", Timestamp: 1761724800},
+		{ID: "AmF15pUfHd_0002", Team1: "Team Liquid", Team2: "FlyQuest", Winner: "TBD", Score: "", Section: "Round 4", Timestamp: 1761735600},
+		{ID: "AmF15pUfHd_0003", Team1: "B8", Team2: "Legacy", Winner: "TBD", Score: "", Section: "Round 4", Timestamp: 1761746400},
+		{ID: "IykJinz1G8_0001", Team1: "GamerLegion", Team2: "SAW", Winner: "SAW", Score: "1-2", Section: "Round 3", Timestamp: 1761638400},
+		{ID: "IykJinz1G8_0002", Team1: "Team Liquid", Team2: "BetBoom Team", Winner: "Team Liquid", Score: "2-1", Section: "Round 3", Timestamp: 1761638400},
+		{ID: "IykJinz1G8_0003", Team1: "3DMAX", Team2: "FlyQuest", Winner: "FlyQuest", Score: "1-2", Section: "Round 3", Timestamp: 1761653100},
+		{ID: "IykJinz1G8_0004", Team1: "Astralis", Team2: "Legacy", Winner: "Legacy", Score: "0-2", Section: "Round 3", Timestamp: 1761647700},
+		{ID: "U7JeCe3nrs_0001", Team1: "GamerLegion", Team2: "PaiN Gaming", Winner: "PaiN Gaming", Score: "1-2", Section: "Round 2", Timestamp: 1761552000},
+		{ID: "U7JeCe3nrs_0002", Team1: "HEROIC", Team2: "BetBoom Team", Winner: "HEROIC", Score: "2-0", Section: "Round 2", Timestamp: 1761564000},
+		{ID: "U7JeCe3nrs_0003", Team1: "Aurora Gaming", Team2: "Team Liquid", Winner: "Aurora Gaming", Score: "2-1", Section: "Round 2", Timestamp: 1761572700},
+		{ID: "U7JeCe3nrs_0004", Team1: "3DMAX", Team2: "B8", Winner: "B8", Score: "0-2", Section: "Round 2", Timestamp: 1761584700},
+		{ID: "VKTHpS7s0x_0001", Team1: "Aurora Gaming", Team2: "HEROIC", Winner: "HEROIC", Score: "0-2", Section: "Round 3", Timestamp: 1761656100},
+		{ID: "VKTHpS7s0x_0002", Team1: "B8", Team2: "PaiN Gaming", Winner: "PaiN Gaming", Score: "0-2", Section: "Round 3", Timestamp: 1761663600},
+		{ID: "ayB546T4zZ_0001", Team1: "PaiN Gaming", Team2: "Gentle Mates", Winner: "PaiN Gaming", Score: "2-0", Section: "Round 1", Timestamp: 1761465900},
+		{ID: "ayB546T4zZ_0002", Team1: "Legacy", Team2: "Team Liquid", Winner: "Team Liquid", Score: "1-2", Section: "Round 1", Timestamp: 1761465600},
+		{ID: "ayB546T4zZ_0003", Team1: "HEROIC", Team2: "Ninjas in Pyjamas", Winner: "HEROIC", Score: "2-0", Section: "Round 1", Timestamp: 1761476400},
+		{ID: "ayB546T4zZ_0004", Team1: "GamerLegion", Team2: "FlyQuest", Winner: "GamerLegion", Score: "2-0", Section: "Round 1", Timestamp: 1761477300},
+		{ID: "ayB546T4zZ_0005", Team1: "3DMAX", Team2: "SAW", Winner: "3DMAX", Score: "2-0", Section: "Round 1", Timestamp: 1761488400},
+		{ID: "ayB546T4zZ_0006", Team1: "BetBoom Team", Team2: "MIBR", Winner: "BetBoom Team", Score: "2-1", Section: "Round 1", Timestamp: 1761483300},
+		{ID: "ayB546T4zZ_0007", Team1: "Aurora Gaming", Team2: "Fnatic", Winner: "Aurora Gaming", Score: "2-0", Section: "Round 1", Timestamp: 1761495600},
+		{ID: "ayB546T4zZ_0008", Team1: "Astralis", Team2: "B8", Winner: "B8", Score: "0-2", Section: "Round 1", Timestamp: 1761494700},
+		{ID: "f3Ubb66fCx_0001", Team1: "3DMAX", Team2: "Astralis", Winner: "TBD", Score: "", Section: "Round 4", Timestamp: 1761724800},
+		{ID: "f3Ubb66fCx_0002", Team1: "BetBoom Team", Team2: "Gentle Mates", Winner: "TBD", Score: "", Section: "Round 4", Timestamp: 1761735600},
+		{ID: "f3Ubb66fCx_0003", Team1: "GamerLegion", Team2: "Fnatic", Winner: "TBD", Score: "", Section: "Round 4", Timestamp: 1761746400},
+		{ID: "ilPVE8BYF6_0001", Team1: "Ninjas in Pyjamas", Team2: "Gentle Mates", Winner: "Gentle Mates", Score: "1-2", Section: "Round 3", Timestamp: 1761664200},
+		{ID: "ilPVE8BYF6_0002", Team1: "Fnatic", Team2: "MIBR", Winner: "Fnatic", Score: "2-0", Section: "Round 3", Timestamp: 1761675900},
+		{ID: "vINHUV3all_0001", Team1: "Legacy", Team2: "Gentle Mates", Winner: "Legacy", Score: "2-0", Section: "Round 2", Timestamp: 1761552000},
+		{ID: "vINHUV3all_0002", Team1: "SAW", Team2: "Ninjas in Pyjamas", Winner: "SAW", Score: "2-1", Section: "Round 2", Timestamp: 1761560100},
+		{ID: "vINHUV3all_0003", Team1: "Fnatic", Team2: "FlyQuest", Winner: "FlyQuest", Score: "0-2", Section: "Round 2", Timestamp: 1761571200},
+		{ID: "vINHUV3all_0004", Team1: "Astralis", Team2: "MIBR", Winner: "Astralis", Score: "2-0", Section: "Round 2", Timestamp: 1761579900},
+		{ID: "zIiQwLgw83_0001", Team1: "TBD", Team2: "TBD", Winner: "TBD", Score: "", Section: "Round 5", Timestamp: 0},
+		{ID: "zIiQwLgw83_0002", Team1: "TBD", Team2: "TBD", Winner: "TBD", Score: "", Section: "Round 5", Timestamp: 0},
+		{ID: "zIiQwLgw83_0003", Team1: "TBD", Team2: "TBD", Winner: "TBD", Score: "", Section: "Round 5", Timestamp: 0},
 	}
 
 	f, err := os.Open("testdata/parser/scheduledMatchRawData.json")
@@ -138,9 +138,9 @@ func TestParseLiquipediaMatches_InvalidData(t *testing.T) {
 
 func TestParseLiquipediaSchedule(t *testing.T) {
 	expectedResult := []ScheduledMatch{
-		{"TBD", "TBD", -62167219200, "3", "PGL", false, false},
-		{"TBD", "TBD", -62167219200, "3", "PGL", false, false},
-		{"TBD", "TBD", -62167219200, "3", "PGL", false, false},
+		{"TBD", "TBD", 0, "3", "PGL", false, false},
+		{"TBD", "TBD", 0, "3", "PGL", false, false},
+		{"TBD", "TBD", 0, "3", "PGL", false, false},
 		{"Legacy", "Team Liquid", 1761465600, "3", "PGL", true, false},
 		{"PaiN Gaming", "Gentle Mates", 1761465900, "3", "PGL_CS2", true, false},
 		{"HEROIC", "Ninjas in Pyjamas", 1761476400, "3", "PGL_CS2", true, false},
@@ -255,6 +255,30 @@ func TestParseLiquipediaSchedule_InvalidData(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "Error creating match node") {
 		t.Fatal("Unexpected error message")
+	}
+}
+
+// endregion
+
+// region parseLiquipediaMatch tests
+
+func TestParseLiquipediaMatch_MissingDate_TimestampZero(t *testing.T) {
+	match := map[string]interface{}{
+		"match2id": "abc_0001",
+		"finished": float64(0),
+		"match2opponents": []interface{}{
+			map[string]interface{}{"name": "Team A"},
+			map[string]interface{}{"name": "Team B"},
+		},
+	}
+
+	node, err := parseLiquipediaMatch(match)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if node.Timestamp != 0 {
+		t.Errorf("Timestamp = %d, want 0", node.Timestamp)
 	}
 }
 

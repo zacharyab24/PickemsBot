@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"pickems-bot/sources"
 	"pickems-bot/tournament"
@@ -17,12 +18,13 @@ func (s *PostgresStore) GetMatchNodes(ctx context.Context, tournamentID int, rou
 		       COALESCE(m.score, ''),
 		       COALESCE(m.section, m.round),
 		       m.status,
-		       COALESCE(t.format, '')
+		       COALESCE(t.format, ''),
+		       COALESCE(m.completed_at, m.scheduled_at)
 		FROM matches m
 		JOIN tournaments t ON t.id = m.tournament_id
 		LEFT JOIN teams tw ON tw.id = m.winner_id
 		WHERE m.tournament_id = $1 AND m.round = $2
-		ORDER BY m.id ASC
+		ORDER BY COALESCE(m.scheduled_at, m.completed_at) ASC NULLS LAST, m.id ASC
 	`, tournamentID, round)
 	if err != nil {
 		return nil, "", fmt.Errorf("GetMatchNodes: %w", err)
@@ -34,11 +36,15 @@ func (s *PostgresStore) GetMatchNodes(ctx context.Context, tournamentID int, rou
 	for rows.Next() {
 		var n sources.MatchNode
 		var externalID *string
-		if err := rows.Scan(&externalID, &n.Team1, &n.Team2, &n.Winner, &n.Score, &n.Section, &n.Status, &kind); err != nil {
+		var timestamp *time.Time
+		if err := rows.Scan(&externalID, &n.Team1, &n.Team2, &n.Winner, &n.Score, &n.Section, &n.Status, &kind, &timestamp); err != nil {
 			return nil, "", fmt.Errorf("GetMatchNodes: scan: %w", err)
 		}
 		if externalID != nil {
 			n.ID = *externalID
+		}
+		if timestamp != nil {
+			n.Timestamp = timestamp.Unix()
 		}
 		nodes = append(nodes, n)
 	}

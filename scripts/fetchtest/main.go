@@ -65,10 +65,11 @@ func main() {
 	}
 
 	fmt.Printf("=== FetchMatchData (round=%q) ===\n", round)
-	_, matchNodes, err := fetcher.FetchMatchData(round)
+	result, matchNodes, kind, err := fetcher.FetchMatchData(round, "")
 	if err != nil {
 		log.Fatalf("FetchMatchData error: %v", err)
 	}
+	fmt.Printf("kind: %s, result: %v\n", kind, result != nil)
 	printMatchNodes(matchNodes)
 
 	fmt.Printf("\n=== FetchSchedule ===\n")

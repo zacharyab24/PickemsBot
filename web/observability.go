@@ -41,6 +41,7 @@ func StartTelemetryServer(cfg TelemetryConfig) error {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/health", s.healthHandler)
+	mux.HandleFunc("/poller", s.pollerStatusHandler)
 
 	srv := &http.Server{
 		Addr:         cfg.Addr,
@@ -66,9 +67,18 @@ type ResponseChecks struct {
 	Discord string `json:"discord"`
 }
 
-func (s *TelemetryServer) healthHandler(w http.ResponseWriter, r *http.Request) {
+// requireGET rejects anything but GET/HEAD, writing 405 and returning false
+// if so. Callers should return immediately when this returns false.
+func requireGET(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		return false
+	}
+	return true
+}
+
+func (s *TelemetryServer) healthHandler(w http.ResponseWriter, r *http.Request) {
+	if !requireGET(w, r) {
 		return
 	}
 
@@ -114,6 +124,59 @@ func (s *TelemetryServer) healthHandler(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(response)
+}
+
+// PollerStatusResponse is the JSON response body returned by the /poller endpoint.
+type PollerStatusResponse struct {
+	Enabled    bool                `json:"enabled"`
+	Message    string              `json:"message,omitempty"`
+	LastPollAt *time.Time          `json:"last_poll_at,omitempty"`
+	Tracked    []TrackedTournament `json:"tracked_tournaments"`
+}
+
+// TrackedTournament is one tournament currently tracked by the poller.
+type TrackedTournament struct {
+	TournamentID           int    `json:"tournament_id"`
+	Name                   string `json:"name"`
+	PandascoreTournamentID int    `json:"pandascore_tournament_id"`
+	SeriesID               int    `json:"series_id"`
+	Round                  string `json:"round"`
+}
+
+// pollerStatusHandler reports the poller's monitoring pool contents and last
+// poll time. The poller always runs (see main.go) regardless of the
+// deployment's configured data_source - guild_config is source-agnostic, so
+// it's not gated on that value; an empty tracked_tournaments list already
+// conveys "nothing to poll right now".
+func (s *TelemetryServer) pollerStatusHandler(w http.ResponseWriter, r *http.Request) {
+	if !requireGET(w, r) {
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	entries := s.app.Snapshot()
+	tracked := make([]TrackedTournament, 0, len(entries))
+	for _, e := range entries {
+		tracked = append(tracked, TrackedTournament{
+			TournamentID:           e.DBTournamentID,
+			Name:                   e.Name,
+			PandascoreTournamentID: e.PandascoreTournamentID,
+			SeriesID:               e.SeriesID,
+			Round:                  e.Round,
+		})
+	}
+
+	response := PollerStatusResponse{
+		Enabled: true,
+		Tracked: tracked,
+	}
+	if lastPoll, ok := s.app.LastPollTime(); ok {
+		response.LastPollAt = &lastPoll
+	}
+
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
 

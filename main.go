@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
 	"time"
 
 	"pickems-bot/app"
@@ -62,10 +61,8 @@ func main() {
 	}
 	defer apiInstance.Store.Close()
 
-	// Background ingestion jobs: keep the tournament catalog (/config picklist) and
-	// VRS rankings fresh, independent of the live-match poller. They run for the
-	// lifetime of the process on their own schedules; the tournament job shares the
-	// app's PandaScore rate limiter via app.Wait.
+	// Background ingestion jobs keep the tournament catalog (/config picklist)
+	// and VRS rankings fresh, independent of the live-match poller.
 	ingestCtx := context.Background()
 	if pandaKey := os.Getenv("PANDASCORE_API_KEY"); pandaKey != "" {
 		go ingest.NewTournamentSync(apiInstance, pandaKey, time.Hour, logger).Start(ingestCtx)
@@ -99,21 +96,22 @@ func main() {
 		}
 	}()
 
-	switch cfg.DataSource {
-	case "pandascore":
-		externalID := strconv.Itoa(cfg.PandaScore.TournamentID)
-		dbTournamentID, err := apiInstance.Store.EnsureTournament(context.Background(), externalID, "pandascore", cfg.TournamentName, cfg.PandaScore.SeriesID)
-		if err != nil {
-			logger.Error("failed to ensure tournament in database", "error", err)
-			os.Exit(1)
-		}
-		if err := apiInstance.PopulateMatches(context.Background(), dbTournamentID, cfg.Round, false); err != nil {
-			logger.Warn("startup populate failed, bot will retry on next poller tick", "error", err)
-		}
-		poller := web.NewPoller(apiInstance, cfg.PandaScore.SeriesID, cfg.PandaScore.TournamentID, dbTournamentID, cfg.Round, os.Getenv("PANDASCORE_API_KEY"), cfg.PandaScore.APIURL, logger)
-		go poller.Start()
-		logger.Info("PandaScore poller started", "db_tournament_id", dbTournamentID)
-	case "liquipedia":
+	// BootstrapPool re-seeds the monitoring pool (which starts empty on each
+	// restart) from guild_config before the poller starts.
+	if err := apiInstance.BootstrapPool(context.Background()); err != nil {
+		logger.Error("failed to bootstrap monitoring pool", "error", err)
+		os.Exit(1)
+	}
+	poller := web.NewPoller(apiInstance, os.Getenv("PANDASCORE_API_KEY"), cfg.PandaScore.APIURL, logger)
+	go poller.Start()
+	logger.Info("PandaScore poller started")
+
+	// cfg.DataSource is already validated by app.NewApp above (it errors out
+	// on anything but "pandascore"/"liquipedia"), so liquipedia's dedicated
+	// webhook server is the only extra bootstrap needed here - PandaScore
+	// tournaments and match data are populated via ingest.TournamentSync and
+	// /config, not from config.toml.
+	if cfg.DataSource == "liquipedia" {
 		dbTournamentID, err := apiInstance.Store.EnsureTournament(context.Background(), cfg.Liquipedia.Page, "liquipedia", cfg.TournamentName, 0)
 		if err != nil {
 			logger.Error("failed to ensure tournament in database", "error", err)
@@ -126,9 +124,8 @@ func main() {
 			}
 		}()
 		logger.Info("Liquipedia webhook server starting", "addr", ":8080", "db_tournament_id", dbTournamentID)
-	default:
-		logger.Error("unknown data_source in config.toml", "data_source", cfg.DataSource)
-		os.Exit(1)
+	} else {
+		logger.Info("PandaScore data source configured; tournaments are tracked via /config")
 	}
 
 	if err := botInstance.Run(); err != nil {

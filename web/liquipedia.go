@@ -54,10 +54,10 @@ func (s *Server) LiquipediaWebhookHandler(w http.ResponseWriter, r *http.Request
 	// Kick async pipeline – call into your existing packages (/api, /bot, etc)
 	go func(e LiquipediaEvent) {
 		ctx := context.Background()
-		if err := s.api.UpdateMatchSchedule(ctx, s.tournamentID); err != nil {
+		if err := s.api.UpdateMatchSchedule(ctx, s.tournamentID, "liquipedia"); err != nil {
 			s.logger().Warn("update match schedule failed", "error", fmt.Errorf("webhook pipeline: %w", err))
 		}
-		if err := s.api.UpdateMatchResults(ctx, s.tournamentID, s.round); err != nil {
+		if err := s.api.UpdateMatchResults(ctx, s.tournamentID, s.round, "liquipedia"); err != nil {
 			s.logger().Error("update match results failed", "error", fmt.Errorf("webhook pipeline: %w", err))
 		}
 	}(event)

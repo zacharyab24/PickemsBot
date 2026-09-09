@@ -22,6 +22,9 @@ type MockDiscordSession struct {
 	SentFiles []MockFileMessage
 	// SentInteractions stores all interaction responses sent during tests
 	SentInteractions []MockInteractionResponse
+	// EditedResponses stores the Content of every InteractionResponseEdit call,
+	// the finalising message for handlers that defer first (see deferEphemeral).
+	EditedResponses []string
 	// ErrorToReturn allows tests to simulate errors
 	ErrorToReturn error
 }
@@ -81,8 +84,8 @@ func (m *MockDiscordSession) ChannelMessageSend(channelID string, content string
 }
 
 // ChannelMessageSendEmbed implements DiscordSession.ChannelMessageSendEmbed.
-// It stores the embed in SentEmbeds and also appends a serialised form to
-// SentMessages so that routing tests (Len checks) keep working without change.
+// Also appends a serialised form to SentMessages so existing content-based
+// test assertions keep working.
 func (m *MockDiscordSession) ChannelMessageSendEmbed(channelID string, embed *discordgo.MessageEmbed, options ...discordgo.RequestOption) (*discordgo.Message, error) {
 	if m.ErrorToReturn != nil {
 		return nil, m.ErrorToReturn
@@ -133,8 +136,18 @@ func NewMockDiscordSession() *MockDiscordSession {
 }
 
 // InteractionResponseEdit implements DiscordSession.InteractionResponseEdit.
+// Matches real Discord behaviour: a failed call doesn't produce an edited
+// response, so ErrorToReturn is checked before recording one - otherwise a
+// test could never observe a handler's edit-failure path (it would still see
+// the content land in EditedResponses even though the "call" failed).
 func (m *MockDiscordSession) InteractionResponseEdit(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit, options ...discordgo.RequestOption) (*discordgo.Message, error) {
-	return &discordgo.Message{}, m.ErrorToReturn
+	if m.ErrorToReturn != nil {
+		return nil, m.ErrorToReturn
+	}
+	if newresp.Content != nil {
+		m.EditedResponses = append(m.EditedResponses, *newresp.Content)
+	}
+	return &discordgo.Message{}, nil
 }
 
 // InteractionRespond implements DiscordSession.InteractionRespond.

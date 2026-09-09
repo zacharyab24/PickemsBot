@@ -87,7 +87,7 @@ func (s *PostgresStore) UpsertMatchSchedule(ctx context.Context, tournamentID in
 	}
 
 	for _, m := range matches {
-		scheduledAt := time.Unix(m.EpochTime, 0).UTC()
+		scheduledAt := epochToTime(m.EpochTime)
 		status := "pending"
 		if m.Finished {
 			status = "completed"
@@ -109,9 +109,18 @@ func (s *PostgresStore) UpsertMatchSchedule(ctx context.Context, tournamentID in
 	return nil
 }
 
-// FetchAndSaveSchedule fetches upcoming matches from the configured data source and persists them for the given tournament.
+// FetchAndSaveSchedule fetches upcoming matches from tournamentID's own data source and persists them.
 func (s *PostgresStore) FetchAndSaveSchedule(ctx context.Context, tournamentID int) error {
-	matches, err := s.fetcher.FetchSchedule()
+	t, err := s.GetTournament(ctx, tournamentID)
+	if err != nil {
+		return fmt.Errorf("FetchAndSaveSchedule: %w", err)
+	}
+	fetcher, err := s.resolveFetcher(t)
+	if err != nil {
+		return fmt.Errorf("FetchAndSaveSchedule: %w", err)
+	}
+
+	matches, err := fetcher.FetchSchedule()
 	if err != nil {
 		return fmt.Errorf("FetchAndSaveSchedule: %w", err)
 	}

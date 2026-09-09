@@ -133,6 +133,37 @@ func TestInteractionRouting_Results(t *testing.T) {
 	}
 }
 
+// TestResultsInteractionHandler_UnknownFormat_UsesChronologicalFallback verifies formats
+// without a dedicated renderer (e.g. double-elimination) get the chronological fallback
+// instead of the old "Unsupported tournament format." message.
+func TestResultsInteractionHandler_UnknownFormat_UsesChronologicalFallback(t *testing.T) {
+	mockStore := app.NewMockStore(tournament.DoubleElim, "Playoffs")
+	mockStore.MatchKind = tournament.DoubleElim
+	mockStore.MatchNodes = []sources.MatchNode{
+		{Team1: "Team A", Team2: "Team B", Winner: "Team A", Score: "2-1", Status: "completed"},
+		{Team1: "Team C", Team2: "Team D", Status: "pending"},
+	}
+	api := app.NewTestApp(mockStore)
+	bot, err := NewBot("test_token", api, nil, "")
+	if err != nil {
+		t.Fatalf("NewBot: %v", err)
+	}
+	session := NewMockDiscordSession()
+
+	bot.resultsInteractionHandler(session, makeCommandInteraction("results"))
+
+	if len(session.SentInteractions) != 1 {
+		t.Fatalf("expected 1 interaction response, got %d", len(session.SentInteractions))
+	}
+	data := session.SentInteractions[0].Response.Data
+	if data.Flags&discordgo.MessageFlagsIsComponentsV2 == 0 {
+		t.Error("expected ComponentsV2 response, not the unsupported-format message")
+	}
+	if len(data.Components) != 1 {
+		t.Errorf("expected 1 container component, got %d", len(data.Components))
+	}
+}
+
 func TestInteractionRouting_Check(t *testing.T) {
 	bot, session := newInteractionTestBot(t)
 	bot.newInteractionHandler(session, makeCommandInteraction("check"))

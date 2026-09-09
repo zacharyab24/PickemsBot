@@ -10,23 +10,18 @@ import (
 	"pickems-bot/sources"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
 // Poller represents the poller used for determining when to update when using PandaScore as a dataset
 // since PandaScore does not support callbacks
 type Poller struct {
-	app                    *app.App
-	seriesID               int
-	pandascoreTournamentID int // external PandaScore ID used for API filtering
-	dbTournamentID         int // internal DB id used for store operations
-	round                  string
-	apiKey                 string
-	apiURL                 string
-	interval               time.Duration
-	knownStatus            map[string]string // matchID -> last known status
-	knownScheduleKey       string            // fingerprint of last stored schedule
-	log                    *slog.Logger
+	app      *app.App
+	apiKey   string
+	apiURL   string
+	interval time.Duration
+	log      *slog.Logger
 }
 
 // logger returns the poller's logger, falling back to the global default when none was injected.
@@ -37,54 +32,67 @@ func (p *Poller) logger() *slog.Logger {
 	return p.log
 }
 
-// NewPoller is the poller constructor.
-// pandascoreTournamentID is the external PandaScore ID used only for API filtering.
-// dbTournamentID is the internal DB id used for all store operations.
-// log may be nil; if so the global slog default is used.
-func NewPoller(a *app.App, seriesID int, pandascoreTournamentID int, dbTournamentID int, round string, apiKey string, apiURL string, log *slog.Logger) *Poller {
+// NewPoller is the poller constructor. It polls every tournament currently in
+// a's monitoring pool - see app.Subscribe/app.Unsubscribe for how tournaments
+// enter and leave that pool. log may be nil; if so the global slog default is
+// used.
+func NewPoller(a *app.App, apiKey string, apiURL string, log *slog.Logger) *Poller {
 	var pollerLog *slog.Logger
 	if log != nil {
 		pollerLog = log.With("component", "poller")
 	}
 	return &Poller{
-		app:                    a,
-		seriesID:               seriesID,
-		pandascoreTournamentID: pandascoreTournamentID,
-		dbTournamentID:         dbTournamentID,
-		round:                  round,
-		apiKey:                 apiKey,
-		apiURL:                 apiURL,
-		interval:               time.Minute,
-		knownStatus:            make(map[string]string),
-		log:                    pollerLog,
+		app:      a,
+		apiKey:   apiKey,
+		apiURL:   apiURL,
+		interval: time.Minute,
+		log:      pollerLog,
 	}
 }
 
-// Start runs the poller. Note this runs for the lifetime of the program
+// Start runs the poller. Note this runs for the lifetime of the program.
+//
+// Each tournament in the pool is ticked concurrently so a slow fetch for one
+// doesn't delay the others. wg.Wait() blocks the loop from going back to
+// ticker.C until the whole batch finishes - ticker.C is buffered to 1 and
+// drops ticks that fire while nothing is receiving, so a batch that overruns
+// the interval simply skips the tick(s) it overran rather than stacking up.
 func (p *Poller) Start() {
 	ticker := time.NewTicker(p.interval)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		if !p.tick() {
-			return
+		var wg sync.WaitGroup
+		for _, entry := range p.app.Snapshot() {
+			wg.Add(1)
+			go func(entry *app.PoolEntry) {
+				defer wg.Done()
+				if !p.tick(entry) {
+					p.app.Unsubscribe(context.Background(), entry.DBTournamentID)
+				}
+			}(entry)
 		}
+		wg.Wait()
+		p.app.RecordPoll()
 	}
 }
 
-// tick is the logic that happens per tick of the poller.
-// Returns false if the poller should stop, true if it should continue.
-func (p *Poller) tick() bool {
-	// make sure we are not exceeding our rate limiter limitation
-	if !p.app.Allow() {
+// tick is the logic that happens per tick of the poller for a single tracked
+// tournament. Returns false if this tournament should be dropped from the
+// monitoring pool (e.g. an unrecoverable fetch error), true otherwise.
+func (p *Poller) tick(entry *app.PoolEntry) bool {
+	if !p.app.Allow("pandascore") {
 		p.logger().Warn("rate limit reached, skipping tick")
 		return true
 	}
 
-	raw, err := sources.GetPandaScoreMatches(p.apiURL, p.apiKey, p.seriesID, p.pandascoreTournamentID)
+	raw, err := sources.GetPandaScoreMatches(p.apiURL, p.apiKey, entry.SeriesID, entry.PandascoreTournamentID)
 	if err != nil {
 		if errors.Is(err, sources.ErrUnrecoverable) {
-			p.logger().Error("unrecoverable fetch error, stopping poller", "error", fmt.Errorf("poller.tick: %w", err))
+			// Only this one tournament drops out - the poller loop itself keeps
+			// running for every other tracked tournament. ingest.TournamentSync's
+			// hourly catalog sync re-subscribes it if guild_config still tracks it.
+			p.logger().Error("unrecoverable fetch error, unsubscribing tournament from poller", "error", fmt.Errorf("poller.tick: %w", err))
 			metrics.PollerErrorsTotal.Inc()
 			return false
 		}
@@ -93,7 +101,7 @@ func (p *Poller) tick() bool {
 		return true
 	}
 
-	matchNodes, err := sources.ParsePandaScoreMatches(raw, p.pandascoreTournamentID)
+	matchNodes, err := sources.ParsePandaScoreMatches(raw, entry.PandascoreTournamentID)
 	if err != nil {
 		p.logger().Warn("failed to parse PandaScore matches, will retry next tick", "error", fmt.Errorf("poller.tick: %w", err))
 		metrics.PollerErrorsTotal.Inc()
@@ -102,22 +110,22 @@ func (p *Poller) tick() bool {
 
 	finishedTransition := false
 	for _, matchNode := range matchNodes {
-		prev, seen := p.knownStatus[matchNode.ID]
+		prev, seen := entry.KnownStatus[matchNode.ID]
 		if seen && prev != "finished" && matchNode.Status == "finished" {
 			finishedTransition = true
 		}
-		p.knownStatus[matchNode.ID] = matchNode.Status
+		entry.KnownStatus[matchNode.ID] = matchNode.Status
 	}
 
-	scheduledMatches, err := sources.ParsePandaScoreSchedule(raw, p.pandascoreTournamentID)
+	scheduledMatches, err := sources.ParsePandaScoreSchedule(raw, entry.PandascoreTournamentID)
 	if err != nil {
 		p.logger().Warn("failed to parse PandaScore schedule, skipping schedule update", "error", fmt.Errorf("poller.tick: %w", err))
-	} else if key := scheduleKey(scheduledMatches); key != p.knownScheduleKey {
-		if err := p.app.StoreSchedule(context.Background(), p.dbTournamentID, scheduledMatches); err != nil {
+	} else if key := scheduleKey(scheduledMatches); key != entry.KnownScheduleKey {
+		if err := p.app.StoreSchedule(context.Background(), entry.DBTournamentID, scheduledMatches); err != nil {
 			p.logger().Warn("failed to store match schedule", "error", fmt.Errorf("poller.tick: %w", err))
 		} else {
 			p.logger().Info("match schedule updated", "matches", len(scheduledMatches))
-			p.knownScheduleKey = key
+			entry.KnownScheduleKey = key
 		}
 	}
 
@@ -125,7 +133,7 @@ func (p *Poller) tick() bool {
 	metrics.PollerTicksTotal.Inc()
 
 	if finishedTransition {
-		if err := p.app.UpdateMatchResults(context.Background(), p.dbTournamentID, p.round); err != nil {
+		if err := p.app.UpdateMatchResults(context.Background(), entry.DBTournamentID, entry.Round, "pandascore"); err != nil {
 			p.logger().Warn("failed to update match results", "error", fmt.Errorf("poller.tick: %w", err))
 		}
 	}

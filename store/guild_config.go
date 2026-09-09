@@ -56,11 +56,51 @@ func (s *PostgresStore) UpsertGuildConfig(ctx context.Context, cfg GuildConfig) 
 }
 
 // EnsureGuild inserts a guilds row if one does not already exist.
-// Must be called before UpsertGuildConfig — guild_config.guild_id has an FK to guilds.
+// Must be called before UpsertGuildConfig - guild_config.guild_id has an FK to guilds.
 func (s *PostgresStore) EnsureGuild(ctx context.Context, guildID string) error {
 	if _, err := s.pool.Exec(ctx,
 		`INSERT INTO guilds (guild_id) VALUES ($1) ON CONFLICT DO NOTHING`, guildID); err != nil {
 		return fmt.Errorf("EnsureGuild: %w", err)
 	}
 	return nil
+}
+
+// ListTrackedTournamentIDs returns the distinct tournament ids referenced
+// across every guild_config row.
+func (s *PostgresStore) ListTrackedTournamentIDs(ctx context.Context) ([]int, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT DISTINCT tournament_id FROM guild_config WHERE tournament_id IS NOT NULL`)
+	if err != nil {
+		return nil, fmt.Errorf("ListTrackedTournamentIDs: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("ListTrackedTournamentIDs: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("ListTrackedTournamentIDs: %w", err)
+	}
+	return ids, nil
+}
+
+// TournamentStillReferenced reports whether any guild_config row still points
+// at tournamentID. Callers checking this after switching a config row to a
+// new tournament don't need to exclude that row - it already points
+// elsewhere by the time this runs.
+func (s *PostgresStore) TournamentStillReferenced(ctx context.Context, tournamentID int) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM guild_config WHERE tournament_id = $1)`,
+		tournamentID,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("TournamentStillReferenced: %w", err)
+	}
+	return exists, nil
 }

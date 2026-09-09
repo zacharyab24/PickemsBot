@@ -105,6 +105,14 @@ func TestBuildResultMatchSection_Pending(t *testing.T) {
 	}
 }
 
+func TestBuildResultMatchSection_TBDVsTBD_NoBolding(t *testing.T) {
+	n := sources.MatchNode{Team1: "TBD", Team2: "TBD", Winner: "TBD", Score: "", Status: "pending"}
+	text, _, _ := sectionParts(t, n)
+	if text != "TBD vs TBD" {
+		t.Errorf("text = %q, want %q", text, "TBD vs TBD")
+	}
+}
+
 func TestBuildResultMatchSection_InProgress(t *testing.T) {
 	n := sources.MatchNode{Team1: "Alpha", Team2: "Beta", Winner: "", Score: "", Status: "in_progress"}
 	_, label, style := sectionParts(t, n)
@@ -210,38 +218,78 @@ func TestBuildSingleElimResultComponents_AllRoundsPresent(t *testing.T) {
 
 // endregion
 
-// region buildSwissResultEmbed tests
+// region buildChronologicalResultComponents tests
 
-func TestBuildSwissResultEmbed_SortedByRound(t *testing.T) {
+func TestBuildChronologicalResultComponents_PreservesOrderNoGrouping(t *testing.T) {
+	nodes := []sources.MatchNode{
+		{Team1: "A", Team2: "B", Winner: "A", Score: "2-0", Status: "completed"},
+		{Team1: "C", Team2: "D", Status: "pending"},
+	}
+	result := buildChronologicalResultComponents(nodes)
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 container, got %d", len(result))
+	}
+	if got := containerHeading(t, result[0]); got != "Results" {
+		t.Errorf("heading = %q, want %q", got, "Results")
+	}
+	if got := containerMatchCount(t, result[0]); got != 2 {
+		t.Errorf("match count = %d, want 2", got)
+	}
+}
+
+// endregion
+
+// region buildSwissResultComponents tests
+
+// containerMatchText returns the display text of the idx'th match Section in a
+// Container (skips the heading and separator).
+func containerMatchText(t *testing.T, comp discordgo.MessageComponent, idx int) string {
+	t.Helper()
+	c := comp.(discordgo.Container)
+	s, ok := c.Components[idx+2].(discordgo.Section)
+	if !ok {
+		t.Fatalf("expected Section at index %d, got %T", idx, c.Components[idx+2])
+	}
+	td, ok := s.Components[0].(discordgo.TextDisplay)
+	if !ok {
+		t.Fatalf("expected TextDisplay, got %T", s.Components[0])
+	}
+	return td.Content
+}
+
+func TestBuildSwissResultComponents_SortedByRound(t *testing.T) {
 	nodes := []sources.MatchNode{
 		{Team1: "A", Team2: "B", Winner: "A", Score: "2-0", Section: "Round 2", Status: "completed"},
 		{Team1: "C", Team2: "D", Winner: "C", Score: "2-1", Section: "Round 2", Status: "completed"},
 		{Team1: "E", Team2: "F", Winner: "E", Score: "2-0", Section: "Round 1", Status: "completed"},
 		{Team1: "G", Team2: "H", Winner: "", Score: "", Section: "Round 3", Status: "pending"},
 	}
-	embed := buildSwissResultEmbed(nodes)
+	result := buildSwissResultComponents(nodes)
 
-	if len(embed.Fields) != 3 {
-		t.Fatalf("expected 3 fields, got %d", len(embed.Fields))
+	if len(result) != 3 {
+		t.Fatalf("expected 3 containers, got %d", len(result))
 	}
 	wantLabels := []string{"Round 1", "Round 2", "Round 3"}
-	for i, f := range embed.Fields {
-		if f.Name != wantLabels[i] {
-			t.Errorf("field[%d] = %q, want %q", i, f.Name, wantLabels[i])
+	wantCounts := []int{1, 2, 1}
+	for i, comp := range result {
+		if got := containerHeading(t, comp); got != wantLabels[i] {
+			t.Errorf("container[%d] label = %q, want %q", i, got, wantLabels[i])
 		}
-	}
-	if lines := strings.Count(embed.Fields[1].Value, "\n") + 1; lines != 2 {
-		t.Errorf("Round 2 has %d lines, want 2", lines)
+		if got := containerMatchCount(t, comp); got != wantCounts[i] {
+			t.Errorf("container[%d] match count = %d, want %d", i, got, wantCounts[i])
+		}
 	}
 }
 
-func TestBuildSwissResultEmbed_WinnerBolded(t *testing.T) {
+func TestBuildSwissResultComponents_WinnerBolded(t *testing.T) {
 	nodes := []sources.MatchNode{
 		{Team1: "A", Team2: "B", Winner: "A", Score: "2-0", Section: "Round 1", Status: "completed"},
 	}
-	embed := buildSwissResultEmbed(nodes)
-	if !strings.Contains(embed.Fields[0].Value, "**A**") {
-		t.Errorf("expected winner A to be bolded, got: %s", embed.Fields[0].Value)
+	result := buildSwissResultComponents(nodes)
+	text := containerMatchText(t, result[0], 0)
+	if !strings.Contains(text, "**A**") {
+		t.Errorf("expected winner A to be bolded, got: %s", text)
 	}
 }
 
