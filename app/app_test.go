@@ -243,6 +243,21 @@ func TestSetUserPrediction_UnsupportedFormat_FailsFast(t *testing.T) {
 	// Fails before EnsureScheduledMatches even runs - no schedule was seeded above.
 }
 
+// cfg.Format is nil (not yet detected when resolveConfig ran), so
+// checkPredictionsSupported lets it through - only ListValidTeams' own read
+// (mockStore.Format) knows the format is unsupported. Must still get the
+// friendly error, not "incorrect number of teams arguments".
+func TestSetUserPrediction_FormatDetectedLate_StillFriendlyError(t *testing.T) {
+	mockStore := NewMockStore(tournament.DoubleElim, "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	api := NewTestApp(mockStore)
+
+	_, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "u1"}, []string{"Team A", "Team B"})
+	if !errors.Is(err, ErrFormatDoesNotSupportPredictions) {
+		t.Fatalf("expected ErrFormatDoesNotSupportPredictions, got: %v", err)
+	}
+}
+
 // endregion
 
 // region CheckPrediction
@@ -326,6 +341,21 @@ func TestCheckPrediction_UnsupportedFormat_FailsFast(t *testing.T) {
 	}
 }
 
+// cfg.Format is nil here - only GetMatchResults' own kind read (simulated via
+// GetMatchResultsError wrapping ErrPredictionsUnsupported) knows it's unsupported.
+func TestCheckPrediction_FormatDetectedLate_StillFriendlyError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	mockStore.Predictions["user1"] = models.Prediction{UserID: "user1", Format: "swiss", Round: "test_round"}
+	mockStore.GetMatchResultsError = fmt.Errorf("GetMatchResults: %w", tournament.ErrPredictionsUnsupported)
+	api := NewTestApp(mockStore)
+
+	_, err := api.CheckPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "user1"})
+	if !errors.Is(err, ErrFormatDoesNotSupportPredictions) {
+		t.Fatalf("expected ErrFormatDoesNotSupportPredictions, got: %v", err)
+	}
+}
+
 // endregion
 
 // region CheckPredictionByUsername
@@ -394,6 +424,21 @@ func TestCheckPredictionByUsername_UnsupportedFormat_FailsFast(t *testing.T) {
 	api := NewTestApp(mockStore)
 
 	_, _, err := api.CheckPredictionByUsername(bg(), testGuildID, testChannelID, "PickemsBot")
+	if !errors.Is(err, ErrFormatDoesNotSupportPredictions) {
+		t.Fatalf("expected ErrFormatDoesNotSupportPredictions, got: %v", err)
+	}
+}
+
+// cfg.Format is nil here - only GetMatchResults' own kind read (simulated via
+// GetMatchResultsError wrapping ErrPredictionsUnsupported) knows it's unsupported.
+func TestCheckPredictionByUsername_FormatDetectedLate_StillFriendlyError(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	mockStore.Predictions["user1"] = models.Prediction{UserID: "user1", Username: "PickemsBot", Format: "swiss", Round: "test_round"}
+	mockStore.GetMatchResultsError = fmt.Errorf("GetMatchResults: %w", tournament.ErrPredictionsUnsupported)
+	api := NewTestApp(mockStore)
+
+	_, _, err := api.CheckPredictionByUsername(bg(), testGuildID, testChannelID, "pickemsbot")
 	if !errors.Is(err, ErrFormatDoesNotSupportPredictions) {
 		t.Fatalf("expected ErrFormatDoesNotSupportPredictions, got: %v", err)
 	}

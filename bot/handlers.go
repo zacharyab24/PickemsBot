@@ -16,21 +16,28 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// predictionErrorMessage returns the message to show for a prediction-command
+// error: err's own text verbatim when predictions aren't supported for the
+// format, otherwise logMsg is logged at Error level (with logArgs and err) and
+// fallbackMsg is returned.
+func (b *Bot) predictionErrorMessage(err error, logMsg, fallbackMsg string, logArgs ...any) string {
+	if errors.Is(err, app.ErrFormatDoesNotSupportPredictions) {
+		return err.Error()
+	}
+	b.logger().Error(logMsg, append(logArgs, "error", err)...)
+	return fallbackMsg
+}
+
 // respondCheckPredictionError maps a CheckPrediction error to the right
 // user-facing message: notSetMsg for a missing prediction (worded differently
-// for /check self vs /check @user by the caller), the format's own message
-// verbatim when predictions aren't supported for it, or a generic failure
-// otherwise.
+// for /check self vs /check @user by the caller), or predictionErrorMessage's
+// result otherwise.
 func (b *Bot) respondCheckPredictionError(session DiscordSession, i *discordgo.Interaction, username, notSetMsg string, err error) {
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	if errors.Is(err, pgx.ErrNoRows) {
 		respondError(session, i, notSetMsg)
-	case errors.Is(err, app.ErrFormatDoesNotSupportPredictions):
-		respondError(session, i, err.Error())
-	default:
-		b.logger().Error("failed to check prediction", "user", username, "error", fmt.Errorf("checkInteractionHandler: %w", err))
-		respondError(session, i, fmt.Sprintf("An error occurred checking %s's Pick'Ems.", username))
+		return
 	}
+	respondError(session, i, b.predictionErrorMessage(err, "failed to check prediction", fmt.Sprintf("An error occurred checking %s's Pick'Ems.", username), "user", username))
 }
 
 func (b *Bot) checkInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
@@ -151,7 +158,12 @@ func (b *Bot) setInteractionHandler(session DiscordSession, i *discordgo.Interac
 			}},
 		}
 	default:
-		respondError(session, i.Interaction, fmt.Sprintf("Predictions are not supported for this tournament format (%s). Upcoming matches and results are still available.", info.Format))
+		if info.SupportsPredictions {
+			b.logger().Error("format supports predictions but has no /set UI case", "format", info.Format)
+			respondError(session, i.Interaction, "An error occurred loading the prediction form for this tournament format.")
+			return
+		}
+		respondError(session, i.Interaction, app.FormatNotSupportedMessage(info.Format))
 		return
 	}
 
@@ -280,12 +292,7 @@ func (b *Bot) teamsInteractionHandler(session DiscordSession, i *discordgo.Inter
 func (b *Bot) leaderboardInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
 	leaderboard, err := b.APIPtr.GetLeaderboard(context.Background(), i.GuildID, i.ChannelID)
 	if err != nil {
-		if errors.Is(err, app.ErrFormatDoesNotSupportPredictions) {
-			respondError(session, i.Interaction, err.Error())
-			return
-		}
-		b.logger().Error("failed to get leaderboard", "error", fmt.Errorf("leaderboardHandler: %w", err))
-		respondError(session, i.Interaction, "An error occurred getting the leaderboard.")
+		respondError(session, i.Interaction, b.predictionErrorMessage(err, "failed to get leaderboard", "An error occurred getting the leaderboard."))
 		return
 	}
 	if leaderboard == nil {
@@ -873,11 +880,7 @@ func (b *Bot) setSubmitHandler(session DiscordSession, i *discordgo.InteractionC
 	user := models.User{UserID: i.Member.User.ID, Username: i.Member.User.Username}
 	prediction, err := b.APIPtr.SetUserPrediction(context.Background(), i.GuildID, i.ChannelID, user, userPreds)
 	if err != nil {
-		b.logger().Error("failed to set user prediction", "user", user.Username, "error", fmt.Errorf("setSubmitHandler: %w", err))
-		msg := fmt.Sprintf("Failed to save Pick'Ems: %s", err.Error())
-		if errors.Is(err, app.ErrFormatDoesNotSupportPredictions) {
-			msg = err.Error() // already a complete, user-facing message - the "Failed to save" framing doesn't fit
-		}
+		msg := b.predictionErrorMessage(err, "failed to set user prediction", fmt.Sprintf("Failed to save Pick'Ems: %s", err.Error()), "user", user.Username)
 		b.finalizeDeferred(session, i.Interaction, "setSubmitHandler", msg)
 		return
 	}
