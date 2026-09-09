@@ -7,6 +7,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"pickems-bot/models"
 	"pickems-bot/sources"
 	"pickems-bot/store"
+	"pickems-bot/tournament"
 
 	"golang.org/x/time/rate"
 )
@@ -59,6 +61,56 @@ func TestResolveConfig_NilRound(t *testing.T) {
 	_, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "u1"}, nil)
 	if err == nil || !strings.Contains(err.Error(), "tournament not configured") {
 		t.Errorf("expected 'tournament not configured' error, got: %v", err)
+	}
+}
+
+// endregion
+
+// region checkPredictionsSupported
+
+func TestCheckPredictionsSupported_NilFormat_NoError(t *testing.T) {
+	api := NewTestApp(NewMockStore("swiss", "test_round"))
+
+	if err := api.checkPredictionsSupported(store.GuildConfig{}); err != nil {
+		t.Errorf("expected no error for a nil (not yet known) format, got: %v", err)
+	}
+}
+
+func TestCheckPredictionsSupported_SupportedFormat_NoError(t *testing.T) {
+	api := NewTestApp(NewMockStore("swiss", "test_round"))
+
+	for _, kind := range []tournament.Kind{tournament.Swiss, tournament.SingleElim} {
+		format := string(kind)
+		if err := api.checkPredictionsSupported(store.GuildConfig{Format: &format}); err != nil {
+			t.Errorf("expected no error for %s, got: %v", kind, err)
+		}
+	}
+}
+
+func TestCheckPredictionsSupported_UnsupportedFormat_ReturnsFriendlyError(t *testing.T) {
+	api := NewTestApp(NewMockStore("swiss", "test_round"))
+
+	for _, kind := range []tournament.Kind{tournament.DoubleElim, tournament.RoundRobin, tournament.Other} {
+		format := string(kind)
+		err := api.checkPredictionsSupported(store.GuildConfig{Format: &format})
+		if !errors.Is(err, ErrFormatDoesNotSupportPredictions) {
+			t.Errorf("expected ErrFormatDoesNotSupportPredictions for %s, got: %v", kind, err)
+		}
+		if !strings.Contains(err.Error(), string(kind)) {
+			t.Errorf("expected error message to name the format %q, got: %v", kind, err)
+		}
+	}
+}
+
+func TestCheckPredictionsSupported_UnrecognisedFormatString_NoError(t *testing.T) {
+	// A format string tournament.Get doesn't recognise (shouldn't normally
+	// happen) is let through rather than blocking the caller - downstream
+	// calls already handle an unknown format on their own.
+	api := NewTestApp(NewMockStore("swiss", "test_round"))
+	format := "not-a-real-format"
+
+	if err := api.checkPredictionsSupported(store.GuildConfig{Format: &format}); err != nil {
+		t.Errorf("expected no error for an unrecognised format string, got: %v", err)
 	}
 }
 
@@ -177,6 +229,20 @@ func TestSetUserPrediction_StoreError(t *testing.T) {
 	}
 }
 
+func TestSetUserPrediction_UnsupportedFormat_FailsFast(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	format := string(tournament.DoubleElim)
+	mockStore.GuildConfig.Format = &format
+	api := NewTestApp(mockStore)
+
+	teams := []string{"Team A", "Team B"}
+	_, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "u1"}, teams)
+	if !errors.Is(err, ErrFormatDoesNotSupportPredictions) {
+		t.Fatalf("expected ErrFormatDoesNotSupportPredictions, got: %v", err)
+	}
+	// Fails before EnsureScheduledMatches even runs - no schedule was seeded above.
+}
+
 // endregion
 
 // region CheckPrediction
@@ -248,6 +314,18 @@ func TestCheckPrediction_NoGuildConfig(t *testing.T) {
 	}
 }
 
+func TestCheckPrediction_UnsupportedFormat_FailsFast(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	format := string(tournament.Other)
+	mockStore.GuildConfig.Format = &format
+	api := NewTestApp(mockStore)
+
+	_, err := api.CheckPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "user1"})
+	if !errors.Is(err, ErrFormatDoesNotSupportPredictions) {
+		t.Fatalf("expected ErrFormatDoesNotSupportPredictions, got: %v", err)
+	}
+}
+
 // endregion
 
 // region CheckPredictionByUsername
@@ -306,6 +384,18 @@ func TestCheckPredictionByUsername_NoGuildConfig(t *testing.T) {
 	_, _, err := api.CheckPredictionByUsername(bg(), testGuildID, testChannelID, "PickemsBot")
 	if err == nil {
 		t.Error("expected error when no guild config, got nil")
+	}
+}
+
+func TestCheckPredictionByUsername_UnsupportedFormat_FailsFast(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	format := string(tournament.RoundRobin)
+	mockStore.GuildConfig.Format = &format
+	api := NewTestApp(mockStore)
+
+	_, _, err := api.CheckPredictionByUsername(bg(), testGuildID, testChannelID, "PickemsBot")
+	if !errors.Is(err, ErrFormatDoesNotSupportPredictions) {
+		t.Fatalf("expected ErrFormatDoesNotSupportPredictions, got: %v", err)
 	}
 }
 
@@ -374,6 +464,18 @@ func TestGetLeaderboard_NoGuildConfig(t *testing.T) {
 	_, err := api.GetLeaderboard(bg(), testGuildID, testChannelID)
 	if err == nil {
 		t.Error("expected error when no guild config, got nil")
+	}
+}
+
+func TestGetLeaderboard_UnsupportedFormat_FailsFast(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	format := string(tournament.DoubleElim)
+	mockStore.GuildConfig.Format = &format
+	api := NewTestApp(mockStore)
+
+	_, err := api.GetLeaderboard(bg(), testGuildID, testChannelID)
+	if !errors.Is(err, ErrFormatDoesNotSupportPredictions) {
+		t.Fatalf("expected ErrFormatDoesNotSupportPredictions, got: %v", err)
 	}
 }
 

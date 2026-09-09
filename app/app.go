@@ -179,10 +179,37 @@ func (a *App) resolveConfig(ctx context.Context, guildID, channelID string) (sto
 	return cfg, nil
 }
 
+// ErrFormatDoesNotSupportPredictions is returned by prediction commands
+// (SetUserPrediction, CheckPrediction, CheckPredictionByUsername,
+// GetLeaderboard) when the guild's configured tournament format can't run
+// predictions. err.Error() is already a complete, user-facing message -
+// callers should show it as-is rather than wrapping it further.
+var ErrFormatDoesNotSupportPredictions = errors.New("Predictions are not supported for this tournament format")
+
+// checkPredictionsSupported returns ErrFormatDoesNotSupportPredictions if
+// cfg's tournament format is known and can't run predictions (e.g.
+// double-elimination, round-robin). Info commands (/upcoming, /results,
+// /team, /teams) don't call this - only the prediction-specific ones do. A
+// nil or unrecognised format is let through: downstream calls already handle
+// "format not yet known" on their own.
+func (a *App) checkPredictionsSupported(cfg store.GuildConfig) error {
+	if cfg.Format == nil {
+		return nil
+	}
+	f, err := tournament.Get(tournament.Kind(*cfg.Format))
+	if err != nil || f.SupportsPredictions() {
+		return nil
+	}
+	return fmt.Errorf("%w (%s). Upcoming matches and results are still available.", ErrFormatDoesNotSupportPredictions, *cfg.Format)
+}
+
 // SetUserPrediction validates and stores a user's prediction for the configured tournament round.
 func (a *App) SetUserPrediction(ctx context.Context, guildID, channelID string, user models.User, inputTeams []string) (models.Prediction, error) {
 	cfg, err := a.resolveConfig(ctx, guildID, channelID)
 	if err != nil {
+		return models.Prediction{}, err
+	}
+	if err := a.checkPredictionsSupported(cfg); err != nil {
 		return models.Prediction{}, err
 	}
 
@@ -250,6 +277,9 @@ func (a *App) CheckPrediction(ctx context.Context, guildID, channelID string, us
 	if err != nil {
 		return nil, err
 	}
+	if err := a.checkPredictionsSupported(cfg); err != nil {
+		return nil, err
+	}
 
 	if err := a.Store.EnsureScheduledMatches(ctx, *cfg.TournamentID); err != nil {
 		return nil, err
@@ -272,6 +302,9 @@ func (a *App) CheckPrediction(ctx context.Context, guildID, channelID string, us
 func (a *App) CheckPredictionByUsername(ctx context.Context, guildID, channelID, username string) (models.User, tournament.ScoreReport, error) {
 	cfg, err := a.resolveConfig(ctx, guildID, channelID)
 	if err != nil {
+		return models.User{}, nil, err
+	}
+	if err := a.checkPredictionsSupported(cfg); err != nil {
 		return models.User{}, nil, err
 	}
 
@@ -302,6 +335,9 @@ func (a *App) CheckPredictionByUsername(ctx context.Context, guildID, channelID,
 func (a *App) GetLeaderboard(ctx context.Context, guildID, channelID string) ([]LeaderboardUser, error) {
 	cfg, err := a.resolveConfig(ctx, guildID, channelID)
 	if err != nil {
+		return nil, err
+	}
+	if err := a.checkPredictionsSupported(cfg); err != nil {
 		return nil, err
 	}
 
