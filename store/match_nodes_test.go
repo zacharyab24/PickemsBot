@@ -106,6 +106,30 @@ func TestGetMatchNodes_OrdersChronologically(t *testing.T) {
 	assert.Equal(t, "later", got[1].ID)
 }
 
+// A finished match's completed_at (when the poller happened to notice it) and
+// a pending match's scheduled_at (when it's slated to start) are different
+// clocks. Ordering must use one consistent domain - scheduled_at - rather than
+// completed_at for finished rows, or a later-scheduled but still-live match
+// can sort ahead of one that already finished earlier in the schedule.
+func TestGetMatchNodes_OrdersByScheduledTime_NotMixedWithCompletedTime(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournament(t, "test-mixed-domain-order", string(tournament.DoubleElim))
+	nodes := []sources.MatchNode{
+		{ID: "finished-earlier", Team1: "TeamA", Team2: "TeamB", Status: "finished", Timestamp: 1000},
+		{ID: "live-later", Team1: "TeamC", Team2: "TeamD", Status: "running", Timestamp: 2000},
+	}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.DoubleElim))
+
+	got, _, err := s.GetMatchNodes(ctx, tournamentID, "Stage 1")
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.Equal(t, "finished-earlier", got[0].ID, "the match scheduled (and finished) first should sort first")
+	assert.Equal(t, "live-later", got[1].ID)
+}
+
 func TestGetMatchNodes_OnlyReturnsRequestedRound(t *testing.T) {
 	cleanDB(t)
 	ctx := context.Background()

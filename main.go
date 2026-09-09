@@ -85,12 +85,11 @@ func main() {
 
 	go func() {
 		if err := web.StartTelemetryServer(web.TelemetryConfig{
-			Addr:       ":9090",
-			App:        apiInstance,
-			DataSource: cfg.DataSource,
-			Discord:    botInstance,
-			StartTime:  startTime,
-			Logger:     logger,
+			Addr:      ":9090",
+			App:       apiInstance,
+			Discord:   botInstance,
+			StartTime: startTime,
+			Logger:    logger,
 		}); err != nil {
 			logger.Error("telemetry server exited", "error", err)
 			os.Exit(1)
@@ -107,14 +106,12 @@ func main() {
 	go poller.Start()
 	logger.Info("PandaScore poller started")
 
-	switch cfg.DataSource {
-	case "pandascore":
-		// PandaScore tournaments and match data are populated via
-		// ingest.TournamentSync and /config, not from config.toml. This case
-		// exists only so an unrecognised data_source still falls through to
-		// default/exit below.
-		logger.Info("PandaScore data source configured; tournaments are tracked via /config")
-	case "liquipedia":
+	// cfg.DataSource is already validated by app.NewApp above (it errors out
+	// on anything but "pandascore"/"liquipedia"), so liquipedia's dedicated
+	// webhook server is the only extra bootstrap needed here - PandaScore
+	// tournaments and match data are populated via ingest.TournamentSync and
+	// /config, not from config.toml.
+	if cfg.DataSource == "liquipedia" {
 		dbTournamentID, err := apiInstance.Store.EnsureTournament(context.Background(), cfg.Liquipedia.Page, "liquipedia", cfg.TournamentName, 0)
 		if err != nil {
 			logger.Error("failed to ensure tournament in database", "error", err)
@@ -127,9 +124,8 @@ func main() {
 			}
 		}()
 		logger.Info("Liquipedia webhook server starting", "addr", ":8080", "db_tournament_id", dbTournamentID)
-	default:
-		logger.Error("unknown data_source in config.toml", "data_source", cfg.DataSource)
-		os.Exit(1)
+	} else {
+		logger.Info("PandaScore data source configured; tournaments are tracked via /config")
 	}
 
 	if err := botInstance.Run(); err != nil {

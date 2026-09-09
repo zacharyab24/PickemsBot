@@ -14,31 +14,28 @@ import (
 
 // TelemetryConfig holds the config for the telemetry server
 type TelemetryConfig struct {
-	Addr       string
-	App        *app.App
-	DataSource string
-	Discord    interface{ IsConnected() bool }
-	StartTime  time.Time
-	Logger     *slog.Logger
+	Addr      string
+	App       *app.App
+	Discord   interface{ IsConnected() bool }
+	StartTime time.Time
+	Logger    *slog.Logger
 }
 
 // TelemetryServer is the HTTP server that handles telemetry (health + metrics) requests
 type TelemetryServer struct {
-	app        *app.App
-	dataSource string
-	discord    interface{ IsConnected() bool }
-	startTime  time.Time
-	log        *slog.Logger
+	app       *app.App
+	discord   interface{ IsConnected() bool }
+	startTime time.Time
+	log       *slog.Logger
 }
 
 // StartTelemetryServer initializes and starts the HTTP server with the passed config
 func StartTelemetryServer(cfg TelemetryConfig) error {
 	s := &TelemetryServer{
-		app:        cfg.App,
-		dataSource: cfg.DataSource,
-		discord:    cfg.Discord,
-		startTime:  cfg.StartTime,
-		log:        cfg.Logger,
+		app:       cfg.App,
+		discord:   cfg.Discord,
+		startTime: cfg.StartTime,
+		log:       cfg.Logger,
 	}
 
 	mux := http.NewServeMux()
@@ -70,9 +67,18 @@ type ResponseChecks struct {
 	Discord string `json:"discord"`
 }
 
-func (s *TelemetryServer) healthHandler(w http.ResponseWriter, r *http.Request) {
+// requireGET rejects anything but GET/HEAD, writing 405 and returning false
+// if so. Callers should return immediately when this returns false.
+func requireGET(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		return false
+	}
+	return true
+}
+
+func (s *TelemetryServer) healthHandler(w http.ResponseWriter, r *http.Request) {
+	if !requireGET(w, r) {
 		return
 	}
 
@@ -138,37 +144,24 @@ type TrackedTournament struct {
 	Round                  string `json:"round"`
 }
 
-// pollerStatusHandler reports the poller's monitoring pool contents and last poll time.
+// pollerStatusHandler reports the poller's monitoring pool contents and last
+// poll time. The poller always runs (see main.go) regardless of the
+// deployment's configured data_source - guild_config is source-agnostic, so
+// it's not gated on that value; an empty tracked_tournaments list already
+// conveys "nothing to poll right now".
 func (s *TelemetryServer) pollerStatusHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+	if !requireGET(w, r) {
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 
-	if s.dataSource != "pandascore" {
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(PollerStatusResponse{
-			Enabled: false,
-			Message: "PandaScore polling is not enabled for this deployment.",
-		})
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-	defer cancel()
-
 	entries := s.app.Snapshot()
 	tracked := make([]TrackedTournament, 0, len(entries))
 	for _, e := range entries {
-		name := ""
-		if t, err := s.app.Store.GetTournament(ctx, e.DBTournamentID); err == nil {
-			name = t.Name
-		}
 		tracked = append(tracked, TrackedTournament{
 			TournamentID:           e.DBTournamentID,
-			Name:                   name,
+			Name:                   e.Name,
 			PandascoreTournamentID: e.PandascoreTournamentID,
 			SeriesID:               e.SeriesID,
 			Round:                  e.Round,

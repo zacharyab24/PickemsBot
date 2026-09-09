@@ -24,7 +24,7 @@ func (s *PostgresStore) GetMatchNodes(ctx context.Context, tournamentID int, rou
 		JOIN tournaments t ON t.id = m.tournament_id
 		LEFT JOIN teams tw ON tw.id = m.winner_id
 		WHERE m.tournament_id = $1 AND m.round = $2
-		ORDER BY COALESCE(m.completed_at, m.scheduled_at) ASC NULLS LAST, m.id ASC
+		ORDER BY COALESCE(m.scheduled_at, m.completed_at) ASC NULLS LAST, m.id ASC
 	`, tournamentID, round)
 	if err != nil {
 		return nil, "", fmt.Errorf("GetMatchNodes: %w", err)

@@ -11,36 +11,19 @@ import (
 	"testing"
 
 	"pickems-bot/app"
-	"pickems-bot/store"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func newTestTelemetryServer(dataSource string) *TelemetryServer {
+func newTestTelemetryServer() *TelemetryServer {
 	return &TelemetryServer{
-		app:        app.NewTestApp(app.NewMockStore("swiss", "test_round")),
-		dataSource: dataSource,
+		app: app.NewTestApp(app.NewMockStore("swiss", "test_round")),
 	}
 }
 
-func TestPollerStatusHandler_Liquipedia_NotEnabled(t *testing.T) {
-	s := newTestTelemetryServer("liquipedia")
-	req := httptest.NewRequest(http.MethodGet, "/poller", nil)
-	rec := httptest.NewRecorder()
-
-	s.pollerStatusHandler(rec, req)
-
-	require.Equal(t, http.StatusOK, rec.Code)
-	var resp PollerStatusResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.False(t, resp.Enabled)
-	assert.NotEmpty(t, resp.Message)
-	assert.Nil(t, resp.LastPollAt)
-}
-
-func TestPollerStatusHandler_PandaScore_EmptyPool(t *testing.T) {
-	s := newTestTelemetryServer("pandascore")
+func TestPollerStatusHandler_EmptyPool(t *testing.T) {
+	s := newTestTelemetryServer()
 	req := httptest.NewRequest(http.MethodGet, "/poller", nil)
 	rec := httptest.NewRecorder()
 
@@ -54,12 +37,13 @@ func TestPollerStatusHandler_PandaScore_EmptyPool(t *testing.T) {
 	assert.Nil(t, resp.LastPollAt)
 }
 
-func TestPollerStatusHandler_PandaScore_ReturnsTrackedAndLastPoll(t *testing.T) {
-	s := newTestTelemetryServer("pandascore")
-	mockStore := s.app.Store.(*app.MockStore)
-	mockStore.Tournaments = []store.Tournament{{ID: 42, Name: "IEM Cologne 2026"}}
+func TestPollerStatusHandler_ReturnsTrackedAndLastPoll(t *testing.T) {
+	s := newTestTelemetryServer()
+	// Name is read straight off the pool entry - see PoolEntry.Name - so no
+	// store lookup (and no N+1 across tracked tournaments) is needed here.
 	s.app.MonitoringPool.Entries[42] = &app.PoolEntry{
 		DBTournamentID:         42,
+		Name:                   "IEM Cologne 2026",
 		PandascoreTournamentID: 555,
 		SeriesID:               999,
 		Round:                  "Playoffs",
@@ -84,7 +68,7 @@ func TestPollerStatusHandler_PandaScore_ReturnsTrackedAndLastPoll(t *testing.T) 
 }
 
 func TestPollerStatusHandler_MethodNotAllowed(t *testing.T) {
-	s := newTestTelemetryServer("pandascore")
+	s := newTestTelemetryServer()
 	req := httptest.NewRequest(http.MethodPost, "/poller", nil)
 	rec := httptest.NewRecorder()
 

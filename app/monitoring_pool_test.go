@@ -1,5 +1,5 @@
 /* monitoring_pool_test.go
- * Unit tests for the monitoring pool: Subscribe, Unsubscribe, Snapshot, BootstrapPool.
+ * Unit tests for the monitoring pool: Subscribe, Unsubscribe, Snapshot, BootstrapPool, ReconcilePool.
  * Authors: Zachary Bower
  */
 
@@ -124,7 +124,10 @@ func TestSubscribe_InvalidExternalID_NoOp(t *testing.T) {
 	}
 }
 
-func TestSubscribe_InvalidSeriesID_NoOp(t *testing.T) {
+// SeriesID is optional (matches resolveFetcher's own handling in app.go) - an
+// empty or unparseable series id shouldn't stop the tournament from being
+// monitored, it just isn't scoped to a specific series.
+func TestSubscribe_InvalidSeriesID_TreatedAsUnset(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.Tournaments = []store.Tournament{
 		{ID: 1, Source: "pandascore", ExternalID: "123", SeriesID: "not-a-number"},
@@ -133,8 +136,30 @@ func TestSubscribe_InvalidSeriesID_NoOp(t *testing.T) {
 
 	api.Subscribe(bg(), 1)
 
-	if _, ok := api.MonitoringPool.Entries[1]; ok {
-		t.Error("expected a tournament with a non-numeric series id not to be subscribed")
+	entry, ok := api.MonitoringPool.Entries[1]
+	if !ok {
+		t.Fatal("expected the tournament to be subscribed despite the invalid series id")
+	}
+	if entry.SeriesID != 0 {
+		t.Errorf("expected SeriesID 0 (unset), got %d", entry.SeriesID)
+	}
+}
+
+func TestSubscribe_EmptySeriesID_TreatedAsUnset(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.Tournaments = []store.Tournament{
+		{ID: 1, Source: "pandascore", ExternalID: "123", SeriesID: ""},
+	}
+	api := NewTestApp(mockStore)
+
+	api.Subscribe(bg(), 1)
+
+	entry, ok := api.MonitoringPool.Entries[1]
+	if !ok {
+		t.Fatal("expected the tournament to be subscribed despite the missing series id")
+	}
+	if entry.SeriesID != 0 {
+		t.Errorf("expected SeriesID 0 (unset), got %d", entry.SeriesID)
 	}
 }
 
@@ -221,6 +246,24 @@ func TestBootstrapPool_SubscribesAllTrackedIDs(t *testing.T) {
 	}
 }
 
+func TestBootstrapPool_BackfillsResultsForSubscribedEntries(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.ListTrackedTournamentIDsResult = []int{1, 2}
+	mockStore.Tournaments = []store.Tournament{
+		{ID: 1, Source: "pandascore", ExternalID: "1", SeriesID: "1", Round: "Playoffs"},
+		{ID: 2, Source: "pandascore", ExternalID: "2", SeriesID: "2", IsFinished: true}, // not subscribed - no backfill
+	}
+	api := NewTestApp(mockStore)
+
+	if err := api.BootstrapPool(bg()); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if mockStore.FetchAndSaveMatchResultsCallCount != 1 {
+		t.Errorf("expected exactly 1 backfill populate (only for the subscribed tournament), got %d", mockStore.FetchAndSaveMatchResultsCallCount)
+	}
+}
+
 func TestBootstrapPool_SkipsFinishedAndWrongSource(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
 	mockStore.ListTrackedTournamentIDsResult = []int{1, 2, 3}
@@ -252,6 +295,57 @@ func TestBootstrapPool_ListError_Propagates(t *testing.T) {
 	api := NewTestApp(mockStore)
 
 	if err := api.BootstrapPool(bg()); err == nil {
+		t.Error("expected error to propagate from ListTrackedTournamentIDs")
+	}
+}
+
+// endregion
+
+// region ReconcilePool
+
+func TestReconcilePool_SubscribesMissingTrackedTournament(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.ListTrackedTournamentIDsResult = []int{1}
+	mockStore.Tournaments = []store.Tournament{
+		{ID: 1, Source: "pandascore", ExternalID: "1", SeriesID: "1"},
+	}
+	api := NewTestApp(mockStore)
+
+	if err := api.ReconcilePool(bg()); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if _, ok := api.MonitoringPool.Entries[1]; !ok {
+		t.Error("expected the dropped-then-still-tracked tournament to be re-subscribed")
+	}
+	if mockStore.FetchAndSaveMatchResultsCallCount != 0 {
+		t.Errorf("expected no backfill populate from ReconcilePool, got %d calls", mockStore.FetchAndSaveMatchResultsCallCount)
+	}
+}
+
+func TestReconcilePool_AlreadySubscribed_NoOp(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.ListTrackedTournamentIDsResult = []int{1}
+	api := NewTestApp(mockStore)
+
+	existing := &PoolEntry{DBTournamentID: 1, KnownStatus: map[string]string{"m1": "finished"}}
+	api.MonitoringPool.Entries[1] = existing
+
+	if err := api.ReconcilePool(bg()); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if api.MonitoringPool.Entries[1] != existing {
+		t.Error("expected the existing entry to be left untouched")
+	}
+}
+
+func TestReconcilePool_ListError_Propagates(t *testing.T) {
+	mockStore := NewMockStore("swiss", "test_round")
+	mockStore.ListTrackedTournamentIDsError = fmt.Errorf("db down")
+	api := NewTestApp(mockStore)
+
+	if err := api.ReconcilePool(bg()); err == nil {
 		t.Error("expected error to propagate from ListTrackedTournamentIDs")
 	}
 }

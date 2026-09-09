@@ -35,6 +35,20 @@ type PandaScoreFetcher struct {
 	tournamentID int
 }
 
+// buildMatchResult calls format.BuildFromMatchNodes and translates
+// ErrPredictionsUnsupported into the "no result, but nodes/kind still valid"
+// shape both FetchMatchData implementations below return.
+func buildMatchResult(format tournament.Format, nodes []sources.MatchNode, round string, kind tournament.Kind) (tournament.MatchResult, []sources.MatchNode, tournament.Kind, error) {
+	result, err := format.BuildFromMatchNodes(nodes, round)
+	if errors.Is(err, tournament.ErrPredictionsUnsupported) {
+		return nil, nodes, kind, nil
+	}
+	if err != nil {
+		return nil, nil, "", err
+	}
+	return result, nodes, kind, nil
+}
+
 // NewLiquipediaFetcher creates a LiquipediaFetcher with the given API URL, API key and page path.
 func NewLiquipediaFetcher(apiURL, apiKey, page string) LiquipediaFetcher {
 	return LiquipediaFetcher{apiURL: apiURL, apiKey: apiKey, page: page}
@@ -68,15 +82,7 @@ func (f LiquipediaFetcher) FetchMatchData(round string, knownKind tournament.Kin
 
 	matchNodes = tournament.FilterNodesByKind(matchNodes, kind)
 
-	result, err := format.BuildFromMatchNodes(matchNodes, round)
-	if errors.Is(err, tournament.ErrPredictionsUnsupported) {
-		return nil, matchNodes, kind, nil
-	}
-	if err != nil {
-		return nil, nil, "", err
-	}
-
-	return result, matchNodes, kind, nil
+	return buildMatchResult(format, matchNodes, round, kind)
 }
 
 // FetchSchedule fetches the scheduled matches for the tournament using Liquipedia as a datasource.
@@ -122,15 +128,7 @@ func (f PandaScoreFetcher) FetchMatchData(round string, knownKind tournament.Kin
 
 	matchNodes = tournament.FilterNodesByKind(matchNodes, kind)
 
-	result, err := format.BuildFromMatchNodes(matchNodes, round)
-	if errors.Is(err, tournament.ErrPredictionsUnsupported) {
-		return nil, matchNodes, kind, nil
-	}
-	if err != nil {
-		return nil, nil, "", err
-	}
-
-	return result, matchNodes, kind, nil
+	return buildMatchResult(format, matchNodes, round, kind)
 }
 
 // FetchSchedule fetches the scheduled matches for the tournament using PandaScore as a datasource.

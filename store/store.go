@@ -30,7 +30,7 @@ type Interface interface {
 	EnsureGuild(ctx context.Context, guildID string) error
 	GetGuildConfig(ctx context.Context, guildID, channelID string) (GuildConfig, error)
 	UpsertGuildConfig(ctx context.Context, cfg GuildConfig) error
-	TournamentStillReferenced(ctx context.Context, tournamentID, excludeConfigID int) (bool, error)
+	TournamentStillReferenced(ctx context.Context, tournamentID int) (bool, error)
 	ListTrackedTournamentIDs(ctx context.Context) ([]int, error)
 
 	// Match data

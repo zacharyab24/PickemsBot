@@ -16,6 +16,24 @@ import (
 	"time"
 )
 
+// liquipediaTBDDate is Liquipedia's placeholder for "no date assigned yet"
+// (paired with dateexact:0 in the API response). It parses successfully via
+// time.Parse into a real, absurdly old timestamp instead of staying unset.
+const liquipediaTBDDate = "0000-01-01 00:00:00"
+
+// parseLiquipediaDate parses a Liquipedia GMT date string to a unix epoch.
+// Returns 0 for the TBD sentinel; err is set for any other unparseable value.
+func parseLiquipediaDate(dateStr string) (int64, error) {
+	if dateStr == liquipediaTBDDate {
+		return 0, nil
+	}
+	parsedTime, err := time.Parse("2006-01-02 15:04:05", dateStr)
+	if err != nil {
+		return 0, err
+	}
+	return parsedTime.Unix(), nil
+}
+
 // GetLiquipediaMatchDataByPage fetches all match data for a tournament page from
 // the LiquipediaDB /match endpoint using a [[pagename::X]] condition. This
 // replaces the older bracket-ID extraction approach: instead of scraping
@@ -229,12 +247,10 @@ func parseLiquipediaMatch(result interface{}) (*MatchNode, error) {
 
 	section, _ := match["section"].(string)
 
-	// date may be missing or unparseable; timestamp just stays 0 in that case.
+	// date may be missing, TBD, or unparseable; timestamp just stays 0 in that case.
 	var timestamp int64
 	if dateStr, ok := match["date"].(string); ok {
-		if parsedTime, err := time.Parse("2006-01-02 15:04:05", dateStr); err == nil {
-			timestamp = parsedTime.Unix()
-		}
+		timestamp, _ = parseLiquipediaDate(dateStr)
 	}
 
 	return &MatchNode{
@@ -294,8 +310,8 @@ func parseLiquipediaScheduledMatch(result interface{}) (*ScheduledMatch, error) 
 	if !ok {
 		return nil, fmt.Errorf("error mapping match2id interface")
 	}
-	// Liquipedia dates are in GMT; parse to epoch
-	parsedTime, err := time.Parse("2006-01-02 15:04:05", matchDateStr)
+	// Liquipedia dates are in GMT; the TBD sentinel means no date assigned yet.
+	epoch, err := parseLiquipediaDate(matchDateStr)
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +356,7 @@ func parseLiquipediaScheduledMatch(result interface{}) (*ScheduledMatch, error) 
 	return &ScheduledMatch{
 		Team1:     teams[0],
 		Team2:     teams[1],
-		EpochTime: parsedTime.Unix(),
+		EpochTime: epoch,
 		BestOf:    strconv.FormatFloat(bestOfFloat, 'f', -1, 64),
 		StreamURL: streamURL,
 		Finished:  isFinished,

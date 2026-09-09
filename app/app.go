@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -33,12 +34,28 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// Data source identifiers, as stored in tournaments.source.
+const (
+	sourcePandaScore = "pandascore"
+	sourceLiquipedia = "liquipedia"
+)
+
 // App provides methods for interacting with the pickems bot data layer.
 type App struct {
-	Store          store.Interface
-	rateLimiter    *rate.Limiter
-	log            *slog.Logger
-	MonitoringPool *MonitoringPool
+	Store store.Interface
+	// Each data source gets its own limiter - guild_config is source-agnostic
+	// (see resolveFetcher below), so a single deployment can end up fetching
+	// tournaments of either source, each with its own rate limits to respect.
+	pandaScoreLimiter *rate.Limiter
+	liquipediaLimiter *rate.Limiter
+	log               *slog.Logger
+	MonitoringPool    *MonitoringPool
+
+	// configLocks serialises the read-modify-write sequence in
+	// SetConfigTournament/SetConfigRound per (guildID, channelID), so two
+	// near-simultaneous /config changes for the same channel can't interleave
+	// their guild_config read with each other's write.
+	configLocks sync.Map // map[string]*sync.Mutex
 }
 
 func (a *App) logger() *slog.Logger {
@@ -52,17 +69,17 @@ func (a *App) logger() *slog.Logger {
 // postgresURI is the connection string for the PostgreSQL database.
 // log may be nil; if so the global slog default is used.
 func NewApp(cfg config.Config, postgresURI string, log *slog.Logger) (*App, error) {
-	var limiter *rate.Limiter
 	switch cfg.DataSource {
-	case "liquipedia":
-		limiter = rate.NewLimiter(rate.Every(time.Minute), 10)
-
-	case "pandascore":
-		limiter = rate.NewLimiter(rate.Every(4*time.Second), 5)
-
+	case sourceLiquipedia, sourcePandaScore:
 	default:
 		return nil, fmt.Errorf("unsupported data source: %s", cfg.DataSource)
 	}
+
+	// Both limiters are always built, regardless of cfg.DataSource -
+	// resolveFetcher below is source-agnostic, so a deployment configured for
+	// one source can still end up fetching tournaments of the other.
+	pandaScoreLimiter := rate.NewLimiter(rate.Every(4*time.Second), 5)
+	liquipediaLimiter := rate.NewLimiter(rate.Every(time.Minute), 10)
 
 	// resolveFetcher builds a fetcher from the tournament actually being
 	// fetched, not from cfg.DataSource - guild_config is source-agnostic, so a
@@ -71,14 +88,13 @@ func NewApp(cfg config.Config, postgresURI string, log *slog.Logger) (*App, erro
 	liquipediaAPIURL, liquipediaAPIKey := cfg.Liquipedia.APIURL, os.Getenv("LIQUIDPEDIADB_API_KEY")
 	resolveFetcher := func(t store.Tournament) (store.DataSourceFetcher, error) {
 		switch t.Source {
-		case "pandascore":
-			extID, err := strconv.Atoi(t.ExternalID)
+		case sourcePandaScore:
+			extID, seriesID, err := parsePandaScoreIDs(t)
 			if err != nil {
-				return nil, fmt.Errorf("invalid pandascore external id %q: %w", t.ExternalID, err)
+				return nil, err
 			}
-			seriesID, _ := strconv.Atoi(t.SeriesID) // optional - 0 if unset
 			return store.NewPandaScoreFetcher(pandaScoreAPIURL, pandaScoreAPIKey, seriesID, extID), nil
-		case "liquipedia":
+		case sourceLiquipedia:
 			return store.NewLiquipediaFetcher(liquipediaAPIURL, liquipediaAPIKey, t.ExternalID), nil
 		default:
 			return nil, fmt.Errorf("unsupported tournament source: %s", t.Source)
@@ -97,31 +113,58 @@ func NewApp(cfg config.Config, postgresURI string, log *slog.Logger) (*App, erro
 	}
 
 	return &App{
-		Store:          s,
-		rateLimiter:    limiter,
-		log:            appLog,
-		MonitoringPool: newMonitoringPool(),
+		Store:             s,
+		pandaScoreLimiter: pandaScoreLimiter,
+		liquipediaLimiter: liquipediaLimiter,
+		log:               appLog,
+		MonitoringPool:    newMonitoringPool(),
 	}, nil
 }
 
-// Allow calls the app's configured rate limiter's Allow() function.
-// Non-blocking: returns false immediately when no token is available. The poller
-// uses this to skip a tick rather than wait.
-func (a *App) Allow() bool {
-	if a.rateLimiter == nil {
-		return false
+// parsePandaScoreIDs parses a tournament's PandaScore external and series ids
+// from their stored string form. extID is mandatory - a PandaScore tournament
+// always has one. seriesID is optional: empty, or unparseable, resolves to 0
+// (unscoped) rather than erroring, matching PandaScore's own optional series
+// filter - a tournament shouldn't silently drop out of monitoring just because
+// its series id is unset.
+func parsePandaScoreIDs(t store.Tournament) (extID, seriesID int, err error) {
+	extID, err = strconv.Atoi(t.ExternalID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid pandascore external id %q: %w", t.ExternalID, err)
 	}
-	return a.rateLimiter.Allow()
+	seriesID, _ = strconv.Atoi(t.SeriesID) // optional - 0 if unset or invalid
+	return extID, seriesID, nil
 }
 
-// Wait blocks until the shared rate limiter permits another call, or ctx is
-// cancelled. Backed by the same limiter as Allow(); batch jobs use this to
-// pace instead of drop.
-func (a *App) Wait(ctx context.Context) error {
-	if a.rateLimiter == nil {
+// limiterFor returns the rate limiter paced for source ("pandascore" or
+// "liquipedia").
+func (a *App) limiterFor(source string) *rate.Limiter {
+	if source == sourceLiquipedia {
+		return a.liquipediaLimiter
+	}
+	return a.pandaScoreLimiter
+}
+
+// Allow calls source's configured rate limiter's Allow() function.
+// Non-blocking: returns false immediately when no token is available. The poller
+// uses this to skip a tick rather than wait.
+func (a *App) Allow(source string) bool {
+	l := a.limiterFor(source)
+	if l == nil {
+		return false
+	}
+	return l.Allow()
+}
+
+// Wait blocks until source's rate limiter permits another call, or ctx is
+// cancelled. Backed by the same limiter as Allow(source); batch jobs use this
+// to pace instead of drop.
+func (a *App) Wait(ctx context.Context, source string) error {
+	l := a.limiterFor(source)
+	if l == nil {
 		return nil
 	}
-	return a.rateLimiter.Wait(ctx)
+	return l.Wait(ctx)
 }
 
 // resolveConfig looks up the guild config and validates that a tournament and round are set.
@@ -444,8 +487,9 @@ func (a *App) GetTournamentInfo(ctx context.Context, guildID, channelID string) 
 }
 
 // PopulateMatches fetches and stores match schedule and optionally results for a specific tournament.
-func (a *App) PopulateMatches(ctx context.Context, tournamentID int, round string, scheduleOnly bool) error {
-	if !a.Allow() {
+// source picks which rate limiter paces the fetch - see App.Allow.
+func (a *App) PopulateMatches(ctx context.Context, tournamentID int, round, source string, scheduleOnly bool) error {
+	if !a.Allow(source) {
 		return fmt.Errorf("rate limiter limit reached")
 	}
 
@@ -465,8 +509,9 @@ func (a *App) PopulateMatches(ctx context.Context, tournamentID int, round strin
 }
 
 // UpdateMatchSchedule is a rate-limited wrapper around Store.FetchAndSaveSchedule.
-func (a *App) UpdateMatchSchedule(ctx context.Context, tournamentID int) error {
-	if !a.Allow() {
+// source picks which rate limiter paces the fetch - see App.Allow.
+func (a *App) UpdateMatchSchedule(ctx context.Context, tournamentID int, source string) error {
+	if !a.Allow(source) {
 		return fmt.Errorf("rate limiter exceeded, skipping match schedule update")
 	}
 	return a.Store.FetchAndSaveSchedule(ctx, tournamentID)
@@ -479,8 +524,9 @@ func (a *App) StoreSchedule(ctx context.Context, tournamentID int, matches []sou
 }
 
 // UpdateMatchResults is a rate-limited wrapper around Store.FetchAndSaveMatchResults.
-func (a *App) UpdateMatchResults(ctx context.Context, tournamentID int, round string) error {
-	if !a.Allow() {
+// source picks which rate limiter paces the fetch - see App.Allow.
+func (a *App) UpdateMatchResults(ctx context.Context, tournamentID int, round, source string) error {
+	if !a.Allow(source) {
 		return fmt.Errorf("rate limiter exceeded, skipping match result update")
 	}
 	timer := prometheus.NewTimer(metrics.LeaderboardDuration)
@@ -504,7 +550,11 @@ func (a *App) GetConfig(ctx context.Context, guildID, channelID string) (store.G
 // Returns the resolved tournament for the confirmation message. An unrecognised
 // pair (e.g. free-typed text that matched no row) surfaces as an error.
 func (a *App) SetConfigTournament(ctx context.Context, guildID, channelID, name, round string) (store.Tournament, error) {
-	// Read the pre-change config so updatePoolAsync can unsubscribe the old
+	lock := a.configLock(guildID, channelID)
+	lock.Lock()
+	defer lock.Unlock()
+
+	// Read the pre-change config so updatePool can unsubscribe the old
 	// tournament, if any, once the switch is made.
 	prev, err := a.Store.GetGuildConfig(ctx, guildID, channelID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -516,16 +566,19 @@ func (a *App) SetConfigTournament(ctx context.Context, guildID, channelID, name,
 		return store.Tournament{}, fmt.Errorf("SetConfigTournament: %w", err)
 	}
 
-	if err := a.upsertConfigField(ctx, guildID, channelID, func(c *store.GuildConfig) {
+	if err := a.upsertConfigField(ctx, guildID, channelID, prev, func(c *store.GuildConfig) {
 		c.TournamentID = &t.ID
 		c.Round = &t.Round
 	}); err != nil {
 		return store.Tournament{}, err
 	}
 
-	go a.detectFormatAsync(t)
-	go a.updatePoolAsync(prev, t.ID)
-	go a.populateMatchesAsync(t)
+	// Synchronous, still under the lock: cheap (one query plus in-memory map
+	// ops), and keeps the whole read-upsert-updatePool sequence atomic with
+	// respect to another /config change on this same guild/channel.
+	a.updatePool(ctx, prev, t.ID)
+
+	go a.finishConfigChange(t)
 	return t, nil
 }
 
@@ -564,6 +617,10 @@ func (a *App) RoundsForConfiguredTournament(ctx context.Context, guildID, channe
 // the current tournament's name plus the new round to that row and stores both.
 // Errors if no tournament is configured, or the round isn't valid for it.
 func (a *App) SetConfigRound(ctx context.Context, guildID, channelID, round string) (store.Tournament, error) {
+	lock := a.configLock(guildID, channelID)
+	lock.Lock()
+	defer lock.Unlock()
+
 	cfg, err := a.Store.GetGuildConfig(ctx, guildID, channelID)
 	if err != nil {
 		return store.Tournament{}, fmt.Errorf("SetConfigRound: %w", err)
@@ -580,27 +637,26 @@ func (a *App) SetConfigRound(ctx context.Context, guildID, channelID, round stri
 		return store.Tournament{}, fmt.Errorf("SetConfigRound: %w", err)
 	}
 
-	if err := a.upsertConfigField(ctx, guildID, channelID, func(c *store.GuildConfig) {
+	if err := a.upsertConfigField(ctx, guildID, channelID, cfg, func(c *store.GuildConfig) {
 		c.TournamentID = &t.ID
 		c.Round = &t.Round
 	}); err != nil {
 		return store.Tournament{}, err
 	}
 
-	go a.detectFormatAsync(t)
-	go a.updatePoolAsync(cfg, t.ID)
-	go a.populateMatchesAsync(t)
+	a.updatePool(ctx, cfg, t.ID) // see SetConfigTournament - same locking/ordering reasoning
+	go a.finishConfigChange(t)
 
 	return t, nil
 }
 
-// upsertConfigField is a helper for updating a single field in the guild config.
-func (a *App) upsertConfigField(ctx context.Context, guildID, channelID string, mutate func(*store.GuildConfig)) error {
-	// Read current state; a missing row just means first-time setup - start empty.
-	cfg, err := a.Store.GetGuildConfig(ctx, guildID, channelID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("upsertConfigField: %w", err)
-	}
+// upsertConfigField applies mutate to base - the caller's own already-fetched
+// guild config, or a zero-value store.GuildConfig{} for first-time setup -
+// and upserts the result. Callers already need that row themselves (e.g. to
+// diff against for updatePool), so this takes it instead of fetching its own
+// copy of the same row a moment later.
+func (a *App) upsertConfigField(ctx context.Context, guildID, channelID string, base store.GuildConfig, mutate func(*store.GuildConfig)) error {
+	cfg := base
 
 	// results_channel_id is the ON CONFLICT key - must be set for the upsert to match.
 	cfg.GuildID = guildID
@@ -618,21 +674,31 @@ func (a *App) upsertConfigField(ctx context.Context, guildID, channelID string, 
 	return nil
 }
 
-// detectFormatAsync runs checkAndStoreFormat in the background after a config
-// change, logging (not returning) any failure. Uses a detached context since
-// the caller's request context may be cancelled once it responds.
-func (a *App) detectFormatAsync(t store.Tournament) {
+// configLock returns the mutex serialising config changes for one
+// (guildID, channelID) pair, creating it on first use.
+func (a *App) configLock(guildID, channelID string) *sync.Mutex {
+	v, _ := a.configLocks.LoadOrStore(guildID+":"+channelID, &sync.Mutex{})
+	return v.(*sync.Mutex)
+}
+
+// finishConfigChange runs the slow, best-effort follow-up work after a config
+// change: format detection, then an initial populate. Uses a detached context
+// since the caller's request context may be cancelled once it responds.
+//
+// The two run sequentially, not as separate goroutines - populate reads
+// t.Format fresh from the DB, so if it started concurrently with detection it
+// could see a still-NULL format and fail to detect a kind that detection was
+// about to persist a moment later. Running them one after another also means
+// they no longer race each other for the same rate limiter's tokens.
+func (a *App) finishConfigChange(t store.Tournament) {
 	if err := a.checkAndStoreFormat(context.Background(), t); err != nil {
 		a.logger().Warn("format detection failed",
 			"tournament_id", t.ID, "external_id", t.ExternalID, "error", err)
 	}
-}
-
-// updatePoolAsync runs updatePool in the background after a config change.
-// Like detectFormatAsync, it uses a detached context because the caller's
-// request context may be cancelled once it responds.
-func (a *App) updatePoolAsync(prev store.GuildConfig, newTournamentID int) {
-	a.updatePool(context.Background(), prev, newTournamentID)
+	if err := a.PopulateMatches(context.Background(), t.ID, t.Round, t.Source, false); err != nil {
+		a.logger().Warn("initial populate failed - results for matches already finished before tracking began may be missed until manually retried",
+			"tournament_id", t.ID, "round", t.Round, "error", err)
+	}
 }
 
 // updatePool reconciles the monitoring pool with a guild's config change.
@@ -642,7 +708,7 @@ func (a *App) updatePoolAsync(prev store.GuildConfig, newTournamentID int) {
 // early drop. newTournamentID is always subscribed.
 func (a *App) updatePool(ctx context.Context, prev store.GuildConfig, newTournamentID int) {
 	if prev.TournamentID != nil && *prev.TournamentID != newTournamentID {
-		stillReferenced, err := a.Store.TournamentStillReferenced(ctx, *prev.TournamentID, prev.ID)
+		stillReferenced, err := a.Store.TournamentStillReferenced(ctx, *prev.TournamentID)
 		if err != nil {
 			a.logger().Warn("failed to check if tournament is still referenced, leaving it subscribed",
 				"tournament_id", *prev.TournamentID, "error", err)
@@ -653,32 +719,20 @@ func (a *App) updatePool(ctx context.Context, prev store.GuildConfig, newTournam
 	a.Subscribe(ctx, newTournamentID)
 }
 
-// populateMatchesAsync runs an initial full populate (schedule + results) in
-// the background when a guild first points at a tournament, so matches
-// already finished before tracking began still get their results fetched.
-// Uses a detached context because the caller's request context may be
-// cancelled once it responds.
-func (a *App) populateMatchesAsync(t store.Tournament) {
-	if err := a.PopulateMatches(context.Background(), t.ID, t.Round, false); err != nil {
-		a.logger().Warn("initial populate failed - results for matches already finished before tracking began may be missed until manually retried",
-			"tournament_id", t.ID, "round", t.Round, "error", err)
-	}
-}
-
 // checkAndStoreFormat fetches the PandaScore bracket for a tournament, infers its format kind, and persists that value in the db.
 func (a *App) checkAndStoreFormat(ctx context.Context, t store.Tournament) error {
-	if t.Source != "pandascore" || t.Format != nil {
+	if t.Source != sourcePandaScore || t.Format != nil {
 		return nil // only PandaScore has a format field, and it's already set
 	}
 
 	// external_id is stored as text but the bracket endpoint keys on the numeric
 	// PandaScore id; parse before spending a rate-limiter token.
-	extID, err := strconv.Atoi(t.ExternalID)
+	extID, _, err := parsePandaScoreIDs(t)
 	if err != nil {
-		return fmt.Errorf("checkAndStoreFormat: invalid external id %q: %w", t.ExternalID, err)
+		return fmt.Errorf("checkAndStoreFormat: %w", err)
 	}
 
-	if err := a.Wait(ctx); err != nil {
+	if err := a.Wait(ctx, t.Source); err != nil {
 		return err
 	}
 

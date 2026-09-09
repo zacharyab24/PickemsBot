@@ -48,9 +48,9 @@ func TestParseLiquipediaMatches(t *testing.T) {
 		{ID: "vINHUV3all_0002", Team1: "SAW", Team2: "Ninjas in Pyjamas", Winner: "SAW", Score: "2-1", Section: "Round 2", Timestamp: 1761560100},
 		{ID: "vINHUV3all_0003", Team1: "Fnatic", Team2: "FlyQuest", Winner: "FlyQuest", Score: "0-2", Section: "Round 2", Timestamp: 1761571200},
 		{ID: "vINHUV3all_0004", Team1: "Astralis", Team2: "MIBR", Winner: "Astralis", Score: "2-0", Section: "Round 2", Timestamp: 1761579900},
-		{ID: "zIiQwLgw83_0001", Team1: "TBD", Team2: "TBD", Winner: "TBD", Score: "", Section: "Round 5", Timestamp: -62167219200},
-		{ID: "zIiQwLgw83_0002", Team1: "TBD", Team2: "TBD", Winner: "TBD", Score: "", Section: "Round 5", Timestamp: -62167219200},
-		{ID: "zIiQwLgw83_0003", Team1: "TBD", Team2: "TBD", Winner: "TBD", Score: "", Section: "Round 5", Timestamp: -62167219200},
+		{ID: "zIiQwLgw83_0001", Team1: "TBD", Team2: "TBD", Winner: "TBD", Score: "", Section: "Round 5", Timestamp: 0},
+		{ID: "zIiQwLgw83_0002", Team1: "TBD", Team2: "TBD", Winner: "TBD", Score: "", Section: "Round 5", Timestamp: 0},
+		{ID: "zIiQwLgw83_0003", Team1: "TBD", Team2: "TBD", Winner: "TBD", Score: "", Section: "Round 5", Timestamp: 0},
 	}
 
 	f, err := os.Open("testdata/parser/scheduledMatchRawData.json")
@@ -138,9 +138,9 @@ func TestParseLiquipediaMatches_InvalidData(t *testing.T) {
 
 func TestParseLiquipediaSchedule(t *testing.T) {
 	expectedResult := []ScheduledMatch{
-		{"TBD", "TBD", -62167219200, "3", "PGL", false, false},
-		{"TBD", "TBD", -62167219200, "3", "PGL", false, false},
-		{"TBD", "TBD", -62167219200, "3", "PGL", false, false},
+		{"TBD", "TBD", 0, "3", "PGL", false, false},
+		{"TBD", "TBD", 0, "3", "PGL", false, false},
+		{"TBD", "TBD", 0, "3", "PGL", false, false},
 		{"Legacy", "Team Liquid", 1761465600, "3", "PGL", true, false},
 		{"PaiN Gaming", "Gentle Mates", 1761465900, "3", "PGL_CS2", true, false},
 		{"HEROIC", "Ninjas in Pyjamas", 1761476400, "3", "PGL_CS2", true, false},

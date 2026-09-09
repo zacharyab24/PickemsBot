@@ -163,13 +163,12 @@ func TestEnsureGuild_SatisfiesGuildConfigFK(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestTournamentStillReferenced_TrueWhenOtherRowExists(t *testing.T) {
+func TestTournamentStillReferenced_TrueWhenAnyRowExists(t *testing.T) {
 	cleanDB(t)
 	ctx := context.Background()
 	s := newTestStore(t)
 
 	seedGuild(t, "guild-1")
-	seedGuild(t, "guild-2")
 	tournamentID := seedTournament(t, "Shared Event", "swiss")
 	round := "Playoffs"
 
@@ -177,38 +176,10 @@ func TestTournamentStillReferenced_TrueWhenOtherRowExists(t *testing.T) {
 	require.NoError(t, s.UpsertGuildConfig(ctx, GuildConfig{
 		GuildID: "guild-1", TournamentID: &tournamentID, Round: &round, ResultsChannelID: &channel1,
 	}))
-	thisConfig, err := s.GetGuildConfig(ctx, "guild-1", "channel-1")
+
+	referenced, err := s.TournamentStillReferenced(ctx, tournamentID)
 	require.NoError(t, err)
-
-	channel2 := "channel-2"
-	require.NoError(t, s.UpsertGuildConfig(ctx, GuildConfig{
-		GuildID: "guild-2", TournamentID: &tournamentID, Round: &round, ResultsChannelID: &channel2,
-	}))
-
-	referenced, err := s.TournamentStillReferenced(ctx, tournamentID, thisConfig.ID)
-	require.NoError(t, err)
-	assert.True(t, referenced, "guild-2's row still points at the tournament")
-}
-
-func TestTournamentStillReferenced_FalseWhenOnlyExcludedRowExists(t *testing.T) {
-	cleanDB(t)
-	ctx := context.Background()
-	s := newTestStore(t)
-
-	seedGuild(t, "guild-1")
-	tournamentID := seedTournament(t, "Solo Event", "swiss")
-	round := "Playoffs"
-
-	channel1 := "channel-1"
-	require.NoError(t, s.UpsertGuildConfig(ctx, GuildConfig{
-		GuildID: "guild-1", TournamentID: &tournamentID, Round: &round, ResultsChannelID: &channel1,
-	}))
-	thisConfig, err := s.GetGuildConfig(ctx, "guild-1", "channel-1")
-	require.NoError(t, err)
-
-	referenced, err := s.TournamentStillReferenced(ctx, tournamentID, thisConfig.ID)
-	require.NoError(t, err)
-	assert.False(t, referenced, "only the excluded row references it")
+	assert.True(t, referenced, "guild-1's row still points at the tournament")
 }
 
 func TestTournamentStillReferenced_FalseWhenNoRowsReferenceIt(t *testing.T) {
@@ -218,7 +189,7 @@ func TestTournamentStillReferenced_FalseWhenNoRowsReferenceIt(t *testing.T) {
 
 	tournamentID := seedTournament(t, "Untracked Event", "swiss")
 
-	referenced, err := s.TournamentStillReferenced(ctx, tournamentID, 0)
+	referenced, err := s.TournamentStillReferenced(ctx, tournamentID)
 	require.NoError(t, err)
 	assert.False(t, referenced)
 }

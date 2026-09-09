@@ -118,7 +118,7 @@ func (s *PostgresStore) upsertMatchNodes(ctx context.Context, tournamentID int, 
 				section      = EXCLUDED.section,
 				score        = EXCLUDED.score,
 				status       = EXCLUDED.status,
-				completed_at = EXCLUDED.completed_at,
+				completed_at = COALESCE(matches.completed_at, EXCLUDED.completed_at),
 				scheduled_at = COALESCE(EXCLUDED.scheduled_at, matches.scheduled_at)
 		`, tournamentID, round, section, n.Team1, n.Team2, score, extID, status,
 			completedAt(status), epochToTime(n.Timestamp))

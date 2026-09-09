@@ -136,11 +136,18 @@ func NewMockDiscordSession() *MockDiscordSession {
 }
 
 // InteractionResponseEdit implements DiscordSession.InteractionResponseEdit.
+// Matches real Discord behaviour: a failed call doesn't produce an edited
+// response, so ErrorToReturn is checked before recording one - otherwise a
+// test could never observe a handler's edit-failure path (it would still see
+// the content land in EditedResponses even though the "call" failed).
 func (m *MockDiscordSession) InteractionResponseEdit(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit, options ...discordgo.RequestOption) (*discordgo.Message, error) {
+	if m.ErrorToReturn != nil {
+		return nil, m.ErrorToReturn
+	}
 	if newresp.Content != nil {
 		m.EditedResponses = append(m.EditedResponses, *newresp.Content)
 	}
-	return &discordgo.Message{}, m.ErrorToReturn
+	return &discordgo.Message{}, nil
 }
 
 // InteractionRespond implements DiscordSession.InteractionRespond.

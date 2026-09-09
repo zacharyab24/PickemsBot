@@ -81,7 +81,7 @@ func (p *Poller) Start() {
 // tournament. Returns false if this tournament should be dropped from the
 // monitoring pool (e.g. an unrecoverable fetch error), true otherwise.
 func (p *Poller) tick(entry *app.PoolEntry) bool {
-	if !p.app.Allow() {
+	if !p.app.Allow("pandascore") {
 		p.logger().Warn("rate limit reached, skipping tick")
 		return true
 	}
@@ -89,7 +89,10 @@ func (p *Poller) tick(entry *app.PoolEntry) bool {
 	raw, err := sources.GetPandaScoreMatches(p.apiURL, p.apiKey, entry.SeriesID, entry.PandascoreTournamentID)
 	if err != nil {
 		if errors.Is(err, sources.ErrUnrecoverable) {
-			p.logger().Error("unrecoverable fetch error, stopping poller", "error", fmt.Errorf("poller.tick: %w", err))
+			// Only this one tournament drops out - the poller loop itself keeps
+			// running for every other tracked tournament. ingest.TournamentSync's
+			// hourly catalog sync re-subscribes it if guild_config still tracks it.
+			p.logger().Error("unrecoverable fetch error, unsubscribing tournament from poller", "error", fmt.Errorf("poller.tick: %w", err))
 			metrics.PollerErrorsTotal.Inc()
 			return false
 		}
@@ -130,7 +133,7 @@ func (p *Poller) tick(entry *app.PoolEntry) bool {
 	metrics.PollerTicksTotal.Inc()
 
 	if finishedTransition {
-		if err := p.app.UpdateMatchResults(context.Background(), entry.DBTournamentID, entry.Round); err != nil {
+		if err := p.app.UpdateMatchResults(context.Background(), entry.DBTournamentID, entry.Round, "pandascore"); err != nil {
 			p.logger().Warn("failed to update match results", "error", fmt.Errorf("poller.tick: %w", err))
 		}
 	}

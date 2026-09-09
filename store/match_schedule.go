@@ -87,7 +87,7 @@ func (s *PostgresStore) UpsertMatchSchedule(ctx context.Context, tournamentID in
 	}
 
 	for _, m := range matches {
-		scheduledAt := time.Unix(m.EpochTime, 0).UTC()
+		scheduledAt := epochToTime(m.EpochTime)
 		status := "pending"
 		if m.Finished {
 			status = "completed"

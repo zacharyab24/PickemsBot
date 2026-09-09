@@ -89,13 +89,15 @@ func (s *PostgresStore) ListTrackedTournamentIDs(ctx context.Context) ([]int, er
 	return ids, nil
 }
 
-// TournamentStillReferenced reports whether any guild_config row other than
-// excludeConfigID still points at tournamentID.
-func (s *PostgresStore) TournamentStillReferenced(ctx context.Context, tournamentID, excludeConfigID int) (bool, error) {
+// TournamentStillReferenced reports whether any guild_config row still points
+// at tournamentID. Callers checking this after switching a config row to a
+// new tournament don't need to exclude that row - it already points
+// elsewhere by the time this runs.
+func (s *PostgresStore) TournamentStillReferenced(ctx context.Context, tournamentID int) (bool, error) {
 	var exists bool
 	err := s.pool.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM guild_config WHERE tournament_id = $1 AND id <> $2)`,
-		tournamentID, excludeConfigID,
+		`SELECT EXISTS (SELECT 1 FROM guild_config WHERE tournament_id = $1)`,
+		tournamentID,
 	).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("TournamentStillReferenced: %w", err)

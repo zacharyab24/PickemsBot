@@ -148,6 +148,31 @@ func TestUpsertMatchNodes_UpdatesCompletedMatch(t *testing.T) {
 	assert.Equal(t, "2-1", score)
 }
 
+func TestUpsertMatchNodes_CompletedAt_NotBumpedOnReUpsert(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournamentNullFormat(t, "test-completed-at-stable")
+
+	finished := []sources.MatchNode{{ID: "m1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA", Score: "2-1", Status: "finished"}}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", finished, tournament.Swiss))
+
+	var firstCompletedAt time.Time
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT completed_at FROM matches WHERE tournament_id = $1`, tournamentID).Scan(&firstCompletedAt))
+	require.False(t, firstCompletedAt.IsZero())
+
+	time.Sleep(10 * time.Millisecond)
+
+	// A sibling match finishing in the same round re-upserts every node,
+	// including this already-completed one - completed_at must not move.
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", finished, tournament.Swiss))
+
+	var secondCompletedAt time.Time
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT completed_at FROM matches WHERE tournament_id = $1`, tournamentID).Scan(&secondCompletedAt))
+	assert.True(t, firstCompletedAt.Equal(secondCompletedAt), "completed_at changed on re-upsert: %v -> %v", firstCompletedAt, secondCompletedAt)
+}
+
 func TestUpsertMatchNodes_WritesScheduledAtFromTimestamp(t *testing.T) {
 	cleanDB(t)
 	ctx := context.Background()

@@ -397,34 +397,23 @@ func (b *Bot) resultsInteractionHandler(session DiscordSession, i *discordgo.Int
 		return
 	}
 
-	var resp *discordgo.InteractionResponse
+	var components []discordgo.MessageComponent
 	switch kind {
 	case tournament.Swiss:
-		resp = &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Flags:      discordgo.MessageFlagsIsComponentsV2,
-				Components: buildSwissResultComponents(nodes),
-			},
-		}
+		components = buildSwissResultComponents(nodes)
 	case tournament.SingleElim:
-		resp = &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Flags:      discordgo.MessageFlagsIsComponentsV2,
-				Components: buildSingleElimResultComponents(nodes),
-			},
-		}
+		components = buildSingleElimResultComponents(nodes)
 	default:
-		resp = &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Flags:      discordgo.MessageFlagsIsComponentsV2,
-				Components: buildChronologicalResultComponents(nodes),
-			},
-		}
+		components = buildChronologicalResultComponents(nodes)
 	}
 
+	resp := &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Flags:      discordgo.MessageFlagsIsComponentsV2,
+			Components: components,
+		},
+	}
 	if err := session.InteractionRespond(i.Interaction, resp); err != nil {
 		b.logger().Error("failed to respond to results interaction", "error", fmt.Errorf("resultsInteractionHandler: %w", err))
 	}
@@ -494,14 +483,10 @@ func (b *Bot) configSetTournament(session DiscordSession, i *discordgo.Interacti
 	t, err := b.APIPtr.SetConfigTournament(context.Background(), i.GuildID, i.ChannelID, name, round)
 	if err != nil {
 		b.logger().Error("failed to set config tournament", "tournament", name, "round", round, "error", fmt.Errorf("configSetTournament: %w", err))
-		msg := "Could not set that tournament - please pick a tournament and round from the lists."
-		session.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Content: &msg})
+		b.finalizeDeferred(session, i.Interaction, "configSetTournament", "Could not set that tournament - please pick a tournament and round from the lists.")
 		return
 	}
-	msg := fmt.Sprintf("Tournament set to **%s - %s** for this channel.", t.Name, t.Round)
-	if _, err := session.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Content: &msg}); err != nil {
-		b.logger().Error("failed to edit config set-tournament response", "error", fmt.Errorf("configSetTournament: %w", err))
-	}
+	b.finalizeDeferred(session, i.Interaction, "configSetTournament", fmt.Sprintf("Tournament set to **%s - %s** for this channel.", t.Name, t.Round))
 }
 
 func (b *Bot) configSetRound(session DiscordSession, i *discordgo.InteractionCreate, sub *discordgo.ApplicationCommandInteractionDataOption) {
@@ -516,14 +501,10 @@ func (b *Bot) configSetRound(session DiscordSession, i *discordgo.InteractionCre
 	t, err := b.APIPtr.SetConfigRound(context.Background(), i.GuildID, i.ChannelID, round)
 	if err != nil {
 		b.logger().Error("failed to set config round", "round", round, "error", fmt.Errorf("configSetRound: %w", err))
-		msg := "Could not set that round - set a tournament first, then pick a round from the list."
-		session.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Content: &msg})
+		b.finalizeDeferred(session, i.Interaction, "configSetRound", "Could not set that round - set a tournament first, then pick a round from the list.")
 		return
 	}
-	msg := fmt.Sprintf("Round set to **%s** for **%s**.", t.Round, t.Name)
-	if _, err := session.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Content: &msg}); err != nil {
-		b.logger().Error("failed to edit config set-round response", "error", fmt.Errorf("configSetRound: %w", err))
-	}
+	b.finalizeDeferred(session, i.Interaction, "configSetRound", fmt.Sprintf("Round set to **%s** for **%s**.", t.Round, t.Name))
 }
 
 // subOptionString returns the string value of a named option under a subcommand,
@@ -620,16 +601,14 @@ func canonicalElimRound(section string) string {
 
 var singleElimRoundOrder = []string{"Round of 32", "Round of 16", "Quarter-finals", "Semi-finals", "Grand Final"}
 
-func buildSingleElimResultComponents(nodes []sources.MatchNode) []discordgo.MessageComponent {
-	byRound := make(map[string][]sources.MatchNode)
-	for _, n := range nodes {
-		label := canonicalElimRound(n.Section)
-		byRound[label] = append(byRound[label], n)
-	}
-
+// buildOrderedRoundContainers renders one Container per round label in order,
+// reading from byRound (already bucketed by the caller) and skipping any
+// label with no matches. Threads a running button-index offset across
+// containers so every match's accessory button gets a unique CustomID.
+func buildOrderedRoundContainers(byRound map[string][]sources.MatchNode, order []string) []discordgo.MessageComponent {
 	var containers []discordgo.MessageComponent
 	idx := 0
-	for _, round := range singleElimRoundOrder {
+	for _, round := range order {
 		matches, ok := byRound[round]
 		if !ok {
 			continue
@@ -638,6 +617,15 @@ func buildSingleElimResultComponents(nodes []sources.MatchNode) []discordgo.Mess
 		idx += len(matches)
 	}
 	return containers
+}
+
+func buildSingleElimResultComponents(nodes []sources.MatchNode) []discordgo.MessageComponent {
+	byRound := make(map[string][]sources.MatchNode)
+	for _, n := range nodes {
+		label := canonicalElimRound(n.Section)
+		byRound[label] = append(byRound[label], n)
+	}
+	return buildOrderedRoundContainers(byRound, singleElimRoundOrder)
 }
 
 // buildChronologicalResultComponents renders results for formats without a dedicated
@@ -668,14 +656,7 @@ func buildSwissResultComponents(nodes []sources.MatchNode) []discordgo.MessageCo
 		return na < nb
 	})
 
-	var containers []discordgo.MessageComponent
-	idx := 0
-	for _, round := range roundOrder {
-		matches := byRound[round]
-		containers = append(containers, buildRoundContainer(round, matches, idx))
-		idx += len(matches)
-	}
-	return containers
+	return buildOrderedRoundContainers(byRound, roundOrder)
 }
 
 func (b *Bot) newAutocompleteInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
@@ -875,16 +856,11 @@ func (b *Bot) setSubmitHandler(session DiscordSession, i *discordgo.InteractionC
 		return
 	}
 
-	errContent := func(msg string) {
-		session.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Content: &msg})
-	}
-
 	user := models.User{UserID: i.Member.User.ID, Username: i.Member.User.Username}
 	prediction, err := b.APIPtr.SetUserPrediction(context.Background(), i.GuildID, i.ChannelID, user, userPreds)
 	if err != nil {
 		b.logger().Error("failed to set user prediction", "user", user.Username, "error", fmt.Errorf("setSubmitHandler: %w", err))
-		msg := fmt.Sprintf("Failed to save Pick'Ems: %s", err.Error())
-		errContent(msg)
+		b.finalizeDeferred(session, i.Interaction, "setSubmitHandler", fmt.Sprintf("Failed to save Pick'Ems: %s", err.Error()))
 		return
 	}
 
@@ -895,7 +871,7 @@ func (b *Bot) setSubmitHandler(session DiscordSession, i *discordgo.InteractionC
 	fields, err := predictionFields(prediction)
 	if err != nil {
 		b.logger().Error("failed to build prediction fields", "user", user.Username, "error", fmt.Errorf("setSubmitHandler: %w", err))
-		errContent("An error occurred displaying your Pick'Ems.")
+		b.finalizeDeferred(session, i.Interaction, "setSubmitHandler", "An error occurred displaying your Pick'Ems.")
 		return
 	}
 

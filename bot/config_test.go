@@ -83,7 +83,10 @@ func makeConfigAutocomplete(sub, focused string, opts ...*discordgo.ApplicationC
 func lastContent(t *testing.T, session *MockDiscordSession) string {
 	t.Helper()
 	if len(session.EditedResponses) > 0 {
-		return session.EditedResponses[len(session.EditedResponses)-1]
+		if len(session.EditedResponses) != 1 {
+			t.Fatalf("expected exactly 1 edited response, got %d: %v", len(session.EditedResponses), session.EditedResponses)
+		}
+		return session.EditedResponses[0]
 	}
 	if len(session.SentInteractions) != 1 {
 		t.Fatalf("expected 1 interaction response, got %d", len(session.SentInteractions))

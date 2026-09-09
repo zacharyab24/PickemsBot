@@ -60,12 +60,13 @@ type MockStore struct {
 	GetLeaderboardError            error
 	ListVRSRankingsError           error
 
-	StoreMatchScheduleCallCount int
-	Tournaments                 []store.Tournament
-	ListTournamentNamesError    error
-	ListRoundsError             error
-	GetTournamentError          error
-	EnsureGuildError            error
+	StoreMatchScheduleCallCount       int
+	FetchAndSaveMatchResultsCallCount int
+	Tournaments                       []store.Tournament
+	ListTournamentNamesError          error
+	ListRoundsError                   error
+	GetTournamentError                error
+	EnsureGuildError                  error
 
 	SyncedTournaments            []store.TournamentCatalogEntry
 	SyncTournamentsError         error
@@ -130,7 +131,7 @@ func (m *MockStore) EnsureGuild(ctx context.Context, guildID string) error {
 }
 
 // TournamentStillReferenced implements store.Interface.
-func (m *MockStore) TournamentStillReferenced(ctx context.Context, tournamentID, excludeConfigID int) (bool, error) {
+func (m *MockStore) TournamentStillReferenced(ctx context.Context, tournamentID int) (bool, error) {
 	return m.TournamentStillReferencedResult, m.TournamentStillReferencedError
 }
 
@@ -255,6 +256,7 @@ func (m *MockStore) UpsertMatchResults(ctx context.Context, tournamentID int, re
 
 // FetchAndSaveMatchResults implements store.Interface.
 func (m *MockStore) FetchAndSaveMatchResults(ctx context.Context, tournamentID int, round string) error {
+	m.FetchAndSaveMatchResultsCallCount++
 	return m.FetchAndSaveMatchResultsError
 }
 
@@ -396,11 +398,12 @@ func (m *MockStore) SetVRSEntries(entries []store.VRSEntry) {
 	m.VRSEntries = entries
 }
 
-// NewTestApp creates a minimal App for unit tests with an unlimited rate limiter.
+// NewTestApp creates a minimal App for unit tests with unlimited rate limiters.
 func NewTestApp(s store.Interface) *App {
 	return &App{
-		Store:          s,
-		rateLimiter:    rate.NewLimiter(rate.Inf, 1),
-		MonitoringPool: newMonitoringPool(),
+		Store:             s,
+		pandaScoreLimiter: rate.NewLimiter(rate.Inf, 1),
+		liquipediaLimiter: rate.NewLimiter(rate.Inf, 1),
+		MonitoringPool:    newMonitoringPool(),
 	}
 }
