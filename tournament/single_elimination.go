@@ -66,6 +66,9 @@ func init() { register(singleElimFormat{}) }
 
 func (singleElimFormat) Name() Kind { return SingleElim }
 
+// SupportsPredictions is always true for single-elimination.
+func (singleElimFormat) SupportsPredictions() bool { return true }
+
 // RequiredPredictions returns teamCount / 2 — one pick per first-round
 // matchup, predicting which team advances.
 func (singleElimFormat) RequiredPredictions(teamCount int) int { return teamCount / 2 }
