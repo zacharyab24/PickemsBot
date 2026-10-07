@@ -1,6 +1,55 @@
 # Changelog
 
-## 4.0
+## 4.0 (beta)
+
+A ground-up rework of how the bot talks to Discord and stores data. Every `$` prefix command has been replaced by a slash command, results are drawn with Discord components instead of a rendered image, and the bot can now follow a different tournament in each channel.
+
+Highlights:
+- Slash commands replace prefix commands: `/set`, `/check`, `/leaderboard`, `/upcoming`, `/results`, `/team`, `/teams` and the new admin-only `/config`. `$help` is gone; Discord shows each command's description natively.
+- `/config` lets server admins choose which tournament and round each channel tracks. Nothing else works in a channel until it has been configured.
+- `/results` is now built from Components V2 cards (one per round) instead of a bracket image, and pages with Previous/Next buttons for large stages.
+- Upcoming matches and results work for any tournament format. Predictions (`/set`, `/check`, `/leaderboard`) support Swiss and single elimination; other formats get a clear "not supported" message instead of an error.
+- Errors are sent as replies to your command instead of separate channel messages.
+
+Breaking changes:
+- All `$` commands are removed.
+- Storage moved from MongoDB to PostgreSQL. Data from 3.x is not migrated; predictions start fresh.
+- Tournament and round are no longer set in `config.toml`; use `/config` per channel.
+
+Slash commands and Components V2 (#74):
+- All commands are slash commands routed through `InteractionCreate`, with team name autocomplete on `/team`.
+- `/results` renders each round as a `Container` of match `Section`s, with the score on a disabled button (green when finished, blue when live). PandaScore and Liquipedia section labels are mapped to consistent round names (Quarter-finals, Semi-finals, Grand Final, etc.).
+- The `pickems-renderer` / `chromedp` image renderer and the `image_render_duration_seconds` metric are removed.
+
+`/results` improvements (#77, #78, #79):
+- Formats without a dedicated layout (double elimination, round robin, unknown) fall back to a chronological list instead of "Unsupported tournament format."
+- Swiss results use the same card layout as single elimination.
+- Results are split into pages that stay under Discord's 40-component limit, with Previous/Next buttons. Large stages previously failed with `COMPONENT_MAX_TOTAL_COMPONENTS_EXCEEDED`. `/results` opens on the latest page.
+- fix: an undecided "TBD vs TBD" match no longer shows TBD as the winner.
+
+Predictions and tournament formats (#78, #80):
+- Info commands (`/upcoming`, `/results`, `/team`, `/teams`) no longer depend on the tournament format.
+- `/set`, `/check` and `/leaderboard` check the format first and reply "Predictions are not supported for this tournament format (X). Upcoming matches and results are still available." for double elimination, round robin, or a format that hasn't been detected yet.
+- Round robin is detected as its own format instead of "other".
+- An ambiguous format guess ("other", e.g. from an empty bracket before a tournament starts) is no longer stored permanently, so the format can still be detected once match data arrives.
+- The "TBD" bracket placeholder is no longer offered as a pickable team.
+
+PostgreSQL migration (#72, #73):
+- MongoDB is replaced by PostgreSQL (pgx/v5), with the schema managed by `golang-migrate` in `migrations/`. Migrations are not applied by the bot; run them before starting it.
+- `POSTGRES_URI` in `.env` replaces the Mongo connection string.
+- fix: PandaScore tournament ids and internal database ids are no longer mixed up in the poller.
+
+Poller (#77):
+- The poller tracks whichever tournaments channels are configured for, instead of one tournament from `config.toml`. It rebuilds its list from the database on startup and polls each tournament independently, so one slow fetch doesn't hold up the others.
+- Finished tournaments stop being polled.
+- New `GET /poller` endpoint and `monitoring_pool_tournaments` metric show what is being polled.
+- fix: each tournament's matches were fetched using the first configured tournament's identity, saving data under the wrong tournament.
+- fix: `/upcoming` errored on a tournament with nothing scheduled instead of saying there are no upcoming matches.
+- fix: `/config set-tournament` and `set-round` could time out ("The application did not respond") on slow database writes.
+- fix: double-elimination match data was never saved, so `/results` was always empty for it.
+
+Observability:
+- `/health` now reports `postgres` instead of `mongodb`. The `mongodb_operations_total` metric is removed.
 
 `/config` admin command - per-channel tournament configuration:
 - Added `/config` (admin-gated, requires Manage Server) to set which tournament and round a channel tracks. Subcommands: `view`, `set-tournament`, `set-round`. All responses are ephemeral so admin setup doesn't clutter the channel.
@@ -18,7 +67,7 @@ In-process data ingestion (`ingest` package):
 
 Tournament format detection:
 - A tournament's format (swiss / single-elimination / double-elimination / other) is now detected from its PandaScore bracket structure rather than match-name text: any loser-bracket feeder edge means double-elimination, winner-only edges mean single-elimination, and no bracket edges means a group stage (round-robin when the match count is n*(n-1)/2, otherwise swiss). Detection runs best-effort in the background when a tournament is configured via `/config`, and the result is stored on the tournament row.
-- Formats that can't run predictions (double-elimination, other) are now first-class via a null-object format: read-only features (schedule, results) keep working, while `/set` refuses cleanly with "the selected tournament uses a format that does not support predictions" instead of erroring on an unknown format.
+- Formats that can't run predictions (double-elimination, other) are now first-class via a null-object format: read-only features (schedule, results) keep working, while the prediction commands refuse cleanly with a "not supported" message instead of erroring on an unknown format.
 - Store: `SetTournamentFormat`, and `Tournament` now carries all row columns. Sources: `GetPandaScoreBracket`, `CountTeams`. Tournament: `DetectKindFromBracket`, the `Other` kind, and `ErrPredictionsUnsupported`.
 
 ## 3.7
