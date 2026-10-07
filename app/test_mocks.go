@@ -83,10 +83,12 @@ type MockStore struct {
 // NewMockStore creates a MockStore pre-wired for the given format and round.
 func NewMockStore(kind tournament.Kind, round string) *MockStore {
 	tournamentID := 1
+	format := string(kind)
 	cfg := store.GuildConfig{
 		GuildID:      "test_guild",
 		TournamentID: &tournamentID,
 		Round:        &round,
+		Format:       &format,
 	}
 	return &MockStore{
 		Predictions:      make(map[string]models.Prediction),
