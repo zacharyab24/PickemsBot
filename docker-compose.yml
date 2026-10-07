@@ -64,14 +64,6 @@ services:
     command: -config.file=/etc/promtail/config.yml
     restart: unless-stopped
 
-  mongodb-exporter:
-    image: percona/mongodb_exporter:0.51
-    container_name: mongodb-exporter
-    command: --mongodb.uri="mongodb://192.168.1.98:27017"
-    ports:
-      - "9216:9216"
-    restart: unless-stopped
-
   test-server:
     image: ghcr.io/zacharyab24/pickems-test-server:latest
     ports:
