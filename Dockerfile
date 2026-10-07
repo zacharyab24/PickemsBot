@@ -9,25 +9,23 @@ RUN go mod download
 COPY . ./
 RUN CGO_ENABLED=0 GOOS=linux go build -o pickems .
 
-# Stage 2: runtime image with Chromium for the bracket renderer
+# Stage 2: runtime image
 FROM debian:bookworm-slim AS runtime
 
+# ca-certificates for HTTPS API calls, wget for the HEALTHCHECK below.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium \
     ca-certificates \
-    fonts-liberation \
-    && ln -s /usr/bin/chromium /usr/bin/chromium-browser \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY --from=builder /app/pickems .
-COPY resources/ resources/
 
 # Required environment variables at runtime:
 #   DISCORD_PROD_TOKEN    - Discord bot token
 #   DISCORD_BETA_TOKEN    - Discord bot token (test server)
-#   MONGO_PROD_URI        - MongoDB connection string
+#   POSTGRES_URI          - PostgreSQL connection string
 #   LIQUIDPEDIADB_API_KEY - Liquipedia API key (liquipedia data source only)
 #   PANDASCORE_API_KEY    - PandaScore API key (pandascore data source only)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
