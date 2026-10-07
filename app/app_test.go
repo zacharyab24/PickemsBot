@@ -68,11 +68,15 @@ func TestResolveConfig_NilRound(t *testing.T) {
 
 // region checkPredictionsSupported
 
-func TestCheckPredictionsSupported_NilFormat_NoError(t *testing.T) {
+func TestCheckPredictionsSupported_NilFormat_ReturnsFriendlyError(t *testing.T) {
 	api := NewTestApp(NewMockStore("swiss", "test_round"))
 
-	if err := api.checkPredictionsSupported(store.GuildConfig{}); err != nil {
-		t.Errorf("expected no error for a nil (not yet known) format, got: %v", err)
+	err := api.checkPredictionsSupported(store.GuildConfig{})
+	if !errors.Is(err, ErrFormatDoesNotSupportPredictions) {
+		t.Fatalf("expected ErrFormatDoesNotSupportPredictions for a nil format, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "(unknown)") {
+		t.Errorf("expected message to say the format is unknown, got: %v", err)
 	}
 }
 
@@ -102,15 +106,13 @@ func TestCheckPredictionsSupported_UnsupportedFormat_ReturnsFriendlyError(t *tes
 	}
 }
 
-func TestCheckPredictionsSupported_UnrecognisedFormatString_NoError(t *testing.T) {
-	// A format string tournament.Get doesn't recognise (shouldn't normally
-	// happen) is let through rather than blocking the caller - downstream
-	// calls already handle an unknown format on their own.
+func TestCheckPredictionsSupported_UnrecognisedFormatString_ReturnsFriendlyError(t *testing.T) {
 	api := NewTestApp(NewMockStore("swiss", "test_round"))
 	format := "not-a-real-format"
 
-	if err := api.checkPredictionsSupported(store.GuildConfig{Format: &format}); err != nil {
-		t.Errorf("expected no error for an unrecognised format string, got: %v", err)
+	err := api.checkPredictionsSupported(store.GuildConfig{Format: &format})
+	if !errors.Is(err, ErrFormatDoesNotSupportPredictions) {
+		t.Errorf("expected ErrFormatDoesNotSupportPredictions for an unrecognised format, got: %v", err)
 	}
 }
 
@@ -243,12 +245,14 @@ func TestSetUserPrediction_UnsupportedFormat_FailsFast(t *testing.T) {
 	// Fails before EnsureScheduledMatches even runs - no schedule was seeded above.
 }
 
-// cfg.Format is nil (not yet detected when resolveConfig ran), so
+// cfg.Format is stale (still swiss when resolveConfig ran), so
 // checkPredictionsSupported lets it through - only ListValidTeams' own read
 // (mockStore.Format) knows the format is unsupported. Must still get the
 // friendly error, not "incorrect number of teams arguments".
 func TestSetUserPrediction_FormatDetectedLate_StillFriendlyError(t *testing.T) {
 	mockStore := NewMockStore(tournament.DoubleElim, "test_round")
+	stale := string(tournament.Swiss)
+	mockStore.GuildConfig.Format = &stale
 	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
 	api := NewTestApp(mockStore)
 
@@ -341,7 +345,7 @@ func TestCheckPrediction_UnsupportedFormat_FailsFast(t *testing.T) {
 	}
 }
 
-// cfg.Format is nil here - only GetMatchResults' own kind read (simulated via
+// cfg.Format still says swiss here - only GetMatchResults' own kind read (simulated via
 // GetMatchResultsError wrapping ErrPredictionsUnsupported) knows it's unsupported.
 func TestCheckPrediction_FormatDetectedLate_StillFriendlyError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
@@ -429,7 +433,7 @@ func TestCheckPredictionByUsername_UnsupportedFormat_FailsFast(t *testing.T) {
 	}
 }
 
-// cfg.Format is nil here - only GetMatchResults' own kind read (simulated via
+// cfg.Format still says swiss here - only GetMatchResults' own kind read (simulated via
 // GetMatchResultsError wrapping ErrPredictionsUnsupported) knows it's unsupported.
 func TestCheckPredictionByUsername_FormatDetectedLate_StillFriendlyError(t *testing.T) {
 	mockStore := NewMockStore("swiss", "test_round")
@@ -509,6 +513,38 @@ func TestGetLeaderboard_NoGuildConfig(t *testing.T) {
 	_, err := api.GetLeaderboard(bg(), testGuildID, testChannelID)
 	if err == nil {
 		t.Error("expected error when no guild config, got nil")
+	}
+}
+
+// A NULL tournaments.format (not detected yet, or ambiguous Other) must give
+// every prediction command the friendly message, not a generic error or an
+// empty leaderboard.
+func TestPredictionCommands_NoStoredFormat_FriendlyError(t *testing.T) {
+	calls := map[string]func(*App) error{
+		"SetUserPrediction": func(api *App) error {
+			_, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "user1"}, []string{"Team A"})
+			return err
+		},
+		"CheckPrediction": func(api *App) error {
+			_, err := api.CheckPrediction(bg(), testGuildID, testChannelID, models.User{UserID: "user1"})
+			return err
+		},
+		"CheckPredictionByUsername": func(api *App) error {
+			_, _, err := api.CheckPredictionByUsername(bg(), testGuildID, testChannelID, "PickemsBot")
+			return err
+		},
+		"GetLeaderboard": func(api *App) error {
+			_, err := api.GetLeaderboard(bg(), testGuildID, testChannelID)
+			return err
+		},
+	}
+	for name, call := range calls {
+		mockStore := NewMockStore("", "test_round")
+		mockStore.GuildConfig.Format = nil
+		err := call(NewTestApp(mockStore))
+		if !errors.Is(err, ErrFormatDoesNotSupportPredictions) {
+			t.Errorf("%s: expected ErrFormatDoesNotSupportPredictions, got: %v", name, err)
+		}
 	}
 }
 
@@ -854,14 +890,20 @@ func TestGetTournamentInfo_ListValidTeamsError(t *testing.T) {
 	}
 }
 
-func TestGetTournamentInfo_UnknownFormat(t *testing.T) {
-	mockStore := NewMockStore("unknown-format", "test_round")
-	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-	api := NewTestApp(mockStore)
+func TestGetTournamentInfo_UnknownOrEmptyFormat_NotSupported(t *testing.T) {
+	for _, kind := range []tournament.Kind{"unknown-format", ""} {
+		mockStore := NewMockStore(kind, "test_round")
+		mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+		api := NewTestApp(mockStore)
 
-	_, err := api.GetTournamentInfo(bg(), testGuildID, testChannelID)
-	if err == nil {
-		t.Error("expected error for unknown tournament format, got nil")
+		info, err := api.GetTournamentInfo(bg(), testGuildID, testChannelID)
+		if err != nil {
+			t.Errorf("format %q: expected no error, got: %v", kind, err)
+			continue
+		}
+		if info.SupportsPredictions {
+			t.Errorf("format %q: expected SupportsPredictions false", kind)
+		}
 	}
 }
 

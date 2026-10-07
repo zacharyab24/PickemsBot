@@ -189,6 +189,9 @@ var ErrFormatDoesNotSupportPredictions = errors.New("Predictions are not support
 // FormatNotSupportedMessage returns the user-facing message for a tournament
 // format that doesn't support predictions. Also used by bot/handlers.go.
 func FormatNotSupportedMessage(format string) string {
+	if format == "" {
+		format = "unknown"
+	}
 	return fmt.Sprintf("%s (%s). Upcoming matches and results are still available.", ErrFormatDoesNotSupportPredictions, format)
 }
 
@@ -198,22 +201,26 @@ type formatNotSupportedError struct{ format string }
 func (e formatNotSupportedError) Error() string { return FormatNotSupportedMessage(e.format) }
 func (e formatNotSupportedError) Unwrap() error { return ErrFormatDoesNotSupportPredictions }
 
-// checkPredictionsSupported returns ErrFormatDoesNotSupportPredictions if
-// cfg's tournament format is known and can't run predictions (e.g.
-// double-elimination, round-robin). Info commands (/upcoming, /results,
-// /team, /teams) don't call this - only the prediction-specific ones do. A
-// nil or unrecognised format is let through: downstream calls already handle
-// "format not yet known" on their own. Not the only gate - see the re-checks
-// in SetUserPrediction and CheckPrediction/CheckPredictionByUsername.
+// predictionFormat returns the Format for kind, or a formatNotSupportedError if
+// kind can't run predictions. An empty or unregistered kind (format not
+// detected yet, or too ambiguous to store) counts as unsupported.
+func predictionFormat(kind tournament.Kind) (tournament.Format, error) {
+	f, err := tournament.Get(kind)
+	if err != nil || !f.SupportsPredictions() {
+		return nil, formatNotSupportedError{format: string(kind)}
+	}
+	return f, nil
+}
+
+// checkPredictionsSupported gates the prediction commands on cfg's tournament
+// format. Info commands (/upcoming, /results, /team, /teams) don't call this.
 func (a *App) checkPredictionsSupported(cfg store.GuildConfig) error {
-	if cfg.Format == nil {
-		return nil
+	var kind tournament.Kind
+	if cfg.Format != nil {
+		kind = tournament.Kind(*cfg.Format)
 	}
-	f, err := tournament.Get(tournament.Kind(*cfg.Format))
-	if err != nil || f.SupportsPredictions() {
-		return nil
-	}
-	return formatNotSupportedError{format: *cfg.Format}
+	_, err := predictionFormat(kind)
+	return err
 }
 
 // SetUserPrediction validates and stores a user's prediction for the configured tournament round.
@@ -235,13 +242,10 @@ func (a *App) SetUserPrediction(ctx context.Context, guildID, channelID string, 
 		return models.Prediction{}, err
 	}
 
-	f, err := tournament.Get(formatName)
-	if err != nil {
-		return models.Prediction{}, fmt.Errorf("unknown tournament format: %s", formatName)
-	}
 	// Re-check against this freshly-read formatName, not just checkPredictionsSupported's cfg.Format.
-	if !f.SupportsPredictions() {
-		return models.Prediction{}, formatNotSupportedError{format: string(formatName)}
+	f, err := predictionFormat(formatName)
+	if err != nil {
+		return models.Prediction{}, err
 	}
 
 	requiredPredictions := f.RequiredPredictions(len(validTeams))
@@ -527,23 +531,22 @@ func (a *App) GetTournamentInfo(ctx context.Context, guildID, channelID string) 
 		return TournamentInfo{}, err
 	}
 
-	f, err := tournament.Get(tournament.Kind(formatName))
-	if err != nil {
-		return TournamentInfo{}, err
-	}
-
 	name := ""
 	if cfg.TournamentName != nil {
 		name = *cfg.TournamentName
 	}
 
-	return TournamentInfo{
-		TournamentName:      name,
-		Round:               *cfg.Round,
-		Format:              string(formatName),
-		NumTeams:            f.RequiredPredictions(len(validTeams)),
-		SupportsPredictions: f.SupportsPredictions(),
-	}, nil
+	info := TournamentInfo{
+		TournamentName: name,
+		Round:          *cfg.Round,
+		Format:         string(formatName),
+	}
+	// An empty or unrecognised format leaves SupportsPredictions false rather than erroring.
+	if f, err := predictionFormat(formatName); err == nil {
+		info.NumTeams = f.RequiredPredictions(len(validTeams))
+		info.SupportsPredictions = true
+	}
+	return info, nil
 }
 
 // PopulateMatches fetches and stores match schedule and optionally results for a specific tournament.
@@ -801,5 +804,8 @@ func (a *App) checkAndStoreFormat(ctx context.Context, t store.Tournament) error
 		return fmt.Errorf("checkAndStoreFormat: %w", err)
 	}
 	kind := tournament.DetectKindFromBracket(brackets, sources.CountTeams(brackets))
+	if kind == tournament.Other {
+		return nil // ambiguous (e.g. empty bracket) - leave NULL so match-node detection can classify it later
+	}
 	return a.Store.SetTournamentFormat(ctx, t.ID, string(kind))
 }
