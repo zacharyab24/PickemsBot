@@ -91,6 +91,9 @@ func init() { register(swissFormat{}) }
 
 func (swissFormat) Name() Kind { return Swiss }
 
+// SupportsPredictions is always true for Swiss.
+func (swissFormat) SupportsPredictions() bool { return true }
+
 // RequiredPredictions returns the total picks needed for a 3-win / 3-loss
 // Swiss bracket of the given size. Breakdown:
 //

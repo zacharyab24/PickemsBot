@@ -2,6 +2,7 @@ package bot
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"pickems-bot/app"
@@ -171,6 +172,79 @@ func TestInteractionRouting_Check(t *testing.T) {
 		t.Errorf("expected 1 interaction response, got %d", len(session.SentInteractions))
 	}
 }
+
+// region prediction commands gated on format
+
+// A guild config pointing at an unsupported-for-predictions format (e.g.
+// double-elimination) should surface the same friendly message from every
+// prediction command, not a generic error - see app.ErrFormatDoesNotSupportPredictions.
+func newUnsupportedFormatTestBot(t *testing.T) (*Bot, *MockDiscordSession) {
+	t.Helper()
+	mockStore := app.NewMockStore(tournament.DoubleElim, "Playoffs")
+	format := string(tournament.DoubleElim)
+	mockStore.GuildConfig.Format = &format
+	api := app.NewTestApp(mockStore)
+	bot, err := NewBot("test_token", api, nil, "")
+	if err != nil {
+		t.Fatalf("NewBot: %v", err)
+	}
+	return bot, NewMockDiscordSession()
+}
+
+func TestCheckInteractionHandler_UnsupportedFormat_ShowsFriendlyMessage(t *testing.T) {
+	bot, session := newUnsupportedFormatTestBot(t)
+
+	bot.checkInteractionHandler(session, makeCommandInteraction("check"))
+
+	if len(session.SentInteractions) != 1 {
+		t.Fatalf("expected 1 interaction response, got %d", len(session.SentInteractions))
+	}
+	content := session.SentInteractions[0].Response.Data.Content
+	if !strings.Contains(content, "Predictions are not supported for this tournament format") {
+		t.Errorf("expected friendly format-not-supported message, got %q", content)
+	}
+}
+
+func TestLeaderboardInteractionHandler_UnsupportedFormat_ShowsFriendlyMessage(t *testing.T) {
+	bot, session := newUnsupportedFormatTestBot(t)
+
+	bot.leaderboardInteractionHandler(session, makeCommandInteraction("leaderboard"))
+
+	if len(session.SentInteractions) != 1 {
+		t.Fatalf("expected 1 interaction response, got %d", len(session.SentInteractions))
+	}
+	content := session.SentInteractions[0].Response.Data.Content
+	if !strings.Contains(content, "Predictions are not supported for this tournament format") {
+		t.Errorf("expected friendly format-not-supported message, got %q", content)
+	}
+}
+
+// setInteractionHandler is the real gate for /set - it resolves the format
+// itself (via GetTournamentInfo) before ever showing team-selection UI, so
+// this exercises the actual entry point rather than App.SetUserPrediction's
+// defensive backstop.
+func TestSetInteractionHandler_UnsupportedFormat_ShowsFriendlyMessage(t *testing.T) {
+	mockStore := app.NewMockStore(tournament.DoubleElim, "Playoffs")
+	mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+	api := app.NewTestApp(mockStore)
+	bot, err := NewBot("test_token", api, nil, "")
+	if err != nil {
+		t.Fatalf("NewBot: %v", err)
+	}
+	session := NewMockDiscordSession()
+
+	bot.setInteractionHandler(session, makeCommandInteraction("set"))
+
+	if len(session.SentInteractions) != 1 {
+		t.Fatalf("expected 1 interaction response, got %d", len(session.SentInteractions))
+	}
+	content := session.SentInteractions[0].Response.Data.Content
+	if !strings.Contains(content, "Predictions are not supported for this tournament format (double-elimination)") {
+		t.Errorf("expected friendly format-not-supported message naming the format, got %q", content)
+	}
+}
+
+// endregion
 
 func TestInteractionRouting_Autocomplete_DispatchesToAutocompleteHandler(t *testing.T) {
 	bot, session := newInteractionTestBot(t)

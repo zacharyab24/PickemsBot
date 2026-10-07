@@ -26,8 +26,8 @@ func loadBracketFixture(t *testing.T, name string) []sources.BracketMatch {
 }
 
 // A real 5-team single round-robin: edge-less (like swiss) but matchCount ==
-// n*(n-1)/2, so it must classify as Other, not Swiss. Also exercises the full
-// path: decode -> sources.CountTeams -> DetectKindFromBracket.
+// n*(n-1)/2, so it must classify as RoundRobin, not Swiss. Also exercises the
+// full path: decode -> sources.CountTeams -> DetectKindFromBracket.
 func TestDetectKindFromBracket_RealRoundRobin(t *testing.T) {
 	matches := loadBracketFixture(t, "roundrobin_brackets.json")
 
@@ -36,5 +36,5 @@ func TestDetectKindFromBracket_RealRoundRobin(t *testing.T) {
 	n := sources.CountTeams(matches)
 	assert.Equal(t, 5, n, "distinct teams derived from opponent IDs")
 
-	assert.Equal(t, Other, DetectKindFromBracket(matches, n))
+	assert.Equal(t, RoundRobin, DetectKindFromBracket(matches, n))
 }

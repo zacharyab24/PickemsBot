@@ -208,6 +208,8 @@ func TestListValidTeams(t *testing.T) {
 	tournamentID := seedTournament(t, "test-validteams", "swiss")
 	seedMatch(t, tournamentID, "Stage 1", "TeamAlpha", "TeamBeta", "pending")
 	seedMatch(t, tournamentID, "Stage 1", "TeamGamma", "TeamDelta", "pending")
+	// An unresolved bracket slot - not a real team, must not surface as one.
+	seedMatch(t, tournamentID, "Stage 1", "TeamGamma", "TBD", "pending")
 
 	teams, kind, err := s.ListValidTeams(ctx, tournamentID, "Stage 1")
 	require.NoError(t, err)
@@ -217,4 +219,5 @@ func TestListValidTeams(t *testing.T) {
 	assert.Contains(t, teams, "TeamBeta")
 	assert.Contains(t, teams, "TeamGamma")
 	assert.Contains(t, teams, "TeamDelta")
+	assert.NotContains(t, teams, "TBD")
 }

@@ -105,6 +105,30 @@ func TestUpsertMatchNodes_DoesNotOverwriteExistingFormat(t *testing.T) {
 	assert.Equal(t, "swiss", format, "existing format should not be overwritten")
 }
 
+// TestUpsertMatchNodes_OtherDoesNotLockFormat verifies Other leaves format
+// NULL so a later, better-classified fetch can still set it.
+func TestUpsertMatchNodes_OtherDoesNotLockFormat(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournamentNullFormat(t, "test-other-no-lock")
+
+	nodes := []sources.MatchNode{{ID: "m1", Team1: "TeamA", Team2: "TeamB", Status: "not_started"}}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Other))
+
+	var format *string
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT format FROM tournaments WHERE id = $1`, tournamentID).Scan(&format))
+	assert.Nil(t, format, "format should stay NULL after an ambiguous (Other) detection")
+
+	// A later fetch with recognisable sections should still be able to set it.
+	nodes[0].Section = "Round 1"
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Swiss))
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT format FROM tournaments WHERE id = $1`, tournamentID).Scan(&format))
+	require.NotNil(t, format)
+	assert.Equal(t, "swiss", *format)
+}
+
 func TestUpsertMatchNodes_Idempotent(t *testing.T) {
 	cleanDB(t)
 	ctx := context.Background()

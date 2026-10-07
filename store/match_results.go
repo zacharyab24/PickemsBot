@@ -173,10 +173,13 @@ func (s *PostgresStore) upsertMatchNodes(ctx context.Context, tournamentID int, 
 	}
 
 	// Set tournament format lazily on first result write (format is NULL until match data arrives).
-	if _, err := tx.Exec(ctx, `
-		UPDATE tournaments SET format = $1 WHERE id = $2 AND format IS NULL
-	`, string(kind), tournamentID); err != nil {
-		return fmt.Errorf("upsertMatchNodes: set format: %w", err)
+	// Other is an ambiguous guess, not a real classification - don't lock it in.
+	if kind != "" && kind != tournament.Other {
+		if _, err := tx.Exec(ctx, `
+			UPDATE tournaments SET format = $1 WHERE id = $2 AND format IS NULL
+		`, string(kind), tournamentID); err != nil {
+			return fmt.Errorf("upsertMatchNodes: set format: %w", err)
+		}
 	}
 
 	return tx.Commit(ctx)

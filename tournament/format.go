@@ -26,6 +26,8 @@ const (
 	SingleElim Kind = "single-elimination"
 	// DoubleElim is not fully supported yet. Only exists for upcoming only mode
 	DoubleElim Kind = "double-elimination"
+	// RoundRobin is detected but not supported for predictions yet.
+	RoundRobin Kind = "round-robin"
 	Other      Kind = "other"
 )
 
@@ -66,6 +68,11 @@ type Format interface {
 	// display (e.g. Discord embed fields). Returns an error if the prediction
 	// is malformed for this format (e.g. wrong field set populated).
 	PredictionFields(p models.Prediction) ([]models.PredictionField, error)
+
+	// SupportsPredictions reports whether this format can run predictions at
+	// all - false for formats the bot can only display raw match data for
+	// (double-elimination, round-robin, other/unrecognised).
+	SupportsPredictions() bool
 
 	// DB Interaction
 	DecodeBSON(bytes []byte) (MatchResult, error)
@@ -160,8 +167,13 @@ func FilterNodesByKind(nodes []sources.MatchNode, kind Kind) []sources.MatchNode
 // DetectKindFromMatchNodes infers the tournament format from the Section fields
 // present in a slice of match nodes returned by the LiquipediaDB API.
 // Priority: DoubleElim (upper + lower keywords) > Swiss (round keyword) > SingleElim (final keywords).
-// Returns an error if no section keywords match any known format.
+// Errors only when nodes itself is empty (nothing to detect from at all) -
+// a non-empty page whose sections match no known keywords resolves to Other
+// rather than failing the whole fetch, matching DetectKindFromBracket.
 func DetectKindFromMatchNodes(nodes []sources.MatchNode) (Kind, error) {
+	if len(nodes) == 0 {
+		return "", fmt.Errorf("could not detect tournament format: no match nodes provided")
+	}
 	var hasRound, hasFinal, hasUpper, hasLower bool
 	for _, n := range nodes {
 		s := strings.ToLower(n.Section)
@@ -186,7 +198,7 @@ func DetectKindFromMatchNodes(nodes []sources.MatchNode) (Kind, error) {
 	case hasFinal:
 		return SingleElim, nil
 	default:
-		return "", fmt.Errorf("could not detect tournament format from match node sections")
+		return Other, nil
 	}
 }
 
@@ -215,7 +227,7 @@ func DetectKindFromBracket(matches []sources.BracketMatch, teamCount int) Kind {
 		return SingleElim // a single winner-fed tree
 	default:
 		if isRoundRobin(len(matches), teamCount) {
-			return Other // round-robin is not a supported format, but we can detect it
+			return RoundRobin
 		}
 		return Swiss // no feeder edges anywhere -> standings-based
 	}

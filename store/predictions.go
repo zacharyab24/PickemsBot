@@ -155,7 +155,7 @@ func (s *PostgresStore) ListValidTeams(ctx context.Context, tournamentID int, ro
 			UNION
 			SELECT COALESCE(t2.canonical_name, m.team2_name) AS name FROM matches m LEFT JOIN teams t2 ON t2.id = m.team2_id WHERE m.tournament_id = $1 AND m.round = $2
 		) names
-		WHERE name IS NOT NULL AND name != ''
+		WHERE name IS NOT NULL AND name != '' AND name != 'TBD'
 		ORDER BY name
 	`, tournamentID, round)
 	if err != nil {

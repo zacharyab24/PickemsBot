@@ -45,6 +45,17 @@ func TestRegister_PanicsOnDuplicate(t *testing.T) {
 	assert.Panics(t, func() { register(swissFormat{}) })
 }
 
+func TestSupportsPredictions_SwissAndSingleElimTrue(t *testing.T) {
+	assert.True(t, MustGet(Swiss).SupportsPredictions())
+	assert.True(t, MustGet(SingleElim).SupportsPredictions())
+}
+
+func TestSupportsPredictions_UnsupportedKindsFalse(t *testing.T) {
+	assert.False(t, MustGet(DoubleElim).SupportsPredictions())
+	assert.False(t, MustGet(RoundRobin).SupportsPredictions())
+	assert.False(t, MustGet(Other).SupportsPredictions())
+}
+
 // region DetectKindFromMatchNodes
 
 func nodes(sections ...string) []sources.MatchNode {
@@ -86,9 +97,10 @@ func TestDetectKindFromMatchNodes_CaseInsensitive(t *testing.T) {
 	assert.Equal(t, Swiss, kind)
 }
 
-func TestDetectKindFromMatchNodes_NoMatchingSections(t *testing.T) {
-	_, err := DetectKindFromMatchNodes(nodes("Group A", "Group B"))
-	assert.Error(t, err)
+func TestDetectKindFromMatchNodes_NoMatchingSections_FallsBackToOther(t *testing.T) {
+	kind, err := DetectKindFromMatchNodes(nodes("Group A", "Group B"))
+	assert.NoError(t, err)
+	assert.Equal(t, Other, kind)
 }
 
 func TestDetectKindFromMatchNodes_EmptyNodes(t *testing.T) {
@@ -203,9 +215,9 @@ func TestDetectKindFromBracket_Swiss(t *testing.T) {
 	assert.Equal(t, Swiss, DetectKindFromBracket(edgelessBracket(33), 16))
 }
 
-func TestDetectKindFromBracket_RoundRobinReportedAsOther(t *testing.T) {
-	// 4 teams, 6 matches (== 4*3/2), no edges -> round-robin -> Other (no scorer).
-	assert.Equal(t, Other, DetectKindFromBracket(edgelessBracket(6), 4))
+func TestDetectKindFromBracket_RoundRobin(t *testing.T) {
+	// 4 teams, 6 matches (== 4*3/2), no edges -> round-robin (no scorer, but its own kind).
+	assert.Equal(t, RoundRobin, DetectKindFromBracket(edgelessBracket(6), 4))
 }
 
 func TestDetectKindFromBracket_EmptyIsOther(t *testing.T) {

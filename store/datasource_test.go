@@ -186,7 +186,11 @@ func TestPandaScoreFetcher_FetchMatchData_Unauthorized(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestPandaScoreFetcher_FetchMatchData_UnrecognisedSection_FailsWithoutKnownKind(t *testing.T) {
+// TestPandaScoreFetcher_FetchMatchData_UnrecognisedSection_FallsBackToOther
+// documents that an unrecognised section, with no already-persisted format to
+// fall back on, degrades to Other (raw nodes, no scoreable result) instead of
+// failing the whole fetch - see tournament.DetectKindFromMatchNodes.
+func TestPandaScoreFetcher_FetchMatchData_UnrecognisedSection_FallsBackToOther(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(psGroupStageJSON))
@@ -194,9 +198,11 @@ func TestPandaScoreFetcher_FetchMatchData_UnrecognisedSection_FailsWithoutKnownK
 	defer srv.Close()
 
 	f := NewPandaScoreFetcher(srv.URL, "test-key", 99001, 0)
-	_, _, _, err := f.FetchMatchData("Group B", "")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "could not detect tournament format")
+	result, nodes, kind, err := f.FetchMatchData("Group B", "")
+	require.NoError(t, err)
+	assert.Nil(t, result)
+	assert.NotEmpty(t, nodes)
+	assert.Equal(t, tournament.Other, kind)
 }
 
 // TestPandaScoreFetcher_FetchMatchData_KnownKindReturnsRawNodesWithoutError is

@@ -26,10 +26,14 @@ var _ Format = unsupportedFormat{}
 
 func init() {
 	register(unsupportedFormat{kind: DoubleElim})
+	register(unsupportedFormat{kind: RoundRobin})
 	register(unsupportedFormat{kind: Other})
 }
 
 func (f unsupportedFormat) Name() Kind { return f.kind }
+
+// SupportsPredictions is always false - that's the point of this type.
+func (unsupportedFormat) SupportsPredictions() bool { return false }
 
 // RequiredPredictions is 0: there are no predictions to make for this format.
 func (unsupportedFormat) RequiredPredictions(int) int { return 0 }
