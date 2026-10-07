@@ -184,7 +184,7 @@ func (a *App) resolveConfig(ctx context.Context, guildID, channelID string) (sto
 // GetLeaderboard) when the guild's configured tournament format can't run
 // predictions. err.Error() is already a complete, user-facing message -
 // callers should show it as-is rather than wrapping it further.
-var ErrFormatDoesNotSupportPredictions = errors.New("Predictions are not supported for this tournament format")
+var ErrFormatDoesNotSupportPredictions = errors.New("predictions are not supported for this tournament format")
 
 // FormatNotSupportedMessage returns the user-facing message for a tournament
 // format that doesn't support predictions. Also used by bot/handlers.go.
@@ -192,7 +192,7 @@ func FormatNotSupportedMessage(format string) string {
 	if format == "" {
 		format = "unknown"
 	}
-	return fmt.Sprintf("%s (%s). Upcoming matches and results are still available.", ErrFormatDoesNotSupportPredictions, format)
+	return fmt.Sprintf("Predictions are not supported for this tournament format (%s). Upcoming matches and results are still available.", format)
 }
 
 // formatNotSupportedError unwraps to ErrFormatDoesNotSupportPredictions.
