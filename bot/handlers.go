@@ -296,7 +296,7 @@ func (b *Bot) leaderboardInteractionHandler(session DiscordSession, i *discordgo
 		respondError(session, i.Interaction, b.predictionErrorMessage(err, "failed to get leaderboard", "An error occurred getting the leaderboard."))
 		return
 	}
-	if leaderboard == nil {
+	if len(leaderboard) == 0 {
 		respondError(session, i.Interaction, "There are currently no rankings. Try again later.")
 		return
 	}
@@ -519,7 +519,7 @@ func (b *Bot) configSetTournament(session DiscordSession, i *discordgo.Interacti
 
 	// Defer before the DB call - SetConfigTournament may take longer than
 	// Discord's 3s window for an undeferred response.
-	if err := deferEphemeral(session, i.Interaction); err != nil {
+	if err := deferPublic(session, i.Interaction); err != nil {
 		b.logger().Error("failed to defer config set-tournament", "error", fmt.Errorf("configSetTournament: %w", err))
 		return
 	}
@@ -527,7 +527,7 @@ func (b *Bot) configSetTournament(session DiscordSession, i *discordgo.Interacti
 	t, err := b.APIPtr.SetConfigTournament(context.Background(), i.GuildID, i.ChannelID, name, round)
 	if err != nil {
 		b.logger().Error("failed to set config tournament", "tournament", name, "round", round, "error", fmt.Errorf("configSetTournament: %w", err))
-		b.finalizeDeferred(session, i.Interaction, "configSetTournament", "Could not set that tournament - please pick a tournament and round from the lists.")
+		b.failDeferredPrivately(session, i.Interaction, "configSetTournament", "Could not set that tournament - please pick a tournament and round from the lists.")
 		return
 	}
 	b.finalizeDeferred(session, i.Interaction, "configSetTournament", fmt.Sprintf("Tournament set to **%s - %s** for this channel.", t.Name, t.Round))
@@ -537,7 +537,7 @@ func (b *Bot) configSetRound(session DiscordSession, i *discordgo.InteractionCre
 	round := subOptionString(sub, "round")
 
 	// See configSetTournament - same defer-before-DB-work reasoning.
-	if err := deferEphemeral(session, i.Interaction); err != nil {
+	if err := deferPublic(session, i.Interaction); err != nil {
 		b.logger().Error("failed to defer config set-round", "error", fmt.Errorf("configSetRound: %w", err))
 		return
 	}
@@ -545,7 +545,7 @@ func (b *Bot) configSetRound(session DiscordSession, i *discordgo.InteractionCre
 	t, err := b.APIPtr.SetConfigRound(context.Background(), i.GuildID, i.ChannelID, round)
 	if err != nil {
 		b.logger().Error("failed to set config round", "round", round, "error", fmt.Errorf("configSetRound: %w", err))
-		b.finalizeDeferred(session, i.Interaction, "configSetRound", "Could not set that round - set a tournament first, then pick a round from the list.")
+		b.failDeferredPrivately(session, i.Interaction, "configSetRound", "Could not set that round - set a tournament first, then pick a round from the list.")
 		return
 	}
 	b.finalizeDeferred(session, i.Interaction, "configSetRound", fmt.Sprintf("Round set to **%s** for **%s**.", t.Round, t.Name))
