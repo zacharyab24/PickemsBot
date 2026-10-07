@@ -23,8 +23,12 @@ type MockDiscordSession struct {
 	// SentInteractions stores all interaction responses sent during tests
 	SentInteractions []MockInteractionResponse
 	// EditedResponses stores the Content of every InteractionResponseEdit call,
-	// the finalising message for handlers that defer first (see deferEphemeral).
+	// the finalising message for handlers that defer first (see deferPublic).
 	EditedResponses []string
+	// DeletedResponses counts InteractionResponseDelete calls.
+	DeletedResponses int
+	// Followups stores every FollowupMessageCreate payload.
+	Followups []*discordgo.WebhookParams
 	// ErrorToReturn allows tests to simulate errors
 	ErrorToReturn error
 }
@@ -147,6 +151,24 @@ func (m *MockDiscordSession) InteractionResponseEdit(interaction *discordgo.Inte
 	if newresp.Content != nil {
 		m.EditedResponses = append(m.EditedResponses, *newresp.Content)
 	}
+	return &discordgo.Message{}, nil
+}
+
+// InteractionResponseDelete implements DiscordSession.InteractionResponseDelete.
+func (m *MockDiscordSession) InteractionResponseDelete(interaction *discordgo.Interaction, options ...discordgo.RequestOption) error {
+	if m.ErrorToReturn != nil {
+		return m.ErrorToReturn
+	}
+	m.DeletedResponses++
+	return nil
+}
+
+// FollowupMessageCreate implements DiscordSession.FollowupMessageCreate.
+func (m *MockDiscordSession) FollowupMessageCreate(interaction *discordgo.Interaction, wait bool, data *discordgo.WebhookParams, options ...discordgo.RequestOption) (*discordgo.Message, error) {
+	if m.ErrorToReturn != nil {
+		return nil, m.ErrorToReturn
+	}
+	m.Followups = append(m.Followups, data)
 	return &discordgo.Message{}, nil
 }
 

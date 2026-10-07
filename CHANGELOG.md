@@ -52,7 +52,7 @@ Observability:
 - `/health` now reports `postgres` instead of `mongodb`. The `mongodb_operations_total` metric is removed.
 
 `/config` admin command - per-channel tournament configuration:
-- Added `/config` (admin-gated, requires Manage Server) to set which tournament and round a channel tracks. Subcommands: `view`, `set-tournament`, `set-round`. All responses are ephemeral so admin setup doesn't clutter the channel.
+- Added `/config` (admin-gated, requires Manage Server) to set which tournament and round a channel tracks. Subcommands: `view`, `set-tournament`, `set-round`. Successful `set-tournament` and `set-round` changes are announced in the channel; `view` and errors are only shown to the admin.
 - `set-tournament` takes a tournament and a round, both autocompleted. The tournament list shows distinct names, so a tournament split across several stages no longer appears multiple times; the round list is scoped to the rounds available for the chosen tournament.
 - `set-round` changes the round without re-picking the tournament, autocompleting only the rounds valid for the currently-configured tournament. Because each (tournament, round) stage is its own catalog row, switching round repoints the channel at the matching row.
 - Both commands resolve the (name, round) pair to a specific tournament row and store its id and round together, so `guild_config.round` always matches the selected stage rather than free-typed text.

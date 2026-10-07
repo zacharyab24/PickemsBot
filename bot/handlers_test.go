@@ -280,6 +280,31 @@ func TestLeaderboardInteractionHandler_UnsupportedFormat_ShowsFriendlyMessage(t 
 	}
 }
 
+// Regression for #82: with no scores yet the store returns an empty slice, and
+// rendering it sent Discord an empty TextDisplay (BASE_TYPE_BAD_LENGTH).
+func TestLeaderboardInteractionHandler_NoScores_ShowsNoRankings(t *testing.T) {
+	mockStore := app.NewMockStore(tournament.Swiss, "Stage 1")
+	mockStore.Leaderboard = []store.LeaderboardEntry{}
+	bot, err := NewBot("test_token", app.NewTestApp(mockStore), nil, "")
+	if err != nil {
+		t.Fatalf("NewBot: %v", err)
+	}
+	session := NewMockDiscordSession()
+
+	bot.leaderboardInteractionHandler(session, makeCommandInteraction("leaderboard"))
+
+	if len(session.SentInteractions) != 1 {
+		t.Fatalf("expected 1 interaction response, got %d", len(session.SentInteractions))
+	}
+	data := session.SentInteractions[0].Response.Data
+	if data.Flags&discordgo.MessageFlagsIsComponentsV2 != 0 {
+		t.Fatal("expected the plain no-rankings reply, not an empty leaderboard container")
+	}
+	if !strings.Contains(data.Content, "no rankings") {
+		t.Errorf("expected no-rankings message, got %q", data.Content)
+	}
+}
+
 // setInteractionHandler is the real gate for /set - it resolves the format
 // itself (via GetTournamentInfo) before ever showing team-selection UI, so
 // this exercises the actual entry point rather than App.SetUserPrediction's

@@ -289,6 +289,11 @@ func (a *App) SetUserPrediction(ctx context.Context, guildID, channelID string, 
 		return models.Prediction{}, err
 	}
 
+	// Best effort: the next results fetch rescores everything anyway.
+	if err := a.Store.ScorePrediction(ctx, guildID, *cfg.TournamentID, *cfg.Round, prediction); err != nil {
+		a.logger().Warn("failed to score new prediction", "user", user.UserID, "error", err)
+	}
+
 	return prediction, nil
 }
 

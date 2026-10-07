@@ -48,6 +48,7 @@ type Interface interface {
 
 	// Predictions
 	UpsertPrediction(ctx context.Context, guildID string, tournamentID int, prediction models.Prediction) error
+	ScorePrediction(ctx context.Context, guildID string, tournamentID int, round string, prediction models.Prediction) error
 	GetPrediction(ctx context.Context, userID, guildID string, tournamentID int, round string) (models.Prediction, error)
 	GetPredictionByUsername(ctx context.Context, username, guildID string, tournamentID int, round string) (models.Prediction, error)
 	ListPredictions(ctx context.Context, guildID string, tournamentID int, round string) ([]models.Prediction, error)

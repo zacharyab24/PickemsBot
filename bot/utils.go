@@ -107,17 +107,31 @@ func respondEphemeral(session DiscordSession, i *discordgo.Interaction, msg stri
 	})
 }
 
-// deferEphemeral acknowledges an interaction with an ephemeral "thinking..."
-// state, giving the caller more than Discord's 3-second window before it must
-// finalise via session.InteractionResponseEdit.
-func deferEphemeral(session DiscordSession, i *discordgo.Interaction) error {
+// deferPublic acknowledges an interaction with a public "thinking..." state,
+// giving the caller more than Discord's 3-second window before it must
+// finalise via finalizeDeferred or failDeferredPrivately.
+func deferPublic(session DiscordSession, i *discordgo.Interaction) error {
 	return session.InteractionRespond(i, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{Flags: discordgo.MessageFlagsEphemeral},
 	})
 }
 
-// finalizeDeferred edits a previously-deferred response (see deferEphemeral)
+// failDeferredPrivately replaces a public deferred response with an ephemeral
+// msg. A deferred response's visibility can't be changed, so it's deleted and
+// msg is sent as an ephemeral followup.
+func (b *Bot) failDeferredPrivately(session DiscordSession, i *discordgo.Interaction, action, msg string) {
+	if err := session.InteractionResponseDelete(i); err != nil {
+		b.logger().Error("failed to delete deferred response", "action", action, "error", err)
+	}
+	if _, err := session.FollowupMessageCreate(i, true, &discordgo.WebhookParams{
+		Content: msg,
+		Flags:   discordgo.MessageFlagsEphemeral,
+	}); err != nil {
+		b.logger().Error("failed to send ephemeral followup", "action", action, "error", err)
+	}
+}
+
+// finalizeDeferred edits a previously-deferred response (see deferPublic)
 // with msg, on both the success and failure outcome of whatever ran in
 // between - action names the caller for the log line if the edit itself
 // fails, which would otherwise leave Discord showing "thinking..." forever

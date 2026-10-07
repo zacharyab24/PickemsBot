@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"pickems-bot/models"
 	"pickems-bot/sources"
 	"pickems-bot/tournament"
 )
@@ -199,26 +200,52 @@ func (s *PostgresStore) updateScores(ctx context.Context, tournamentID int, roun
 	}
 
 	for _, p := range predictions {
-		report, err := f.CalculateScore(p, result)
-		if err != nil {
-			s.logger().Warn("updateScores: score calculation failed", "user", p.UserID, "error", err)
-			continue
+		if err := s.upsertScore(ctx, f, "", tournamentID, round, p, result); err != nil {
+			s.logger().Warn("updateScores: score failed", "user", p.UserID, "error", err)
 		}
-		score := report.GetScore()
+	}
+	return nil
+}
 
-		if _, err := s.pool.Exec(ctx, `
-			INSERT INTO scores (prediction_id, successes, pending, failed, last_computed_at)
-			SELECT p.id, $2, $3, $4, NOW()
-			FROM predictions p
-			WHERE p.user_id = $1 AND p.tournament_id = $5 AND p.round = $6
-			ON CONFLICT (prediction_id) DO UPDATE SET
-				successes        = EXCLUDED.successes,
-				pending          = EXCLUDED.pending,
-				failed           = EXCLUDED.failed,
-				last_computed_at = NOW()
-		`, p.UserID, score.Successes, score.Pending, score.Failed, tournamentID, round); err != nil {
-			s.logger().Warn("updateScores: upsert failed", "user", p.UserID, "error", err)
-		}
+// ScorePrediction scores one guild's prediction against the stored match results,
+// so it shows on the leaderboard without waiting for the next results fetch.
+func (s *PostgresStore) ScorePrediction(ctx context.Context, guildID string, tournamentID int, round string, prediction models.Prediction) error {
+	result, err := s.GetMatchResults(ctx, tournamentID, round)
+	if err != nil {
+		return fmt.Errorf("ScorePrediction: %w", err)
+	}
+	f, err := tournament.Get(result.GetType())
+	if err != nil {
+		return fmt.Errorf("ScorePrediction: unknown format: %w", err)
+	}
+	if err := s.upsertScore(ctx, f, guildID, tournamentID, round, prediction, result); err != nil {
+		return fmt.Errorf("ScorePrediction: %w", err)
+	}
+	return nil
+}
+
+// upsertScore calculates and writes p's score. An empty guildID writes it to
+// the user's prediction in every guild.
+func (s *PostgresStore) upsertScore(ctx context.Context, f tournament.Format, guildID string, tournamentID int, round string, p models.Prediction, result tournament.MatchResult) error {
+	report, err := f.CalculateScore(p, result)
+	if err != nil {
+		return fmt.Errorf("calculate: %w", err)
+	}
+	score := report.GetScore()
+
+	if _, err := s.pool.Exec(ctx, `
+		INSERT INTO scores (prediction_id, successes, pending, failed, last_computed_at)
+		SELECT p.id, $2, $3, $4, NOW()
+		FROM predictions p
+		WHERE p.user_id = $1 AND p.tournament_id = $5 AND p.round = $6
+		  AND ($7 = '' OR p.guild_id = $7)
+		ON CONFLICT (prediction_id) DO UPDATE SET
+			successes        = EXCLUDED.successes,
+			pending          = EXCLUDED.pending,
+			failed           = EXCLUDED.failed,
+			last_computed_at = NOW()
+	`, p.UserID, score.Successes, score.Pending, score.Failed, tournamentID, round, guildID); err != nil {
+		return fmt.Errorf("upsert: %w", err)
 	}
 	return nil
 }

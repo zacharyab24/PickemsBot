@@ -77,11 +77,17 @@ func makeConfigAutocomplete(sub, focused string, opts ...*discordgo.ApplicationC
 }
 
 // lastContent returns the meaningful final message content, whether the
-// handler responded in one shot (InteractionRespond) or deferred first and
-// finalised via InteractionResponseEdit (see deferEphemeral) - in the latter
-// case the deferred ack itself carries no content, so the edit is what matters.
+// handler responded in one shot (InteractionRespond), deferred and edited the
+// response (finalizeDeferred), or deferred and replaced it with an ephemeral
+// followup (failDeferredPrivately).
 func lastContent(t *testing.T, session *MockDiscordSession) string {
 	t.Helper()
+	if len(session.Followups) > 0 {
+		if len(session.Followups) != 1 {
+			t.Fatalf("expected exactly 1 followup, got %d", len(session.Followups))
+		}
+		return session.Followups[0].Content
+	}
 	if len(session.EditedResponses) > 0 {
 		if len(session.EditedResponses) != 1 {
 			t.Fatalf("expected exactly 1 edited response, got %d: %v", len(session.EditedResponses), session.EditedResponses)
@@ -199,8 +205,8 @@ func TestConfigSetRound_Success(t *testing.T) {
 	if len(session.SentInteractions) != 1 {
 		t.Fatalf("expected 1 response, got %d", len(session.SentInteractions))
 	}
-	if session.SentInteractions[0].Response.Data.Flags&discordgo.MessageFlagsEphemeral == 0 {
-		t.Error("expected ephemeral response")
+	if got := lastContent(t, session); !strings.Contains(got, "Round set to **Playoffs**") {
+		t.Errorf("expected public confirmation, got %q", got)
 	}
 	// Switching round repoints tournament_id at the sibling row and stores the round.
 	ms := bot.APIPtr.Store.(*app.MockStore)
@@ -230,11 +236,34 @@ func TestConfigSetRound_DefersBeforeResponding(t *testing.T) {
 	if resp.Type != discordgo.InteractionResponseDeferredChannelMessageWithSource {
 		t.Errorf("expected a deferred ack, got response type %v", resp.Type)
 	}
-	if resp.Data == nil || resp.Data.Flags&discordgo.MessageFlagsEphemeral == 0 {
-		t.Error("expected the deferred ack to be ephemeral")
+	// Success is announced to the channel, so the ack must be public.
+	if resp.Data != nil && resp.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+		t.Error("expected the deferred ack to be public")
 	}
 	if len(session.EditedResponses) != 1 {
 		t.Fatalf("expected exactly 1 edit finalising the response, got %d", len(session.EditedResponses))
+	}
+}
+
+// assertPrivateFailure checks a failed set-tournament/set-round replaced its
+// public deferred ack with an ephemeral followup.
+func assertPrivateFailure(t *testing.T, session *MockDiscordSession, wantSubstr string) {
+	t.Helper()
+	if session.DeletedResponses != 1 {
+		t.Errorf("expected the public deferred response to be deleted, got %d deletes", session.DeletedResponses)
+	}
+	if len(session.EditedResponses) != 0 {
+		t.Errorf("expected no public edit on failure, got %v", session.EditedResponses)
+	}
+	if len(session.Followups) != 1 {
+		t.Fatalf("expected 1 followup, got %d", len(session.Followups))
+	}
+	f := session.Followups[0]
+	if f.Flags&discordgo.MessageFlagsEphemeral == 0 {
+		t.Error("expected the failure followup to be ephemeral")
+	}
+	if !strings.Contains(f.Content, wantSubstr) {
+		t.Errorf("expected %q, got %q", wantSubstr, f.Content)
 	}
 }
 
@@ -244,9 +273,7 @@ func TestConfigSetRound_UnknownRound_Rejected(t *testing.T) {
 	seedBlast(bot)
 	bot.newInteractionHandler(session, makeConfigInteraction(adminPerms, configSub("set-round", strArg("round", "Group Stage"))))
 
-	if !strings.Contains(lastContent(t, session), "Could not set that round") {
-		t.Errorf("expected round error, got %q", lastContent(t, session))
-	}
+	assertPrivateFailure(t, session, "Could not set that round")
 }
 
 func TestConfigSetRound_StoreError(t *testing.T) {
@@ -256,9 +283,7 @@ func TestConfigSetRound_StoreError(t *testing.T) {
 
 	bot.newInteractionHandler(session, makeConfigInteraction(adminPerms, configSub("set-round", strArg("round", "Playoffs"))))
 
-	if !strings.Contains(lastContent(t, session), "Could not set that round") {
-		t.Errorf("expected round-update error, got %q", lastContent(t, session))
-	}
+	assertPrivateFailure(t, session, "Could not set that round")
 }
 
 // endregion
@@ -295,9 +320,7 @@ func TestConfigSetTournament_UnknownPair_Rejected(t *testing.T) {
 	bot.newInteractionHandler(session, makeConfigInteraction(adminPerms,
 		configSub("set-tournament", strArg("tournament", "Nonexistent Cup"), strArg("round", "Playoffs"))))
 
-	if !strings.Contains(lastContent(t, session), "Could not set that tournament") {
-		t.Errorf("expected pick-from-list message, got %q", lastContent(t, session))
-	}
+	assertPrivateFailure(t, session, "Could not set that tournament")
 }
 
 func TestConfigSetTournament_StoreError(t *testing.T) {
@@ -308,9 +331,7 @@ func TestConfigSetTournament_StoreError(t *testing.T) {
 	bot.newInteractionHandler(session, makeConfigInteraction(adminPerms,
 		configSub("set-tournament", strArg("tournament", "BLAST Bounty Summer 2026"), strArg("round", "Playoffs"))))
 
-	if !strings.Contains(lastContent(t, session), "Could not set that tournament") {
-		t.Errorf("expected set-tournament error, got %q", lastContent(t, session))
-	}
+	assertPrivateFailure(t, session, "Could not set that tournament")
 }
 
 // endregion

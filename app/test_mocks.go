@@ -78,6 +78,9 @@ type MockStore struct {
 	SetFormatID              int
 	SetFormatValue           string
 	SetTournamentFormatError error
+
+	ScoredPredictions    []models.Prediction
+	ScorePredictionError error
 }
 
 // NewMockStore creates a MockStore pre-wired for the given format and round.
@@ -300,6 +303,12 @@ func (m *MockStore) UpsertPrediction(ctx context.Context, guildID string, tourna
 	}
 	m.Predictions[prediction.UserID] = prediction
 	return nil
+}
+
+// ScorePrediction implements store.Interface.
+func (m *MockStore) ScorePrediction(ctx context.Context, guildID string, tournamentID int, round string, prediction models.Prediction) error {
+	m.ScoredPredictions = append(m.ScoredPredictions, prediction)
+	return m.ScorePredictionError
 }
 
 // GetPrediction implements store.Interface.
