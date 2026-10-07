@@ -314,7 +314,7 @@ func (a *App) CheckPrediction(ctx context.Context, guildID, channelID string, us
 	results, err := a.Store.GetMatchResults(ctx, *cfg.TournamentID, *cfg.Round)
 	if err != nil {
 		if errors.Is(err, tournament.ErrPredictionsUnsupported) {
-			return nil, fmt.Errorf("%w. Upcoming matches and results are still available.", ErrFormatDoesNotSupportPredictions)
+			return nil, formatNotSupportedError{}
 		}
 		return nil, err
 	}
@@ -344,7 +344,7 @@ func (a *App) CheckPredictionByUsername(ctx context.Context, guildID, channelID,
 	results, err := a.Store.GetMatchResults(ctx, *cfg.TournamentID, *cfg.Round)
 	if err != nil {
 		if errors.Is(err, tournament.ErrPredictionsUnsupported) {
-			return models.User{}, nil, fmt.Errorf("%w. Upcoming matches and results are still available.", ErrFormatDoesNotSupportPredictions)
+			return models.User{}, nil, formatNotSupportedError{}
 		}
 		return models.User{}, nil, err
 	}
