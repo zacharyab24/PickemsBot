@@ -142,6 +142,26 @@ func TestSetUserPrediction_SwissFormat_Success(t *testing.T) {
 	}
 }
 
+// A new prediction is scored straight away so it shows on /leaderboard before
+// the next results fetch; a scoring failure must not fail /set.
+func TestSetUserPrediction_ScoresNewPrediction(t *testing.T) {
+	for _, scoreErr := range []error{nil, fmt.Errorf("no match nodes")} {
+		mockStore := NewMockStore("swiss", "test_round")
+		mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+		mockStore.ScorePredictionError = scoreErr
+		api := NewTestApp(mockStore)
+
+		user := models.User{UserID: "user1", Username: "testuser"}
+		teams := []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
+		if _, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, user, teams); err != nil {
+			t.Fatalf("scoreErr=%v: expected no error, got: %v", scoreErr, err)
+		}
+		if len(mockStore.ScoredPredictions) != 1 || mockStore.ScoredPredictions[0].UserID != user.UserID {
+			t.Errorf("scoreErr=%v: expected the new prediction to be scored, got %+v", scoreErr, mockStore.ScoredPredictions)
+		}
+	}
+}
+
 func TestSetUserPrediction_SingleEliminationFormat_Success(t *testing.T) {
 	mockStore := NewMockStore("single-elimination", "test_round")
 	mockStore.ValidTeams = []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H"}

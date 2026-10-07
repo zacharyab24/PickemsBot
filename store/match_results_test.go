@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"pickems-bot/models"
 	"pickems-bot/sources"
 	"pickems-bot/tournament"
 
@@ -344,3 +345,36 @@ func TestGetMatchResults_NoNodes(t *testing.T) {
 }
 
 // endregion
+
+// A newly set prediction must reach the leaderboard straight away, and only in
+// the guild it was set in.
+func TestScorePrediction_ScoresOnlyThatGuild(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournament(t, "test-score-prediction", "swiss")
+	nodes := []sources.MatchNode{
+		{ID: "m1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA", Score: "2-0", Status: "finished"},
+		{ID: "m2", Team1: "TeamC", Team2: "TeamD", Status: "not_started"},
+	}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Swiss))
+
+	seedGuild(t, "guild-1")
+	seedGuild(t, "guild-2")
+	seedUser(t, "user-1", "Player1")
+	pred := models.Prediction{UserID: "user-1", Username: "Player1", Round: "Stage 1", Format: "swiss", Win: []string{"TeamA"}}
+	require.NoError(t, s.UpsertPrediction(ctx, "guild-1", tournamentID, pred))
+	require.NoError(t, s.UpsertPrediction(ctx, "guild-2", tournamentID, pred))
+
+	require.NoError(t, s.ScorePrediction(ctx, "guild-1", tournamentID, "Stage 1", pred))
+
+	entries, err := s.GetLeaderboard(ctx, "guild-1", tournamentID)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "user-1", entries[0].UserID)
+
+	entries, err = s.GetLeaderboard(ctx, "guild-2", tournamentID)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "guild-2's prediction should not be scored by guild-1's /set")
+}
