@@ -63,8 +63,8 @@ type HealthResponse struct {
 
 // ResponseChecks holds the individual dependency check results within a HealthResponse.
 type ResponseChecks struct {
-	MongoDb string `json:"mongodb"`
-	Discord string `json:"discord"`
+	Postgres string `json:"postgres"`
+	Discord  string `json:"discord"`
 }
 
 // requireGET rejects anything but GET/HEAD, writing 405 and returning false
@@ -87,12 +87,12 @@ func (s *TelemetryServer) healthHandler(w http.ResponseWriter, r *http.Request) 
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
-	var mongodbStatus string
+	var postgresStatus string
 	if err := s.app.Store.Ping(ctx); err != nil {
-		mongodbStatus = fmt.Sprintf("error: %v", err)
+		postgresStatus = fmt.Sprintf("error: %v", err)
 		ok = false
 	} else {
-		mongodbStatus = "ok"
+		postgresStatus = "ok"
 	}
 
 	var discordStatus string
@@ -116,8 +116,8 @@ func (s *TelemetryServer) healthHandler(w http.ResponseWriter, r *http.Request) 
 	response := HealthResponse{
 		Status: status,
 		Checks: ResponseChecks{
-			MongoDb: mongodbStatus,
-			Discord: discordStatus,
+			Postgres: postgresStatus,
+			Discord:  discordStatus,
 		},
 		Uptime: int64(time.Since(s.startTime).Seconds()),
 	}

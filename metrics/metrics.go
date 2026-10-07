@@ -11,11 +11,8 @@ var PollerTicksTotal = newCounter("poller_ticks_total", "Total number of PandaSc
 // PollerErrorsTotal counts errors encountered during PandaScore poller ticks.
 var PollerErrorsTotal = newCounter("poller_errors_total", "Total number of errors from the PandaScore poller")
 
-// MatchUpdatesTotal counts match result updates successfully written to MongoDB.
+// MatchUpdatesTotal counts match result updates successfully written to Postgres.
 var MatchUpdatesTotal = newCounter("match_updates_total", "Total number of match updates recieved")
-
-// MongoOpsTotal counts MongoDB operations, labelled by operation type (read or write).
-var MongoOpsTotal = newCounterVec("mongodb_operations_total", "Total number of calls made to mongodb", "operation")
 
 // MonitoringPoolTournaments is set to 1 for each tournament currently tracked
 // by the poller's monitoring pool, labelled by internal id, external PandaScore
@@ -41,7 +38,6 @@ func init() {
 		PollerErrorsTotal,
 		MatchUpdatesTotal,
 		LeaderboardDuration,
-		MongoOpsTotal,
 		MonitoringPoolTournaments,
 	)
 }

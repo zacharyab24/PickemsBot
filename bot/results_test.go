@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -126,77 +127,44 @@ func TestBuildResultMatchSection_InProgress(t *testing.T) {
 
 // endregion
 
-// region buildSingleElimResultComponents tests
+// region result grouping tests
 
-// containerHeading returns the round label from the first TextDisplay in a Container.
-func containerHeading(t *testing.T, comp discordgo.MessageComponent) string {
+// assertGroups checks each group's label and match count.
+func assertGroups(t *testing.T, groups []resultGroup, wantLabels []string, wantCounts []int) {
 	t.Helper()
-	c, ok := comp.(discordgo.Container)
-	if !ok {
-		t.Fatalf("expected Container, got %T", comp)
+	if len(groups) != len(wantLabels) {
+		t.Fatalf("expected %d groups, got %d", len(wantLabels), len(groups))
 	}
-	td, ok := c.Components[0].(discordgo.TextDisplay)
-	if !ok {
-		t.Fatalf("expected TextDisplay as first component, got %T", c.Components[0])
+	for i, g := range groups {
+		if g.label != wantLabels[i] {
+			t.Errorf("group[%d] label = %q, want %q", i, g.label, wantLabels[i])
+		}
+		if wantCounts != nil && len(g.nodes) != wantCounts[i] {
+			t.Errorf("group[%d] match count = %d, want %d", i, len(g.nodes), wantCounts[i])
+		}
 	}
-	// Strip leading "## " prefix added by buildRoundContainer.
-	if len(td.Content) > 3 {
-		return td.Content[3:]
-	}
-	return td.Content
 }
 
-// containerMatchCount returns the number of Section components in a Container
-// (skips the leading TextDisplay heading and Separator).
-func containerMatchCount(t *testing.T, comp discordgo.MessageComponent) int {
-	t.Helper()
-	c := comp.(discordgo.Container)
-	return len(c.Components) - 2 // heading + separator
-}
-
-func TestBuildSingleElimResultComponents_GroupsAndOrders(t *testing.T) {
+func TestSingleElimResultGroups_GroupsAndOrders(t *testing.T) {
 	nodes := []sources.MatchNode{
 		{Team1: "A", Team2: "B", Winner: "A", Score: "2-1", Section: "Quarterfinal 1: A vs B", Status: "completed"},
 		{Team1: "C", Team2: "D", Winner: "C", Score: "2-0", Section: "Quarterfinal 2: C vs D", Status: "completed"},
 		{Team1: "A", Team2: "C", Winner: "A", Score: "2-1", Section: "Semifinal 1: A vs C", Status: "completed"},
 		{Team1: "A", Team2: "E", Winner: "", Score: "", Section: "Grand final: A vs E", Status: "pending"},
 	}
-	result := buildSingleElimResultComponents(nodes)
-
-	if len(result) != 3 {
-		t.Fatalf("expected 3 containers, got %d", len(result))
-	}
-
-	wantLabels := []string{"Quarter-finals", "Semi-finals", "Grand Final"}
-	wantCounts := []int{2, 1, 1}
-	for i, comp := range result {
-		if got := containerHeading(t, comp); got != wantLabels[i] {
-			t.Errorf("container[%d] label = %q, want %q", i, got, wantLabels[i])
-		}
-		if got := containerMatchCount(t, comp); got != wantCounts[i] {
-			t.Errorf("container[%d] match count = %d, want %d", i, got, wantCounts[i])
-		}
-	}
+	assertGroups(t, singleElimResultGroups(nodes),
+		[]string{"Quarter-finals", "Semi-finals", "Grand Final"}, []int{2, 1, 1})
 }
 
-func TestBuildSingleElimResultComponents_SkipsMissingRounds(t *testing.T) {
+func TestSingleElimResultGroups_SkipsMissingRounds(t *testing.T) {
 	nodes := []sources.MatchNode{
 		{Team1: "A", Team2: "B", Winner: "A", Score: "2-0", Section: "Semifinal 1: A vs B", Status: "completed"},
 		{Team1: "A", Team2: "C", Winner: "", Score: "", Section: "Grand final: A vs C", Status: "pending"},
 	}
-	result := buildSingleElimResultComponents(nodes)
-	if len(result) != 2 {
-		t.Fatalf("expected 2 containers (no QF), got %d", len(result))
-	}
-	if got := containerHeading(t, result[0]); got != "Semi-finals" {
-		t.Errorf("first container = %q, want Semi-finals", got)
-	}
-	if got := containerHeading(t, result[1]); got != "Grand Final" {
-		t.Errorf("second container = %q, want Grand Final", got)
-	}
+	assertGroups(t, singleElimResultGroups(nodes), []string{"Semi-finals", "Grand Final"}, nil)
 }
 
-func TestBuildSingleElimResultComponents_AllRoundsPresent(t *testing.T) {
+func TestSingleElimResultGroups_AllRoundsPresent(t *testing.T) {
 	nodes := []sources.MatchNode{
 		{Team1: "A", Team2: "B", Section: "Round of 32: A vs B", Status: "completed", Winner: "A", Score: "2-0"},
 		{Team1: "A", Team2: "C", Section: "Round of 16: A vs C", Status: "completed", Winner: "A", Score: "2-1"},
@@ -204,90 +172,189 @@ func TestBuildSingleElimResultComponents_AllRoundsPresent(t *testing.T) {
 		{Team1: "A", Team2: "E", Section: "Semifinal 1: A vs E", Status: "completed", Winner: "A", Score: "2-1"},
 		{Team1: "A", Team2: "F", Section: "Grand final: A vs F", Status: "pending"},
 	}
-	result := buildSingleElimResultComponents(nodes)
-	if len(result) != 5 {
-		t.Fatalf("expected 5 containers, got %d", len(result))
-	}
-	wantOrder := []string{"Round of 32", "Round of 16", "Quarter-finals", "Semi-finals", "Grand Final"}
-	for i, comp := range result {
-		if got := containerHeading(t, comp); got != wantOrder[i] {
-			t.Errorf("container[%d] = %q, want %q", i, got, wantOrder[i])
-		}
-	}
+	assertGroups(t, singleElimResultGroups(nodes),
+		[]string{"Round of 32", "Round of 16", "Quarter-finals", "Semi-finals", "Grand Final"}, nil)
 }
 
-// endregion
-
-// region buildChronologicalResultComponents tests
-
-func TestBuildChronologicalResultComponents_PreservesOrderNoGrouping(t *testing.T) {
+func TestChronologicalResultGroups_PreservesOrderNoGrouping(t *testing.T) {
 	nodes := []sources.MatchNode{
 		{Team1: "A", Team2: "B", Winner: "A", Score: "2-0", Status: "completed"},
 		{Team1: "C", Team2: "D", Status: "pending"},
 	}
-	result := buildChronologicalResultComponents(nodes)
-
-	if len(result) != 1 {
-		t.Fatalf("expected 1 container, got %d", len(result))
-	}
-	if got := containerHeading(t, result[0]); got != "Results" {
-		t.Errorf("heading = %q, want %q", got, "Results")
-	}
-	if got := containerMatchCount(t, result[0]); got != 2 {
-		t.Errorf("match count = %d, want 2", got)
+	groups := chronologicalResultGroups(nodes)
+	assertGroups(t, groups, []string{"Results"}, []int{2})
+	if groups[0].nodes[0].Team1 != "A" || groups[0].nodes[1].Team1 != "C" {
+		t.Errorf("expected input order preserved, got %+v", groups[0].nodes)
 	}
 }
 
-// endregion
-
-// region buildSwissResultComponents tests
-
-// containerMatchText returns the display text of the idx'th match Section in a
-// Container (skips the heading and separator).
-func containerMatchText(t *testing.T, comp discordgo.MessageComponent, idx int) string {
-	t.Helper()
-	c := comp.(discordgo.Container)
-	s, ok := c.Components[idx+2].(discordgo.Section)
-	if !ok {
-		t.Fatalf("expected Section at index %d, got %T", idx, c.Components[idx+2])
-	}
-	td, ok := s.Components[0].(discordgo.TextDisplay)
-	if !ok {
-		t.Fatalf("expected TextDisplay, got %T", s.Components[0])
-	}
-	return td.Content
-}
-
-func TestBuildSwissResultComponents_SortedByRound(t *testing.T) {
+func TestSwissResultGroups_SortedByRound(t *testing.T) {
 	nodes := []sources.MatchNode{
 		{Team1: "A", Team2: "B", Winner: "A", Score: "2-0", Section: "Round 2", Status: "completed"},
 		{Team1: "C", Team2: "D", Winner: "C", Score: "2-1", Section: "Round 2", Status: "completed"},
 		{Team1: "E", Team2: "F", Winner: "E", Score: "2-0", Section: "Round 1", Status: "completed"},
 		{Team1: "G", Team2: "H", Winner: "", Score: "", Section: "Round 3", Status: "pending"},
 	}
-	result := buildSwissResultComponents(nodes)
+	assertGroups(t, swissResultGroups(nodes),
+		[]string{"Round 1", "Round 2", "Round 3"}, []int{1, 2, 1})
+}
 
-	if len(result) != 3 {
-		t.Fatalf("expected 3 containers, got %d", len(result))
-	}
-	wantLabels := []string{"Round 1", "Round 2", "Round 3"}
-	wantCounts := []int{1, 2, 1}
-	for i, comp := range result {
-		if got := containerHeading(t, comp); got != wantLabels[i] {
-			t.Errorf("container[%d] label = %q, want %q", i, got, wantLabels[i])
+// endregion
+
+// region pagination tests
+
+// countComponents counts every component in the tree, nested ones included,
+// the way Discord does for its per-message cap.
+func countComponents(comps []discordgo.MessageComponent) int {
+	n := 0
+	for _, c := range comps {
+		n++
+		switch c := c.(type) {
+		case discordgo.Container:
+			n += countComponents(c.Components)
+		case discordgo.ActionsRow:
+			n += countComponents(c.Components)
+		case discordgo.Section:
+			n += countComponents(c.Components)
+			if c.Accessory != nil {
+				n++
+			}
 		}
-		if got := containerMatchCount(t, comp); got != wantCounts[i] {
-			t.Errorf("container[%d] match count = %d, want %d", i, got, wantCounts[i])
+	}
+	return n
+}
+
+// matchNodes builds count completed matches in the given section.
+func matchNodes(section string, count int) []sources.MatchNode {
+	nodes := make([]sources.MatchNode, count)
+	for i := range nodes {
+		team := fmt.Sprintf("%s T%d", section, i)
+		nodes[i] = sources.MatchNode{Team1: team, Team2: team + "b", Winner: team, Score: "2-0", Section: section, Status: "completed"}
+	}
+	return nodes
+}
+
+// navRow returns the trailing ActionsRow of a rendered page, or nil if none.
+func navRow(comps []discordgo.MessageComponent) *discordgo.ActionsRow {
+	if row, ok := comps[len(comps)-1].(discordgo.ActionsRow); ok {
+		return &row
+	}
+	return nil
+}
+
+func TestPaginateResultGroups_EveryPageFitsAndKeepsAllMatchesInOrder(t *testing.T) {
+	var nodes []sources.MatchNode
+	for r := 1; r <= 5; r++ {
+		nodes = append(nodes, matchNodes(fmt.Sprintf("Round %d", r), 8)...)
+	}
+	pages := paginateResultGroups(swissResultGroups(nodes))
+	if len(pages) < 2 {
+		t.Fatalf("expected multiple pages for 40 matches, got %d", len(pages))
+	}
+
+	var seen []sources.MatchNode
+	for p := range pages {
+		if got := countComponents(renderResultsPage(pages, p)); got > maxMessageComponents {
+			t.Errorf("page %d has %d components, cap is %d", p, got, maxMessageComponents)
+		}
+		for _, g := range pages[p] {
+			seen = append(seen, g.nodes...)
+		}
+	}
+	if len(seen) != len(nodes) {
+		t.Fatalf("expected %d matches across pages, got %d", len(nodes), len(seen))
+	}
+	for i := range nodes {
+		if seen[i] != nodes[i] {
+			t.Fatalf("match %d out of order: got %+v, want %+v", i, seen[i], nodes[i])
 		}
 	}
 }
 
-func TestBuildSwissResultComponents_WinnerBolded(t *testing.T) {
-	nodes := []sources.MatchNode{
-		{Team1: "A", Team2: "B", Winner: "A", Score: "2-0", Section: "Round 1", Status: "completed"},
+func TestPaginateResultGroups_SplitsOversizedGroup(t *testing.T) {
+	// A 6-team round robin is 15 matches in one group, which can't fit one container.
+	pages := paginateResultGroups(chronologicalResultGroups(matchNodes("Group A", 15)))
+	if len(pages) != 2 {
+		t.Fatalf("expected 2 pages, got %d", len(pages))
 	}
-	result := buildSwissResultComponents(nodes)
-	text := containerMatchText(t, result[0], 0)
+	if pages[0][0].label != "Results" || pages[1][0].label != "Results (cont.)" {
+		t.Errorf("labels = %q, %q; want %q, %q", pages[0][0].label, pages[1][0].label, "Results", "Results (cont.)")
+	}
+	for p := range pages {
+		if got := countComponents(renderResultsPage(pages, p)); got > maxMessageComponents {
+			t.Errorf("page %d has %d components, cap is %d", p, got, maxMessageComponents)
+		}
+	}
+}
+
+func TestPaginateResultGroups_DoesNotSplitGroupsThatFit(t *testing.T) {
+	groups := []resultGroup{
+		{label: "Round 1", nodes: matchNodes("Round 1", 8)},
+		{label: "Round 2", nodes: matchNodes("Round 2", 8)},
+	}
+	pages := paginateResultGroups(groups)
+	if len(pages) != 2 {
+		t.Fatalf("expected each round on its own page, got %d pages", len(pages))
+	}
+	for p, page := range pages {
+		if len(page) != 1 || len(page[0].nodes) != 8 {
+			t.Errorf("page %d: expected one whole round of 8, got %+v", p, page)
+		}
+	}
+}
+
+func TestRenderResultsPage_SinglePageHasNoNav(t *testing.T) {
+	pages := paginateResultGroups(chronologicalResultGroups(matchNodes("Group A", 3)))
+	comps := renderResultsPage(pages, 0)
+	if navRow(comps) != nil {
+		t.Error("expected no nav row for a single page")
+	}
+}
+
+func TestRenderResultsPage_NavButtons(t *testing.T) {
+	pages := paginateResultGroups(chronologicalResultGroups(matchNodes("Group A", 30)))
+	if len(pages) != 3 {
+		t.Fatalf("expected 3 pages, got %d", len(pages))
+	}
+
+	tests := []struct {
+		page                       int
+		prevID, label, nextID      string
+		prevDisabled, nextDisabled bool
+	}{
+		{0, "results_page:-1", "Page 1/3", "results_page:1", true, false},
+		{1, "results_page:0", "Page 2/3", "results_page:2", false, false},
+		{2, "results_page:1", "Page 3/3", "results_page:3", false, true},
+		// Out-of-range requests clamp to the nearest page.
+		{9, "results_page:1", "Page 3/3", "results_page:3", false, true},
+		{-4, "results_page:-1", "Page 1/3", "results_page:1", true, false},
+	}
+	for _, tt := range tests {
+		row := navRow(renderResultsPage(pages, tt.page))
+		if row == nil {
+			t.Fatalf("page %d: expected nav row", tt.page)
+		}
+		prev := row.Components[0].(discordgo.Button)
+		ind := row.Components[1].(discordgo.Button)
+		next := row.Components[2].(discordgo.Button)
+		if prev.CustomID != tt.prevID || prev.Disabled != tt.prevDisabled {
+			t.Errorf("page %d prev = (%q, disabled=%v), want (%q, %v)", tt.page, prev.CustomID, prev.Disabled, tt.prevID, tt.prevDisabled)
+		}
+		if ind.Label != tt.label || !ind.Disabled {
+			t.Errorf("page %d indicator = (%q, disabled=%v), want (%q, true)", tt.page, ind.Label, ind.Disabled, tt.label)
+		}
+		if next.CustomID != tt.nextID || next.Disabled != tt.nextDisabled {
+			t.Errorf("page %d next = (%q, disabled=%v), want (%q, %v)", tt.page, next.CustomID, next.Disabled, tt.nextID, tt.nextDisabled)
+		}
+	}
+}
+
+func TestRenderResultsPage_WinnerBolded(t *testing.T) {
+	pages := paginateResultGroups(swissResultGroups([]sources.MatchNode{
+		{Team1: "A", Team2: "B", Winner: "A", Score: "2-0", Section: "Round 1", Status: "completed"},
+	}))
+	c := renderResultsPage(pages, 0)[0].(discordgo.Container)
+	text := c.Components[2].(discordgo.Section).Components[0].(discordgo.TextDisplay).Content
 	if !strings.Contains(text, "**A**") {
 		t.Errorf("expected winner A to be bolded, got: %s", text)
 	}

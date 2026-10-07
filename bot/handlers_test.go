@@ -165,6 +165,67 @@ func TestResultsInteractionHandler_UnknownFormat_UsesChronologicalFallback(t *te
 	}
 }
 
+func newLargeResultsTestBot(t *testing.T) (*Bot, *MockDiscordSession) {
+	t.Helper()
+	mockStore := app.NewMockStore(tournament.RoundRobin, "Group Stage")
+	mockStore.MatchKind = tournament.RoundRobin
+	mockStore.MatchNodes = matchNodes("Group A", 30)
+	bot, err := NewBot("test_token", app.NewTestApp(mockStore), nil, "")
+	if err != nil {
+		t.Fatalf("NewBot: %v", err)
+	}
+	return bot, NewMockDiscordSession()
+}
+
+// TestResultsInteractionHandler_LargeResults_PaginatesUnderCap is the regression
+// test for COMPONENT_MAX_TOTAL_COMPONENTS_EXCEEDED on big stages.
+func TestResultsInteractionHandler_LargeResults_PaginatesUnderCap(t *testing.T) {
+	bot, session := newLargeResultsTestBot(t)
+
+	bot.resultsInteractionHandler(session, makeCommandInteraction("results"))
+
+	if len(session.SentInteractions) != 1 {
+		t.Fatalf("expected 1 interaction response, got %d", len(session.SentInteractions))
+	}
+	comps := session.SentInteractions[0].Response.Data.Components
+	if got := countComponents(comps); got > maxMessageComponents {
+		t.Errorf("response has %d components, cap is %d", got, maxMessageComponents)
+	}
+	row := navRow(comps)
+	if row == nil {
+		t.Fatal("expected nav row")
+	}
+	if got := row.Components[1].(discordgo.Button).Label; got != "Page 3/3" {
+		t.Errorf("expected to open on the last page, got %q", got)
+	}
+}
+
+func TestResultsPageButton_UpdatesMessageToRequestedPage(t *testing.T) {
+	bot, session := newLargeResultsTestBot(t)
+	click := &discordgo.InteractionCreate{
+		Interaction: &discordgo.Interaction{
+			Type:      discordgo.InteractionMessageComponent,
+			GuildID:   "test_guild",
+			ChannelID: "test_channel",
+			Member:    &discordgo.Member{User: &discordgo.User{ID: "test_user", Username: "TestUser"}},
+			Data:      discordgo.MessageComponentInteractionData{CustomID: "results_page:0"},
+		},
+	}
+
+	bot.newInteractionHandler(session, click)
+
+	if len(session.SentInteractions) != 1 {
+		t.Fatalf("expected 1 interaction response, got %d", len(session.SentInteractions))
+	}
+	resp := session.SentInteractions[0].Response
+	if resp.Type != discordgo.InteractionResponseUpdateMessage {
+		t.Errorf("response type = %v, want UpdateMessage", resp.Type)
+	}
+	if got := navRow(resp.Data.Components).Components[1].(discordgo.Button).Label; got != "Page 1/3" {
+		t.Errorf("page indicator = %q, want %q", got, "Page 1/3")
+	}
+}
+
 func TestInteractionRouting_Check(t *testing.T) {
 	bot, session := newInteractionTestBot(t)
 	bot.newInteractionHandler(session, makeCommandInteraction("check"))

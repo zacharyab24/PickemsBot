@@ -10,6 +10,7 @@ import (
 	"pickems-bot/sources"
 	"pickems-bot/tournament"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -404,39 +405,61 @@ func (b *Bot) upcomingInteractionHandler(session DiscordSession, i *discordgo.In
 	}
 }
 
-func (b *Bot) resultsInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
+// resultPages fetches the channel's results and splits them into pages that fit
+// Discord's component cap.
+func (b *Bot) resultPages(i *discordgo.InteractionCreate) ([][]resultGroup, error) {
 	nodes, kind, err := b.APIPtr.GetResults(context.Background(), i.GuildID, i.ChannelID)
 	if err != nil {
+		return nil, err
+	}
+	return paginateResultGroups(resultGroups(kind, nodes)), nil
+}
+
+func (b *Bot) resultsInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
+	pages, err := b.resultPages(i)
+	if err != nil {
 		b.logger().Error("failed to get results", "error", fmt.Errorf("resultsInteractionHandler: %w", err))
-		session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Flags:   discordgo.MessageFlagsEphemeral,
-				Content: "An error occurred fetching the results.",
-			},
-		})
+		respondEphemeral(session, i.Interaction, "An error occurred fetching the results.")
 		return
 	}
 
-	var components []discordgo.MessageComponent
-	switch kind {
-	case tournament.Swiss:
-		components = buildSwissResultComponents(nodes)
-	case tournament.SingleElim:
-		components = buildSingleElimResultComponents(nodes)
-	default:
-		components = buildChronologicalResultComponents(nodes)
-	}
-
+	// Open on the last page so the most recent rounds show first.
 	resp := &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Flags:      discordgo.MessageFlagsIsComponentsV2,
-			Components: components,
+			Components: renderResultsPage(pages, len(pages)-1),
 		},
 	}
 	if err := session.InteractionRespond(i.Interaction, resp); err != nil {
 		b.logger().Error("failed to respond to results interaction", "error", fmt.Errorf("resultsInteractionHandler: %w", err))
+	}
+}
+
+// resultsPageHandler handles the Previous/Next buttons on a /results message by
+// re-fetching results and editing the message in place.
+func (b *Bot) resultsPageHandler(session DiscordSession, i *discordgo.InteractionCreate) {
+	page, err := strconv.Atoi(strings.TrimPrefix(i.MessageComponentData().CustomID, resultsPagePrefix))
+	if err != nil {
+		b.logger().Error("invalid results page button", "error", fmt.Errorf("resultsPageHandler: %w", err))
+		return
+	}
+
+	pages, err := b.resultPages(i)
+	if err != nil {
+		b.logger().Error("failed to get results", "error", fmt.Errorf("resultsPageHandler: %w", err))
+		respondEphemeral(session, i.Interaction, "An error occurred fetching the results.")
+		return
+	}
+
+	if err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseUpdateMessage,
+		Data: &discordgo.InteractionResponseData{
+			Flags:      discordgo.MessageFlagsIsComponentsV2,
+			Components: renderResultsPage(pages, page),
+		},
+	}); err != nil {
+		b.logger().Error("failed to update results page", "error", fmt.Errorf("resultsPageHandler: %w", err))
 	}
 }
 
@@ -622,43 +645,133 @@ func canonicalElimRound(section string) string {
 
 var singleElimRoundOrder = []string{"Round of 32", "Round of 16", "Quarter-finals", "Semi-finals", "Grand Final"}
 
-// buildOrderedRoundContainers renders one Container per round label in order,
-// reading from byRound (already bucketed by the caller) and skipping any
-// label with no matches. Threads a running button-index offset across
-// containers so every match's accessory button gets a unique CustomID.
-func buildOrderedRoundContainers(byRound map[string][]sources.MatchNode, order []string) []discordgo.MessageComponent {
-	var containers []discordgo.MessageComponent
-	idx := 0
-	for _, round := range order {
-		matches, ok := byRound[round]
-		if !ok {
-			continue
-		}
-		containers = append(containers, buildRoundContainer(round, matches, idx))
-		idx += len(matches)
-	}
-	return containers
+// resultGroup is a labelled run of matches rendered as one Container.
+type resultGroup struct {
+	label string
+	nodes []sources.MatchNode
 }
 
-func buildSingleElimResultComponents(nodes []sources.MatchNode) []discordgo.MessageComponent {
+const (
+	// Discord caps a message at 40 components, counting nested ones.
+	maxMessageComponents = 40
+	// ActionsRow + Previous, page indicator, Next.
+	resultsNavComponents = 4
+	// Container + heading TextDisplay + Separator.
+	resultsContainerComponents = 3
+	// Section + TextDisplay + accessory Button.
+	resultsMatchComponents = 3
+	resultsPagePrefix      = "results_page:"
+)
+
+func resultGroups(kind tournament.Kind, nodes []sources.MatchNode) []resultGroup {
+	switch kind {
+	case tournament.Swiss:
+		return swissResultGroups(nodes)
+	case tournament.SingleElim:
+		return singleElimResultGroups(nodes)
+	default:
+		return chronologicalResultGroups(nodes)
+	}
+}
+
+// orderedResultGroups returns one group per round label in order, skipping
+// labels with no matches.
+func orderedResultGroups(byRound map[string][]sources.MatchNode, order []string) []resultGroup {
+	var groups []resultGroup
+	for _, round := range order {
+		if matches, ok := byRound[round]; ok {
+			groups = append(groups, resultGroup{label: round, nodes: matches})
+		}
+	}
+	return groups
+}
+
+func singleElimResultGroups(nodes []sources.MatchNode) []resultGroup {
 	byRound := make(map[string][]sources.MatchNode)
 	for _, n := range nodes {
 		label := canonicalElimRound(n.Section)
 		byRound[label] = append(byRound[label], n)
 	}
-	return buildOrderedRoundContainers(byRound, singleElimRoundOrder)
+	return orderedResultGroups(byRound, singleElimRoundOrder)
 }
 
-// buildChronologicalResultComponents renders results for formats without a dedicated
-// renderer: a flat, ungrouped list in the order nodes were given (chronological, per
-// GetMatchNodes), with no bracket structure or overall winner.
-func buildChronologicalResultComponents(nodes []sources.MatchNode) []discordgo.MessageComponent {
-	return []discordgo.MessageComponent{buildRoundContainer("Results", nodes, 0)}
+// chronologicalResultGroups is the fallback for formats without a dedicated
+// renderer: one ungrouped list in the order nodes were given.
+func chronologicalResultGroups(nodes []sources.MatchNode) []resultGroup {
+	return []resultGroup{{label: "Results", nodes: nodes}}
 }
 
-// buildSwissResultComponents groups Swiss results by round, sorted numerically,
-// into the same card-style containers used by single-elimination results.
-func buildSwissResultComponents(nodes []sources.MatchNode) []discordgo.MessageComponent {
+// paginateResultGroups packs groups into pages that fit under Discord's
+// component cap, splitting any group too large for a page on its own.
+func paginateResultGroups(groups []resultGroup) [][]resultGroup {
+	budget := maxMessageComponents - resultsNavComponents
+	perContainer := (budget - resultsContainerComponents) / resultsMatchComponents
+
+	var pages [][]resultGroup
+	var page []resultGroup
+	used := 0
+	for _, g := range groups {
+		for start := 0; start < len(g.nodes); start += perContainer {
+			chunk := resultGroup{label: g.label, nodes: g.nodes[start:min(start+perContainer, len(g.nodes))]}
+			if start > 0 {
+				chunk.label += " (cont.)"
+			}
+			cost := resultsContainerComponents + resultsMatchComponents*len(chunk.nodes)
+			if used+cost > budget && len(page) > 0 {
+				pages = append(pages, page)
+				page, used = nil, 0
+			}
+			page = append(page, chunk)
+			used += cost
+		}
+	}
+	if len(page) > 0 {
+		pages = append(pages, page)
+	}
+	return pages
+}
+
+// renderResultsPage renders one page (clamped to range), plus a nav row when
+// there is more than one page.
+func renderResultsPage(pages [][]resultGroup, page int) []discordgo.MessageComponent {
+	if len(pages) == 0 {
+		return []discordgo.MessageComponent{discordgo.TextDisplay{Content: "No results available."}}
+	}
+	page = max(0, min(page, len(pages)-1))
+
+	var comps []discordgo.MessageComponent
+	idx := 0
+	for _, g := range pages[page] {
+		comps = append(comps, buildRoundContainer(g.label, g.nodes, idx))
+		idx += len(g.nodes)
+	}
+	if len(pages) > 1 {
+		comps = append(comps, discordgo.ActionsRow{Components: []discordgo.MessageComponent{
+			discordgo.Button{
+				Label:    "Previous",
+				Style:    discordgo.SecondaryButton,
+				CustomID: fmt.Sprintf("%s%d", resultsPagePrefix, page-1),
+				Disabled: page == 0,
+			},
+			discordgo.Button{
+				Label:    fmt.Sprintf("Page %d/%d", page+1, len(pages)),
+				Style:    discordgo.SecondaryButton,
+				CustomID: "results_page_indicator",
+				Disabled: true,
+			},
+			discordgo.Button{
+				Label:    "Next",
+				Style:    discordgo.SecondaryButton,
+				CustomID: fmt.Sprintf("%s%d", resultsPagePrefix, page+1),
+				Disabled: page == len(pages)-1,
+			},
+		}})
+	}
+	return comps
+}
+
+// swissResultGroups groups Swiss results by round, sorted numerically.
+func swissResultGroups(nodes []sources.MatchNode) []resultGroup {
 	byRound := make(map[string][]sources.MatchNode)
 	var roundOrder []string
 	seen := make(map[string]bool)
@@ -677,7 +790,7 @@ func buildSwissResultComponents(nodes []sources.MatchNode) []discordgo.MessageCo
 		return na < nb
 	})
 
-	return buildOrderedRoundContainers(byRound, roundOrder)
+	return orderedResultGroups(byRound, roundOrder)
 }
 
 func (b *Bot) newAutocompleteInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
@@ -803,6 +916,8 @@ func (b *Bot) newComponentHandler(session DiscordSession, i *discordgo.Interacti
 		b.setSelectHandler(session, i)
 	case customID == "set_submit":
 		b.setSubmitHandler(session, i)
+	case strings.HasPrefix(customID, resultsPagePrefix):
+		b.resultsPageHandler(session, i)
 	}
 }
 
