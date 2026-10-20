@@ -51,7 +51,7 @@ func TestCanonicalElimRound(t *testing.T) {
 // sectionParts extracts the display text and button (label, style) from a match Section.
 func sectionParts(t *testing.T, n sources.MatchNode) (text, label string, style discordgo.ButtonStyle) {
 	t.Helper()
-	s := buildResultMatchSection(n, 0)
+	s := buildResultMatchSection(n, "", 0)
 
 	td, ok := s.Components[0].(discordgo.TextDisplay)
 	if !ok {
@@ -122,6 +122,15 @@ func TestBuildResultMatchSection_InProgress(t *testing.T) {
 	}
 	if style != discordgo.PrimaryButton {
 		t.Errorf("style = %v, want PrimaryButton", style)
+	}
+}
+
+func TestBuildResultMatchSection_SwissRecords(t *testing.T) {
+	n := sources.MatchNode{Team1: "Spirit", Team2: "1win", Winner: "Spirit", Score: "2-0", Status: "completed"}
+	s := buildResultMatchSection(n, "2-1", 0)
+	want := "2-1: **Spirit** vs 1win"
+	if got := s.Components[0].(discordgo.TextDisplay).Content; got != want {
+		t.Errorf("text = %q, want %q", got, want)
 	}
 }
 
@@ -197,6 +206,56 @@ func TestSwissResultGroups_SortedByRound(t *testing.T) {
 	}
 	assertGroups(t, swissResultGroups(nodes),
 		[]string{"Round 1", "Round 2", "Round 3"}, []int{1, 2, 1})
+}
+
+func TestSwissResultGroups_RecordsFromEarlierRounds(t *testing.T) {
+	nodes := []sources.MatchNode{
+		{Team1: "A", Team2: "C", Winner: "A", Section: "Round 2", Status: "completed"},
+		{Team1: "B", Team2: "D", Winner: "D", Section: "Round 2", Status: "completed"},
+		{Team1: "A", Team2: "B", Winner: "A", Section: "Round 1", Status: "completed"},
+		{Team1: "C", Team2: "D", Winner: "C", Section: "Round 1", Status: "completed"},
+		{Team1: "TBD", Team2: "A", Section: "Round 3", Status: "pending"},
+		{Team1: "TBD", Team2: "TBD", Section: "Round 3", Status: "pending"},
+	}
+	groups := swissResultGroups(nodes)
+	want := [][]string{
+		{"0-0", "0-0"},
+		{"1-0", "0-1"},
+		{"2-0", ""},
+	}
+	for i, g := range groups {
+		for j := range g.nodes {
+			if got := g.record(j); got != want[i][j] {
+				t.Errorf("%s match %d: record = %q, want %q", g.label, j, got, want[i][j])
+			}
+		}
+	}
+}
+
+func TestPaginateResultGroups_SplitsRecordsWithNodes(t *testing.T) {
+	nodes := matchNodes("Round 1", 14)
+	records := make([]string, len(nodes))
+	for i := range records {
+		records[i] = fmt.Sprintf("%d-0", i)
+	}
+	pages := paginateResultGroups([]resultGroup{{label: "Round 1", nodes: nodes, records: records}})
+	i := 0
+	for _, page := range pages {
+		for _, g := range page {
+			if len(g.records) != len(g.nodes) {
+				t.Fatalf("%s: %d records for %d nodes", g.label, len(g.records), len(g.nodes))
+			}
+			for j := range g.nodes {
+				if g.records[j] != records[i] {
+					t.Errorf("match %d: record = %q, want %q", i, g.records[j], records[i])
+				}
+				i++
+			}
+		}
+	}
+	if i != len(nodes) {
+		t.Errorf("saw %d matches, want %d", i, len(nodes))
+	}
 }
 
 // endregion
