@@ -23,6 +23,7 @@ type TournamentInfo struct {
 
 // LeaderboardUser represents a single user on the leaderboard
 type LeaderboardUser struct {
+	UserID    string
 	Username  string
 	Rank      int
 	Successes int

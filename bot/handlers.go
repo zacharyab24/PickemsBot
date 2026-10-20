@@ -291,6 +291,50 @@ func (b *Bot) teamsInteractionHandler(session DiscordSession, i *discordgo.Inter
 	})
 }
 
+const (
+	// Discord caps the total text across a Components V2 message's components.
+	maxMessageText     = 4000
+	leaderboardHeading = "## Leaderboard"
+	leaderboardFooter  = "-# Scoring: 3pts correct · 1pt pending · 0pts incorrect • No tiebreakers"
+)
+
+// leaderboardText renders as many top rows as fit in budget bytes. When rows
+// are cut, the caller's own row (if cut) and a count of hidden rows follow.
+func leaderboardText(users []app.LeaderboardUser, callerID string, budget int) string {
+	rows := make([]string, len(users))
+	caller := -1
+	for i, u := range users {
+		rows[i] = fmt.Sprintf("%d. **%s** - %d correct, %d incorrect\n", u.Rank, u.Username, u.Successes, u.Failures)
+		if callerID != "" && u.UserID == callerID {
+			caller = i
+		}
+	}
+
+	// tail is what follows the first shown rows.
+	tail := func(shown int) string {
+		if shown == len(rows) {
+			return ""
+		}
+		hidden := len(rows) - shown
+		var t string
+		if caller >= shown {
+			t = rows[caller]
+			hidden--
+		}
+		if hidden > 0 {
+			t += fmt.Sprintf("-# %d more not shown\n", hidden)
+		}
+		return t
+	}
+
+	shown, used := 0, 0
+	for shown < len(rows) && used+len(rows[shown])+len(tail(shown+1)) <= budget {
+		used += len(rows[shown])
+		shown++
+	}
+	return strings.Join(rows[:shown], "") + tail(shown)
+}
+
 func (b *Bot) leaderboardInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {
 	leaderboard, err := b.APIPtr.GetLeaderboard(context.Background(), i.GuildID, i.ChannelID)
 	if err != nil {
@@ -302,15 +346,11 @@ func (b *Bot) leaderboardInteractionHandler(session DiscordSession, i *discordgo
 		return
 	}
 
-	var sb strings.Builder
-	for _, user := range leaderboard {
-		fmt.Fprintf(&sb, "%d. **%s** - %d correct, %d incorrect\n",
-			user.Rank,
-			user.Username,
-			user.Successes,
-			user.Failures,
-		)
+	var callerID string
+	if i.Member != nil && i.Member.User != nil {
+		callerID = i.Member.User.ID
 	}
+	body := leaderboardText(leaderboard, callerID, maxMessageText-len(leaderboardHeading)-len(leaderboardFooter))
 
 	accentColor := green
 	if err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -321,10 +361,10 @@ func (b *Bot) leaderboardInteractionHandler(session DiscordSession, i *discordgo
 				discordgo.Container{
 					AccentColor: &accentColor,
 					Components: []discordgo.MessageComponent{
-						discordgo.TextDisplay{Content: "## Leaderboard"},
-						discordgo.TextDisplay{Content: sb.String()},
+						discordgo.TextDisplay{Content: leaderboardHeading},
+						discordgo.TextDisplay{Content: body},
 						discordgo.Separator{},
-						discordgo.TextDisplay{Content: "-# Scoring: 3pts correct · 1pt pending · 0pts incorrect • No tiebreakers"},
+						discordgo.TextDisplay{Content: leaderboardFooter},
 					},
 				},
 			},

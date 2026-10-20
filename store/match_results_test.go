@@ -378,3 +378,40 @@ func TestScorePrediction_ScoresOnlyThatGuild(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, entries, "guild-2's prediction should not be scored by guild-1's /set")
 }
+
+func TestUpdateScores_ScoresEachGuildsOwnPrediction(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournament(t, "test-update-scores-guilds", "swiss")
+	nodes := []sources.MatchNode{
+		{ID: "m1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA", Score: "2-0", Status: "finished"},
+	}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Swiss))
+
+	seedGuild(t, "guild-1")
+	seedGuild(t, "guild-2")
+	seedUser(t, "user-1", "Player1")
+	base := models.Prediction{UserID: "user-1", Username: "Player1", Round: "Stage 1", Format: "swiss"}
+	pred1, pred2 := base, base
+	pred1.Lose = []string{"TeamB"}
+	pred2.Lose = []string{"TeamA"}
+	require.NoError(t, s.UpsertPrediction(ctx, "guild-1", tournamentID, pred1))
+	require.NoError(t, s.UpsertPrediction(ctx, "guild-2", tournamentID, pred2))
+
+	result := tournament.SwissResult{Round: "Stage 1", Teams: map[string]string{"TeamA": "3-0", "TeamB": "0-3"}}
+	require.NoError(t, s.updateScores(ctx, tournamentID, "Stage 1", result))
+
+	entries, err := s.GetLeaderboard(ctx, "guild-1", tournamentID)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, 1, entries[0].Successes)
+	assert.Equal(t, 0, entries[0].Failed)
+
+	entries, err = s.GetLeaderboard(ctx, "guild-2", tournamentID)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, 0, entries[0].Successes)
+	assert.Equal(t, 1, entries[0].Failed)
+}
