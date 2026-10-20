@@ -668,28 +668,6 @@ func buildRoundContainer(g resultGroup, idxOffset int) discordgo.Container {
 	return discordgo.Container{AccentColor: &grey, Components: comps}
 }
 
-// canonicalElimRound maps PandaScore and Liquipedia section labels to a
-// consistent display name used for grouping and ordering.
-func canonicalElimRound(section string) string {
-	lower := strings.ToLower(section)
-	switch {
-	case strings.HasPrefix(lower, "grand final"):
-		return "Grand Final"
-	case strings.HasPrefix(lower, "semifinal"), strings.HasPrefix(lower, "semi-final"), strings.HasPrefix(lower, "semi final"):
-		return "Semi-finals"
-	case strings.HasPrefix(lower, "quarterfinal"), strings.HasPrefix(lower, "quarter-final"), strings.HasPrefix(lower, "quarter final"):
-		return "Quarter-finals"
-	case strings.HasPrefix(lower, "round of 16"):
-		return "Round of 16"
-	case strings.HasPrefix(lower, "round of 32"):
-		return "Round of 32"
-	default:
-		return section
-	}
-}
-
-var singleElimRoundOrder = []string{"Round of 32", "Round of 16", "Quarter-finals", "Semi-finals", "Grand Final"}
-
 // resultGroup is a labelled run of matches rendered as one Container.
 type resultGroup struct {
 	label string
@@ -744,10 +722,10 @@ func orderedResultGroups(byRound map[string][]sources.MatchNode, order []string)
 func singleElimResultGroups(nodes []sources.MatchNode) []resultGroup {
 	byRound := make(map[string][]sources.MatchNode)
 	for _, n := range nodes {
-		label := canonicalElimRound(n.Section)
+		label := tournament.CanonicalElimRound(n.Section)
 		byRound[label] = append(byRound[label], n)
 	}
-	return orderedResultGroups(byRound, singleElimRoundOrder)
+	return orderedResultGroups(byRound, tournament.ElimRoundOrder)
 }
 
 // chronologicalResultGroups is the fallback for formats without a dedicated

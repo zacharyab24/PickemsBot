@@ -188,16 +188,42 @@ func edgelessBracket(n int) []sources.BracketMatch {
 	return make([]sources.BracketMatch, n)
 }
 
-func TestDetectKindFromBracket_DoubleElim(t *testing.T) {
-	// Entry matches with no edges, a winner-fed upper match, at least one
-	// loser-fed lower-bracket match, and a winner-fed grand final.
-	matches := []sources.BracketMatch{
-		bm(), bm(),
-		bm("winner", "winner"),
-		bm("loser", "winner"),
-		bm("winner", "winner"),
+// fed builds a BracketMatch with an ID and feeder edges given as (matchID, type) pairs.
+func fed(id int, edges ...any) sources.BracketMatch {
+	m := sources.BracketMatch{ID: id}
+	for i := 0; i < len(edges); i += 2 {
+		m.PreviousMatches = append(m.PreviousMatches, sources.BracketEdge{FromMatchID: edges[i].(int), Type: edges[i+1].(string)})
 	}
-	assert.Equal(t, DoubleElim, DetectKindFromBracket(matches, 8))
+	return m
+}
+
+// doubleElim4 is a 4-team double-elim bracket: the lower bracket (5, 6) is
+// loser-fed and feeds onward into the grand final.
+func doubleElim4(loser string) []sources.BracketMatch {
+	return []sources.BracketMatch{
+		fed(1), fed(2),
+		fed(3, 1, "winner", 2, "winner"),
+		fed(4, 1, loser, 2, loser),
+		fed(5, 4, "winner", 3, loser),
+		fed(6, 3, "winner", 5, "winner"),
+	}
+}
+
+func TestDetectKindFromBracket_DoubleElim(t *testing.T) {
+	assert.Equal(t, DoubleElim, DetectKindFromBracket(doubleElim4("loser"), 4))
+}
+
+// ESL Pro League Season 24 playoffs (PandaScore tournament 22018): an 8-team
+// single-elim bracket plus a third-place match fed by the semi-final losers.
+func TestDetectKindFromBracket_ThirdPlaceMatchIsSingleElim(t *testing.T) {
+	matches := []sources.BracketMatch{
+		fed(1711482, 1711479, "winner", 1711480, "winner"),
+		fed(1711481, 1711479, "loser", 1711480, "loser"),
+		fed(1711480, 1711477, "winner", 1711478, "winner"),
+		fed(1711479, 1711475, "winner", 1711476, "winner"),
+		fed(1711478), fed(1711477), fed(1711476), fed(1711475),
+	}
+	assert.Equal(t, SingleElim, DetectKindFromBracket(matches, 8))
 }
 
 func TestDetectKindFromBracket_SingleElim(t *testing.T) {
@@ -226,12 +252,14 @@ func TestDetectKindFromBracket_EmptyIsOther(t *testing.T) {
 }
 
 func TestDetectKindFromBracket_LoserEdgeWinsOverWinnerEdges(t *testing.T) {
-	// A single loser edge means a lower bracket exists -> double-elim, even amid
-	// many winner edges. Guards the priority ordering.
+	// A single onward-feeding loser edge means a lower bracket exists -> double-elim,
+	// even amid many winner edges. Guards the priority ordering.
 	matches := []sources.BracketMatch{
-		bm("winner", "winner"),
-		bm("winner", "winner"),
-		bm("loser", "winner"),
+		fed(1), fed(2),
+		fed(3, 1, "winner", 2, "winner"),
+		fed(4, 3, "winner", 1, "winner"),
+		fed(5, 2, "loser", 1, "winner"),
+		fed(6, 4, "winner", 5, "winner"),
 	}
 	assert.Equal(t, DoubleElim, DetectKindFromBracket(matches, 8))
 }
@@ -247,7 +275,7 @@ func TestDetectKindFromBracket_EntryPointMatchesDoNotForceGroup(t *testing.T) {
 }
 
 func TestDetectKindFromBracket_EdgeTypeCaseInsensitive(t *testing.T) {
-	assert.Equal(t, DoubleElim, DetectKindFromBracket([]sources.BracketMatch{bm("LOSER")}, 8))
+	assert.Equal(t, DoubleElim, DetectKindFromBracket(doubleElim4("LOSER"), 4))
 	assert.Equal(t, SingleElim, DetectKindFromBracket([]sources.BracketMatch{bm("Winner")}, 8))
 }
 

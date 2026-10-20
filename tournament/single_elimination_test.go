@@ -183,9 +183,9 @@ func TestGetEliminationResults_GrandFinal(t *testing.T) {
 // TestGetEliminationResults_MultipleRounds tests multiple rounds
 func TestGetEliminationResults_MultipleRounds(t *testing.T) {
 	matchNodes := []sources.MatchNode{
-		{ID: "bracket_R02-M001", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},
-		{ID: "bracket_R02-M002", Team1: "TeamC", Team2: "TeamD", Winner: "TeamC"},
-		{ID: "bracket_R01-M001", Team1: "TeamA", Team2: "TeamC", Winner: "TeamA"},
+		{ID: "bracket_R01-M001", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},
+		{ID: "bracket_R01-M002", Team1: "TeamC", Team2: "TeamD", Winner: "TeamC"},
+		{ID: "bracket_R02-M001", Team1: "TeamA", Team2: "TeamC", Winner: "TeamA"},
 	}
 	results, err := getEliminationResults(matchNodes)
 	assert.NoError(t, err)
@@ -310,6 +310,78 @@ func TestBracketDepth(t *testing.T) {
 	}
 	for _, c := range cases {
 		assert.Equal(t, c.want, bracketDepth(c.n), "n=%d", c.n)
+	}
+}
+
+// endregion
+
+// region section-based rounds
+
+// eplS24Playoffs is ESL Pro League Season 24's playoffs as PandaScore returns
+// them: newest first, with a third-place match between the semis and final.
+func eplS24Playoffs() []sources.MatchNode {
+	return []sources.MatchNode{
+		{ID: "1711482", Team1: "Vitality", Team2: "MOUZ", Winner: "Vitality", Section: "Grand Final: VIT vs MOUZ"},
+		{ID: "1711481", Team1: "Aurora Gaming", Team2: "Spirit", Winner: "Aurora Gaming", Section: "3rd Place Match: AUR vs TS"},
+		{ID: "1711480", Team1: "MOUZ", Team2: "Spirit", Winner: "MOUZ", Section: "Semifinal 2: MOUZ vs TS"},
+		{ID: "1711479", Team1: "Aurora Gaming", Team2: "Vitality", Winner: "Vitality", Section: "Semifinal 1: AUR vs VIT"},
+		{ID: "1711478", Team1: "Team Falcons", Team2: "Spirit", Winner: "Spirit", Section: "Quarterfinal 4: FAL vs TS"},
+		{ID: "1711477", Team1: "FURIA", Team2: "MOUZ", Winner: "MOUZ", Section: "Quarterfinal 3: FURIA vs MOUZ"},
+		{ID: "1711476", Team1: "Vitality", Team2: "PARIVISION", Winner: "Vitality", Section: "Quarterfinal 2: VIT vs PRV"},
+		{ID: "1711475", Team1: "1WIN", Team2: "Aurora Gaming", Winner: "Aurora Gaming", Section: "Quarterfinal 1: 1WIN vs AUR"},
+	}
+}
+
+func TestGetEliminationResults_SectionRoundsNewestFirstWithThirdPlace(t *testing.T) {
+	results, err := getEliminationResults(eplS24Playoffs())
+	assert.NoError(t, err)
+	assert.Equal(t, map[string]models.TeamProgress{
+		"Vitality":      {Round: "Grand Final", Status: "advanced"},
+		"MOUZ":          {Round: "Grand Final", Status: "eliminated"},
+		"Aurora Gaming": {Round: "Semi Final", Status: "eliminated"},
+		"Spirit":        {Round: "Semi Final", Status: "eliminated"},
+		"Team Falcons":  {Round: "Quarter Final", Status: "eliminated"},
+		"FURIA":         {Round: "Quarter Final", Status: "eliminated"},
+		"PARIVISION":    {Round: "Quarter Final", Status: "eliminated"},
+		"1WIN":          {Round: "Quarter Final", Status: "eliminated"},
+	}, results)
+}
+
+func TestGetEliminationResults_SectionRoundsPending(t *testing.T) {
+	nodes := eplS24Playoffs()[2:]
+	nodes[0].Winner, nodes[1].Winner = "TBD", "TBD"
+	results, err := getEliminationResults(nodes)
+	assert.NoError(t, err)
+	assert.Equal(t, models.TeamProgress{Round: "Semi Final", Status: "pending"}, results["MOUZ"])
+	assert.Equal(t, models.TeamProgress{Round: "Quarter Final", Status: "eliminated"}, results["FURIA"])
+}
+
+func TestFilterNodesByKind_SingleElimKeepsThirdPlace(t *testing.T) {
+	assert.Len(t, FilterNodesByKind(eplS24Playoffs(), SingleElim), 8)
+}
+
+func TestCanonicalElimRound(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"Grand final: A vs B", "Grand Final"},
+		{"GRAND FINAL", "Grand Final"},
+		{"Semifinal 1: A vs B", "Semi-finals"},
+		{"Semi-Final 2", "Semi-finals"},
+		{"Semifinals", "Semi-finals"},
+		{"Quarterfinal 1: A vs B", "Quarter-finals"},
+		{"Quarter final", "Quarter-finals"},
+		{"Round of 16", "Round of 16"},
+		{"Round of 32", "Round of 32"},
+		{"3rd Place Match: A vs B", ThirdPlace},
+		{"Third Place Match", ThirdPlace},
+		{"Play-in Stage", "Play-in Stage"},
+	}
+	for _, tt := range tests {
+		if got := CanonicalElimRound(tt.input); got != tt.want {
+			t.Errorf("CanonicalElimRound(%q) = %q, want %q", tt.input, got, tt.want)
+		}
 	}
 }
 

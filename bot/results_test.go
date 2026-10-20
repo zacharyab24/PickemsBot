@@ -6,45 +6,10 @@ import (
 	"testing"
 
 	"pickems-bot/sources"
+	"pickems-bot/tournament"
 
 	"github.com/bwmarrin/discordgo"
 )
-
-// region canonicalElimRound tests
-
-func TestCanonicalElimRound(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		// Grand Final variants
-		{"Grand final: A vs B", "Grand Final"},
-		{"Grand Final", "Grand Final"},
-		{"GRAND FINAL", "Grand Final"},
-		// Semi-finals variants
-		{"Semifinal 1: A vs B", "Semi-finals"},
-		{"Semi-Final 2", "Semi-finals"},
-		{"Semi final", "Semi-finals"},
-		// Quarter-finals variants
-		{"Quarterfinal 1: A vs B", "Quarter-finals"},
-		{"Quarter-Final 2", "Quarter-finals"},
-		{"Quarter final", "Quarter-finals"},
-		// Round of N
-		{"Round of 16", "Round of 16"},
-		{"Round of 32", "Round of 32"},
-		// Unknown section passed through unchanged
-		{"Play-in Stage", "Play-in Stage"},
-		{"Group A", "Group A"},
-	}
-	for _, tt := range tests {
-		got := canonicalElimRound(tt.input)
-		if got != tt.want {
-			t.Errorf("canonicalElimRound(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
-
-// endregion
 
 // region buildResultMatchSection tests
 
@@ -171,6 +136,16 @@ func TestSingleElimResultGroups_SkipsMissingRounds(t *testing.T) {
 		{Team1: "A", Team2: "C", Winner: "", Score: "", Section: "Grand final: A vs C", Status: "pending"},
 	}
 	assertGroups(t, singleElimResultGroups(nodes), []string{"Semi-finals", "Grand Final"}, nil)
+}
+
+func TestSingleElimResultGroups_ThirdPlaceBeforeGrandFinal(t *testing.T) {
+	nodes := []sources.MatchNode{
+		{Team1: "A", Team2: "E", Section: "Grand Final: A vs E", Status: "completed", Winner: "A", Score: "3-0"},
+		{Team1: "C", Team2: "G", Section: "3rd Place Match: C vs G", Status: "completed", Winner: "C", Score: "2-1"},
+		{Team1: "A", Team2: "C", Section: "Semifinal 1: A vs C", Status: "completed", Winner: "A", Score: "2-0"},
+	}
+	assertGroups(t, singleElimResultGroups(nodes),
+		[]string{"Semi-finals", tournament.ThirdPlace, "Grand Final"}, []int{1, 1, 1})
 }
 
 func TestSingleElimResultGroups_AllRoundsPresent(t *testing.T) {

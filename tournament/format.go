@@ -154,7 +154,8 @@ func FilterNodesByKind(nodes []sources.MatchNode, kind Kind) []sources.MatchNode
 			s := strings.ToLower(n.Section)
 			if strings.Contains(s, "bracket") ||
 				strings.Contains(s, "final") ||
-				strings.Contains(s, "playoff") {
+				strings.Contains(s, "playoff") ||
+				isThirdPlace(n) {
 				filtered = append(filtered, n)
 			}
 		}
@@ -209,6 +210,12 @@ func DetectKindFromBracket(matches []sources.BracketMatch, teamCount int) Kind {
 	if len(matches) == 0 {
 		return Other
 	}
+	feedsAnother := make(map[int]bool)
+	for _, m := range matches {
+		for _, e := range m.PreviousMatches {
+			feedsAnother[e.FromMatchID] = true
+		}
+	}
 	var hasWinnerEdge, hasLoserEdge bool
 	for _, m := range matches {
 		for _, e := range m.PreviousMatches {
@@ -216,7 +223,10 @@ func DetectKindFromBracket(matches []sources.BracketMatch, teamCount int) Kind {
 			case "winner":
 				hasWinnerEdge = true
 			case "loser":
-				hasLoserEdge = true
+				// A loser-fed match that feeds nothing is a third-place decider, not a lower bracket.
+				if feedsAnother[m.ID] {
+					hasLoserEdge = true
+				}
 			}
 		}
 	}

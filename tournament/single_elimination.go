@@ -275,52 +275,43 @@ func TrimSingleElimNodes(nodes []sources.MatchNode) []sources.MatchNode {
 }
 
 // getEliminationResults processes a slice of match nodes and returns a map of team name → TeamProgress.
-// It supports two bracket ID formats used by Liquipedia:
-//   - Classic format: bracketId_R01-M001 (numeric round/match encoded in the suffix)
-//   - Modern format: bracketId_RxMTP    (opaque position code — round not parseable from ID)
-//
-// When the classic format is detected for all matches, round numbers come from the ID.
-// Otherwise, round is determined by position in the slice. LiquipediaDB returns bracket
-// matches in bracket order (QF → SF → Final), so position maps cleanly to round number.
+// A third-place match is ignored. Rounds come from, in order of preference:
+//   - Section labels, when every match has a recognisable one (PandaScore: "Semifinal 1: A vs B")
+//   - Classic Liquipedia IDs: bracketId_R01-M001 (numeric round encoded in the suffix)
+//   - Position in the slice, for opaque IDs (bracketId_RxMTP). LiquipediaDB returns bracket
+//     matches in bracket order (QF → SF → Final), so position maps cleanly to round number.
 func getEliminationResults(matchNodes []sources.MatchNode) (map[string]models.TeamProgress, error) {
+	matchNodes = slices.DeleteFunc(slices.Clone(matchNodes), isThirdPlace)
 	if len(matchNodes) == 0 {
 		return nil, fmt.Errorf("at least one match required, recieved 0")
 	}
 
-	// Trim any extra matches beyond the main bracket (e.g. a 3rd-place consolation
-	// match in a Bracket/8 gives 8 total instead of 7). Extra matches fall outside
-	// user predictions and would corrupt round assignments if left in.
-	depth := bracketDepth(len(matchNodes))
-	mainSize := (1 << depth) - 1
-	if len(matchNodes) > mainSize {
-		matchNodes = matchNodes[:mainSize]
+	roundNums, numMatches := sectionRounds(matchNodes)
+	if roundNums == nil {
+		// Unlabelled extras (e.g. a 3rd-place match in a Bracket/8 gives 8 total instead
+		// of 7) fall outside user predictions and would corrupt round assignments.
+		matchNodes = TrimSingleElimNodes(matchNodes)
+		roundNums = positionalRounds(matchNodes)
+		numMatches = len(matchNodes)
 	}
 
 	// Ordered slice of rounds where [0] is the last match (grand final), and [n] is the first. This is where the limitation of 32 comes from
-	rounds, err := getRoundNames(len(matchNodes))
+	rounds, err := getRoundNames(numMatches)
 	if err != nil {
 		return nil, err
 	}
 
-	// Detect whether all IDs use the classic _R01-M001 format.
-	// If any ID fails to parse, fall back to position-based round assignment.
-	usePositionBased := false
-	for _, m := range matchNodes {
-		if _, _, err := extractRoundAndMatchIDs(m.ID); err != nil {
-			usePositionBased = true
-			break
-		}
+	// Later rounds must overwrite earlier ones, whatever order the source returned.
+	order := make([]int, len(matchNodes))
+	for i := range order {
+		order[i] = i
 	}
+	slices.SortStableFunc(order, func(a, b int) int { return roundNums[a] - roundNums[b] })
 
 	results := make(map[string]models.TeamProgress)
 
-	for i, match := range matchNodes {
-		var roundNum int
-		if usePositionBased {
-			roundNum = roundFromIndex(i, len(matchNodes))
-		} else {
-			roundNum, _, _ = extractRoundAndMatchIDs(match.ID)
-		}
+	for _, i := range order {
+		match, roundNum := matchNodes[i], roundNums[i]
 
 		// Safely resolve stage and rank
 		round := fmt.Sprintf("Round %d", roundNum)
@@ -366,6 +357,94 @@ func getEliminationResults(matchNodes []sources.MatchNode) (map[string]models.Te
 		}
 	}
 	return results, nil
+}
+
+// sectionRounds returns each match's 1-based round number from its section label,
+// and the match count of the full bracket. Returns nil if any label is unrecognised.
+func sectionRounds(matchNodes []sources.MatchNode) ([]int, int) {
+	depths := make([]int, len(matchNodes))
+	maxDepth := 0
+	for i, m := range matchNodes {
+		depths[i] = elimRoundDepth(m.Section)
+		if depths[i] < 0 {
+			return nil, 0
+		}
+		maxDepth = max(maxDepth, depths[i])
+	}
+	numRounds := maxDepth + 1
+	roundNums := make([]int, len(depths))
+	for i, d := range depths {
+		roundNums[i] = numRounds - d
+	}
+	return roundNums, (1 << numRounds) - 1
+}
+
+// positionalRounds returns each match's 1-based round number from classic IDs,
+// falling back to position if any ID isn't in the classic format.
+func positionalRounds(matchNodes []sources.MatchNode) []int {
+	roundNums := make([]int, len(matchNodes))
+	for i, m := range matchNodes {
+		r, _, err := extractRoundAndMatchIDs(m.ID)
+		if err != nil {
+			for j := range matchNodes {
+				roundNums[j] = roundFromIndex(j, len(matchNodes))
+			}
+			return roundNums
+		}
+		roundNums[i] = r
+	}
+	return roundNums
+}
+
+// ThirdPlace is the canonical label for a third-place decider.
+const ThirdPlace = "Third Place"
+
+// ElimRoundOrder lists the canonical single-elimination round labels, earliest first.
+var ElimRoundOrder = []string{"Round of 32", "Round of 16", "Quarter-finals", "Semi-finals", ThirdPlace, "Grand Final"}
+
+// CanonicalElimRound maps PandaScore and Liquipedia section labels to a
+// consistent name used for grouping and ordering. Unknown labels pass through.
+func CanonicalElimRound(section string) string {
+	lower := strings.ToLower(section)
+	switch {
+	case strings.Contains(lower, "3rd place"), strings.Contains(lower, "third place"), strings.Contains(lower, "3rd-place"):
+		return ThirdPlace
+	case strings.HasPrefix(lower, "grand final"):
+		return "Grand Final"
+	case strings.HasPrefix(lower, "semifinal"), strings.HasPrefix(lower, "semi-final"), strings.HasPrefix(lower, "semi final"):
+		return "Semi-finals"
+	case strings.HasPrefix(lower, "quarterfinal"), strings.HasPrefix(lower, "quarter-final"), strings.HasPrefix(lower, "quarter final"):
+		return "Quarter-finals"
+	case strings.HasPrefix(lower, "round of 16"):
+		return "Round of 16"
+	case strings.HasPrefix(lower, "round of 32"):
+		return "Round of 32"
+	default:
+		return section
+	}
+}
+
+// elimRoundDepth returns how many rounds before the Grand Final a section is
+// (0 = Grand Final), or -1 if the label isn't a recognised bracket round.
+func elimRoundDepth(section string) int {
+	switch CanonicalElimRound(section) {
+	case "Grand Final":
+		return 0
+	case "Semi-finals":
+		return 1
+	case "Quarter-finals":
+		return 2
+	case "Round of 16":
+		return 3
+	case "Round of 32":
+		return 4
+	default:
+		return -1
+	}
+}
+
+func isThirdPlace(n sources.MatchNode) bool {
+	return CanonicalElimRound(n.Section) == ThirdPlace
 }
 
 // getRoundIndex is a helper function to get the index of a round from its name. Used in getEliminationResults
