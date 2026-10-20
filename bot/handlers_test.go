@@ -305,6 +305,52 @@ func TestLeaderboardInteractionHandler_NoScores_ShowsNoRankings(t *testing.T) {
 	}
 }
 
+// Regression for #87: Discord rejects a Components V2 message with more than
+// 4000 characters of text.
+func TestLeaderboardInteractionHandler_ManyUsers_StaysUnderTextLimit(t *testing.T) {
+	mockStore := app.NewMockStore(tournament.Swiss, "Stage 1")
+	for n := range 300 {
+		id := fmt.Sprintf("user-%d", n)
+		if n == 250 {
+			id = "test_user"
+		}
+		mockStore.Leaderboard = append(mockStore.Leaderboard, store.LeaderboardEntry{
+			UserID: id, Username: fmt.Sprintf("SomeLongishUsername%d", n), Successes: 300 - n,
+		})
+	}
+	bot, err := NewBot("test_token", app.NewTestApp(mockStore), nil, "")
+	if err != nil {
+		t.Fatalf("NewBot: %v", err)
+	}
+	session := NewMockDiscordSession()
+
+	bot.leaderboardInteractionHandler(session, makeCommandInteraction("leaderboard"))
+
+	if len(session.SentInteractions) != 1 {
+		t.Fatalf("expected 1 interaction response, got %d", len(session.SentInteractions))
+	}
+	container := session.SentInteractions[0].Response.Data.Components[0].(discordgo.Container)
+	total := 0
+	var body string
+	for _, c := range container.Components {
+		if td, ok := c.(discordgo.TextDisplay); ok {
+			total += len(td.Content)
+			if strings.HasPrefix(td.Content, "1. ") {
+				body = td.Content
+			}
+		}
+	}
+	if total > maxMessageText {
+		t.Errorf("message text is %d bytes, limit is %d", total, maxMessageText)
+	}
+	if !strings.Contains(body, "251. **SomeLongishUsername250**") {
+		t.Error("expected the caller's own row to be shown")
+	}
+	if !strings.Contains(body, "more not shown") {
+		t.Error("expected a count of hidden rows")
+	}
+}
+
 // setInteractionHandler is the real gate for /set - it resolves the format
 // itself (via GetTournamentInfo) before ever showing team-selection UI, so
 // this exercises the actual entry point rather than App.SetUserPrediction's

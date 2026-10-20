@@ -385,6 +385,7 @@ func (a *App) GetLeaderboard(ctx context.Context, guildID, channelID string) ([]
 	response := make([]LeaderboardUser, 0, len(entries))
 	for i, e := range entries {
 		response = append(response, LeaderboardUser{
+			UserID:    e.UserID,
 			Username:  e.Username,
 			Rank:      i + 1,
 			Successes: e.Successes,
