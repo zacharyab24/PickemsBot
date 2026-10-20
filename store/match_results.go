@@ -200,7 +200,7 @@ func (s *PostgresStore) updateScores(ctx context.Context, tournamentID int, roun
 	}
 
 	for _, p := range predictions {
-		if err := s.upsertScore(ctx, f, "", tournamentID, round, p, result); err != nil {
+		if err := s.upsertScore(ctx, f, p.GuildID, tournamentID, round, p, result); err != nil {
 			s.logger().Warn("updateScores: score failed", "user", p.UserID, "error", err)
 		}
 	}
@@ -224,8 +224,7 @@ func (s *PostgresStore) ScorePrediction(ctx context.Context, guildID string, tou
 	return nil
 }
 
-// upsertScore calculates and writes p's score. An empty guildID writes it to
-// the user's prediction in every guild.
+// upsertScore calculates and writes p's score to the user's prediction in guildID.
 func (s *PostgresStore) upsertScore(ctx context.Context, f tournament.Format, guildID string, tournamentID int, round string, p models.Prediction, result tournament.MatchResult) error {
 	report, err := f.CalculateScore(p, result)
 	if err != nil {
@@ -237,8 +236,7 @@ func (s *PostgresStore) upsertScore(ctx context.Context, f tournament.Format, gu
 		INSERT INTO scores (prediction_id, successes, pending, failed, last_computed_at)
 		SELECT p.id, $2, $3, $4, NOW()
 		FROM predictions p
-		WHERE p.user_id = $1 AND p.tournament_id = $5 AND p.round = $6
-		  AND ($7 = '' OR p.guild_id = $7)
+		WHERE p.user_id = $1 AND p.tournament_id = $5 AND p.round = $6 AND p.guild_id = $7
 		ON CONFLICT (prediction_id) DO UPDATE SET
 			successes        = EXCLUDED.successes,
 			pending          = EXCLUDED.pending,

@@ -106,7 +106,7 @@ func (s *PostgresStore) GetPredictionByUsername(ctx context.Context, username, g
 // Pass an empty guildID to return predictions across all guilds (used by score materialisation).
 func (s *PostgresStore) ListPredictions(ctx context.Context, guildID string, tournamentID int, round string) ([]models.Prediction, error) {
 	query := `
-		SELECT p.id, p.user_id, u.username, p.round, p.format
+		SELECT p.id, p.user_id, u.username, p.guild_id, p.round, p.format
 		FROM predictions p
 		JOIN users u ON u.user_id = p.user_id
 		WHERE p.tournament_id = $1 AND p.round = $2
@@ -126,7 +126,7 @@ func (s *PostgresStore) ListPredictions(ctx context.Context, guildID string, tou
 	for rows.Next() {
 		var predID int
 		var p models.Prediction
-		if err := rows.Scan(&predID, &p.UserID, &p.Username, &p.Round, &p.Format); err != nil {
+		if err := rows.Scan(&predID, &p.UserID, &p.Username, &p.GuildID, &p.Round, &p.Format); err != nil {
 			return nil, fmt.Errorf("ListPredictions: scan: %w", err)
 		}
 		if err := s.populatePicks(ctx, predID, &p); err != nil {

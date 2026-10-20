@@ -27,6 +27,7 @@ type Prediction struct {
 	ID       primitive.ObjectID `bson:"_id,omitempty"`
 	UserID   string             `bson:"userid,omitempty"`
 	Username string             `bson:"username,omitempty"`
+	GuildID  string             `bson:"guildid,omitempty"`
 	Format   string             `bson:"format,omitempty"` // "swiss" or "single-elimination"
 	Round    string             `bson:"round,omitempty"`
 
