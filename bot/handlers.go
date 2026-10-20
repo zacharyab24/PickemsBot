@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -570,16 +571,13 @@ func isDecidedWinner(winner, team string) bool {
 }
 
 // buildResultMatchSection returns a Section component for a single match node.
-// The text shows the winner bolded (if known); the button accessory shows the score.
-func buildResultMatchSection(n sources.MatchNode, buttonID int) discordgo.Section {
-	var text string
-	switch {
-	case isDecidedWinner(n.Winner, n.Team1):
-		text = fmt.Sprintf("**%s** vs %s", n.Team1, n.Team2)
-	case isDecidedWinner(n.Winner, n.Team2):
-		text = fmt.Sprintf("%s vs **%s**", n.Team1, n.Team2)
-	default:
-		text = fmt.Sprintf("%s vs %s", n.Team1, n.Team2)
+// The text shows the Swiss record (if any) and the winner bolded (if known); the
+// button accessory shows the score.
+func buildResultMatchSection(n sources.MatchNode, record string, buttonID int) discordgo.Section {
+	text := resultTeamText(n.Team1, isDecidedWinner(n.Winner, n.Team1)) +
+		" vs " + resultTeamText(n.Team2, isDecidedWinner(n.Winner, n.Team2))
+	if record != "" {
+		text = record + ": " + text
 	}
 
 	label := "-"
@@ -610,15 +608,22 @@ func buildResultMatchSection(n sources.MatchNode, buttonID int) discordgo.Sectio
 	}
 }
 
-// buildRoundContainer wraps a labelled group of match nodes into a Container.
-func buildRoundContainer(label string, nodes []sources.MatchNode, idxOffset int) discordgo.Container {
+func resultTeamText(team string, won bool) string {
+	if won {
+		return "**" + team + "**"
+	}
+	return team
+}
+
+// buildRoundContainer wraps a result group into a Container.
+func buildRoundContainer(g resultGroup, idxOffset int) discordgo.Container {
 	grey := 0x2b2d31
 	comps := []discordgo.MessageComponent{
-		discordgo.TextDisplay{Content: "## " + label},
+		discordgo.TextDisplay{Content: "## " + g.label},
 		discordgo.Separator{},
 	}
-	for j, n := range nodes {
-		comps = append(comps, buildResultMatchSection(n, idxOffset+j))
+	for j, n := range g.nodes {
+		comps = append(comps, buildResultMatchSection(n, g.record(j), idxOffset+j))
 	}
 	return discordgo.Container{AccentColor: &grey, Components: comps}
 }
@@ -649,6 +654,16 @@ var singleElimRoundOrder = []string{"Round of 32", "Round of 16", "Quarter-final
 type resultGroup struct {
 	label string
 	nodes []sources.MatchNode
+	// records parallels nodes for Swiss groups with the teams' shared record
+	// going into each match; nil otherwise.
+	records []string
+}
+
+func (g resultGroup) record(i int) string {
+	if g.records == nil {
+		return ""
+	}
+	return g.records[i]
 }
 
 const (
@@ -712,7 +727,11 @@ func paginateResultGroups(groups []resultGroup) [][]resultGroup {
 	used := 0
 	for _, g := range groups {
 		for start := 0; start < len(g.nodes); start += perContainer {
-			chunk := resultGroup{label: g.label, nodes: g.nodes[start:min(start+perContainer, len(g.nodes))]}
+			end := min(start+perContainer, len(g.nodes))
+			chunk := resultGroup{label: g.label, nodes: g.nodes[start:end]}
+			if g.records != nil {
+				chunk.records = g.records[start:end]
+			}
 			if start > 0 {
 				chunk.label += " (cont.)"
 			}
@@ -742,7 +761,7 @@ func renderResultsPage(pages [][]resultGroup, page int) []discordgo.MessageCompo
 	var comps []discordgo.MessageComponent
 	idx := 0
 	for _, g := range pages[page] {
-		comps = append(comps, buildRoundContainer(g.label, g.nodes, idx))
+		comps = append(comps, buildRoundContainer(g, idx))
 		idx += len(g.nodes)
 	}
 	if len(pages) > 1 {
@@ -770,7 +789,8 @@ func renderResultsPage(pages [][]resultGroup, page int) []discordgo.MessageCompo
 	return comps
 }
 
-// swissResultGroups groups Swiss results by round, sorted numerically.
+// swissResultGroups groups Swiss results by round, sorted numerically, with
+// each team's record from earlier rounds.
 func swissResultGroups(nodes []sources.MatchNode) []resultGroup {
 	byRound := make(map[string][]sources.MatchNode)
 	var roundOrder []string
@@ -790,7 +810,29 @@ func swissResultGroups(nodes []sources.MatchNode) []resultGroup {
 		return na < nb
 	})
 
-	return orderedResultGroups(byRound, roundOrder)
+	groups := orderedResultGroups(byRound, roundOrder)
+	var played []sources.MatchNode
+	for i := range groups {
+		before := tournament.SwissRecords(played)
+		groups[i].records = make([]string, len(groups[i].nodes))
+		for j, n := range groups[i].nodes {
+			groups[i].records[j] = cmp.Or(recordBefore(before, n.Team1), recordBefore(before, n.Team2))
+		}
+		played = append(played, groups[i].nodes...)
+	}
+	return groups
+}
+
+// recordBefore returns a team's record from earlier rounds, "0-0" if it has
+// none, or "" for a TBD placeholder.
+func recordBefore(records map[string]string, team string) string {
+	if team == "" || team == "TBD" {
+		return ""
+	}
+	if r, ok := records[team]; ok {
+		return r
+	}
+	return "0-0"
 }
 
 func (b *Bot) newAutocompleteInteractionHandler(session DiscordSession, i *discordgo.InteractionCreate) {

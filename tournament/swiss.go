@@ -261,6 +261,12 @@ func evaluateBucket(teams []string, scores map[string]string, classify func(wins
 	return entries, nil
 }
 
+// SwissRecords returns each team's "W-L" record across the given match nodes.
+func SwissRecords(matchNodes []sources.MatchNode) map[string]string {
+	scores, _ := calculateSwissScores(matchNodes)
+	return scores
+}
+
 // calculateSwissScores processes match nodes and calculates Swiss scores. Called by BuildFromMatchNodes.
 func calculateSwissScores(matchNodes []sources.MatchNode) (map[string]string, error) {
 	var teams []string

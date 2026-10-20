@@ -252,6 +252,14 @@ func TestCalculateSwissScores_PendingMatches(t *testing.T) {
 	assert.Equal(t, "0-0", scores["TeamC"])
 }
 
+func TestSwissRecords(t *testing.T) {
+	records := SwissRecords([]sources.MatchNode{
+		{ID: "1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},
+		{ID: "2", Team1: "TeamA", Team2: "TeamC", Winner: "TBD"},
+	})
+	assert.Equal(t, map[string]string{"TeamA": "1-0", "TeamB": "0-1", "TeamC": "0-0"}, records)
+}
+
 // TestCalculateSwissScores_EmptyInput tests with no matches
 func TestCalculateSwissScores_EmptyInput(t *testing.T) {
 	scores, err := calculateSwissScores([]sources.MatchNode{})
