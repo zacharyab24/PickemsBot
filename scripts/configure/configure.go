@@ -21,19 +21,13 @@ import (
 const liquipediaBase = "https://liquipedia.net/counterstrike/"
 
 type tournamentConfig struct {
-	DataSource   string // "liquipedia" or "pandascore"
-	Name         string
-	Round        string
-	UpcomingOnly bool
-	Test         bool
+	DataSource string // "liquipedia" or "pandascore"
+	Test       bool
 
-	// Liquipedia only
-	Page   string
-	Format string // empty = auto-detect; set to "swiss" or "single-elimination" for multi-stage pages
-
-	// PandaScore only
-	SeriesID     int
-	TournamentID int // optional; narrows to a single stage within the series
+	// Liquipedia only: the tournament the webhook server updates.
+	Name  string
+	Round string
+	Page  string
 }
 
 const (
@@ -192,28 +186,22 @@ func pickStage(stages []string, in io.Reader, out io.Writer) (string, error) {
 	return stages[idx-1], nil
 }
 
-var nonAlnum = regexp.MustCompile(`[^A-Za-z0-9]+`)
-
-// mongoSafe normalises a free-form name into a Mongo-friendly database name.
-func mongoSafe(s string) string {
-	s = nonAlnum.ReplaceAllString(strings.TrimSpace(s), "_")
-	return strings.Trim(s, "_")
-}
-
 func writeConfig(path string, c tournamentConfig) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	fmt.Fprintln(f, "# Tournament configuration. Generated/updated by `go run ./scripts/configure`.")
+	fmt.Fprintln(f, "# Deployment configuration. Generated/updated by `go run ./scripts/configure`.")
+	fmt.Fprintln(f, "# Tournaments are chosen per channel with /config.")
 	fmt.Fprintln(f)
 	fmt.Fprintf(f, "data_source     = %q\n", c.DataSource)
-	fmt.Fprintf(f, "tournament_name = %q\n", c.Name)
-	fmt.Fprintf(f, "round           = %q\n", c.Round)
-	fmt.Fprintf(f, "upcoming_only   = %t\n", c.UpcomingOnly)
 	fmt.Fprintf(f, "test            = %t\n", c.Test)
 	fmt.Fprintln(f, "log_level       = \"\"")
+	if c.DataSource == "liquipedia" {
+		fmt.Fprintf(f, "tournament_name = %q\n", c.Name)
+		fmt.Fprintf(f, "round           = %q\n", c.Round)
+	}
 	fmt.Fprintln(f)
 
 	// Liquipedia section — always written; api_url uses the production URL when
@@ -225,8 +213,6 @@ func writeConfig(path string, c tournamentConfig) error {
 	fmt.Fprintln(f, "[liquipedia]")
 	fmt.Fprintf(f, "api_url = %q\n", liqAPIURL)
 	fmt.Fprintf(f, "page    = %q\n", c.Page)
-	fmt.Fprintf(f, "params  = \"\"\n")
-	fmt.Fprintf(f, "format  = %q\n", c.Format)
 	fmt.Fprintln(f)
 
 	// PandaScore section — always written; api_url uses the production URL when
@@ -236,8 +222,6 @@ func writeConfig(path string, c tournamentConfig) error {
 		psAPIURL = pandaScoreProdAPIURL
 	}
 	fmt.Fprintln(f, "[pandascore]")
-	fmt.Fprintf(f, "api_url       = %q\n", psAPIURL)
-	fmt.Fprintf(f, "series_id     = %d\n", c.SeriesID)
-	fmt.Fprintf(f, "tournament_id = %d\n", c.TournamentID)
+	fmt.Fprintf(f, "api_url = %q\n", psAPIURL)
 	return nil
 }

@@ -11,7 +11,10 @@ import (
 	"strings"
 	"testing"
 
+	"pickems-bot/config"
+
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // region pagePathFromURL
@@ -203,82 +206,44 @@ func TestPickStage_InvalidInput(t *testing.T) {
 
 // endregion
 
-// region mongoSafe
-
-func TestMongoSafe(t *testing.T) {
-	assert.Equal(t, "Intel_Extreme_Masters_Cologne_Major_2026", mongoSafe("Intel Extreme Masters Cologne Major 2026"))
-	assert.Equal(t, "BLAST_tv_Austin_Major_2025", mongoSafe("BLAST.tv Austin Major 2025"))
-	assert.Equal(t, "PGL_Bucharest_2026", mongoSafe("  PGL Bucharest 2026  "))
-	assert.Equal(t, "X", mongoSafe("___X___"))
-}
-
-// endregion
-
 // region writeConfig
 
-func TestWriteConfig_Liquipedia(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "out.toml")
-
-	cfg := tournamentConfig{
-		DataSource: "liquipedia",
-		Name:       "Foo_2026",
-		Page:       "Foo/2026/Bar/Stage_1",
-		Round:      "Stage_1",
-		Format:     "swiss",
-	}
-	err := writeConfig(path, cfg)
-	assert.NoError(t, err)
-
-	data, err := os.ReadFile(path)
-	assert.NoError(t, err)
-
-	out := string(data)
-	assert.True(t, strings.HasPrefix(out, "#"), "expected header comment")
-	assert.Contains(t, out, `data_source     = "liquipedia"`)
-	assert.Contains(t, out, `tournament_name = "Foo_2026"`)
-	assert.Contains(t, out, `round           = "Stage_1"`)
-	assert.Contains(t, out, `upcoming_only   = false`)
-	// Nested liquipedia section
-	assert.Contains(t, out, "[liquipedia]")
-	assert.Contains(t, out, `api_url = "https://api.liquipedia.net/api/v3/match"`)
-	assert.Contains(t, out, `page    = "Foo/2026/Bar/Stage_1"`)
-	assert.Contains(t, out, `format  = "swiss"`)
-	// PandaScore section always written, but api_url is blank when not the active source
-	assert.Contains(t, out, "[pandascore]")
-	assert.Contains(t, out, `api_url       = ""`)
-	assert.Contains(t, out, "series_id     = 0")
-	assert.Contains(t, out, "tournament_id = 0")
+// writeAndLoad writes cfg and loads it back through the bot's own loader.
+func writeAndLoad(t *testing.T, cfg tournamentConfig) (string, config.Config) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "out.toml")
+	require.NoError(t, writeConfig(path, cfg))
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	loaded, err := config.Load(path)
+	require.NoError(t, err, "generated config must load:\n%s", raw)
+	return string(raw), loaded
 }
 
-func TestWriteConfig_PandaScore(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "out.toml")
+func TestWriteConfig_Liquipedia_LoadsWithWebhookTournament(t *testing.T) {
+	_, got := writeAndLoad(t, tournamentConfig{
+		DataSource: "liquipedia",
+		Name:       "IEM Cologne 2026",
+		Page:       "Intel_Extreme_Masters/2026/Cologne/Stage_1",
+		Round:      "Stage_1",
+	})
 
-	cfg := tournamentConfig{
-		DataSource:   "pandascore",
-		Name:         "IEM_Cologne_2026",
-		SeriesID:     10488,
-		TournamentID: 20708,
-		Round:        "Stage_1",
-	}
-	err := writeConfig(path, cfg)
-	assert.NoError(t, err)
+	assert.Equal(t, "liquipedia", got.DataSource)
+	assert.Equal(t, "IEM Cologne 2026", got.TournamentName)
+	assert.Equal(t, "Stage_1", got.Round)
+	assert.Equal(t, "Intel_Extreme_Masters/2026/Cologne/Stage_1", got.Liquipedia.Page)
+	assert.Equal(t, liquipediaProdAPIURL, got.Liquipedia.APIURL)
+	assert.Empty(t, got.PandaScore.APIURL)
+}
 
-	data, err := os.ReadFile(path)
-	assert.NoError(t, err)
+func TestWriteConfig_PandaScore_OnlyWritesAPIURL(t *testing.T) {
+	raw, got := writeAndLoad(t, tournamentConfig{DataSource: "pandascore", Test: true})
 
-	out := string(data)
-	assert.True(t, strings.HasPrefix(out, "#"), "expected header comment")
-	assert.Contains(t, out, `data_source     = "pandascore"`)
-	assert.Contains(t, out, `tournament_name = "IEM_Cologne_2026"`)
-	assert.Contains(t, out, `round           = "Stage_1"`)
-	assert.Contains(t, out, "[pandascore]")
-	assert.Contains(t, out, `api_url       = "https://api.pandascore.co/csgo/matches"`)
-	assert.Contains(t, out, "series_id     = 10488")
-	assert.Contains(t, out, "tournament_id = 20708")
-	assert.Contains(t, out, "[liquipedia]")
-	assert.Contains(t, out, `api_url = ""`)
+	assert.Equal(t, "pandascore", got.DataSource)
+	assert.True(t, got.Test)
+	assert.Equal(t, pandaScoreProdAPIURL, got.PandaScore.APIURL)
+	assert.NotContains(t, raw, "tournament_name", "PandaScore tournaments come from /config")
+	assert.NotContains(t, raw, "round")
 }
 
 func TestWriteConfig_BadPath(t *testing.T) {
