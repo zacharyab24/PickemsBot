@@ -1,6 +1,6 @@
 # Changelog
 
-## 4.0 (beta)
+## 4.0
 
 A ground-up rework of how the bot talks to Discord and stores data. Every `$` prefix command has been replaced by a slash command, results are drawn with Discord components instead of a rendered image, and the bot can now follow a different tournament in each channel.
 
@@ -15,6 +15,7 @@ Breaking changes:
 - All `$` commands are removed.
 - Storage moved from MongoDB to PostgreSQL. Data from 3.x is not migrated; predictions start fresh.
 - Tournament and round are no longer set in `config.toml`; use `/config` per channel.
+- `config.toml` no longer reads `upcoming_only`, `liquipedia.params`, `liquipedia.format`, `pandascore.series_id` or `pandascore.tournament_id`. A PandaScore deployment only needs `data_source` and `pandascore.api_url`; `tournament_name`, `round` and `liquipedia.page` are only required for Liquipedia. Old configs still load, the retired keys are ignored.
 
 Slash commands and Components V2 (#74):
 - All commands are slash commands routed through `InteractionCreate`, with team name autocomplete on `/team`.
@@ -69,6 +70,24 @@ Tournament format detection:
 - A tournament's format (swiss / single-elimination / double-elimination / other) is now detected from its PandaScore bracket structure rather than match-name text: any loser-bracket feeder edge means double-elimination, winner-only edges mean single-elimination, and no bracket edges means a group stage (round-robin when the match count is n*(n-1)/2, otherwise swiss). Detection runs best-effort in the background when a tournament is configured via `/config`, and the result is stored on the tournament row.
 - Formats that can't run predictions (double-elimination, other) are now first-class via a null-object format: read-only features (schedule, results) keep working, while the prediction commands refuse cleanly with a "not supported" message instead of erroring on an unknown format.
 - Store: `SetTournamentFormat`, and `Tournament` now carries all row columns. Sources: `GetPandaScoreBracket`, `CountTeams`. Tournament: `DetectKindFromBracket`, the `Other` kind, and `ErrPredictionsUnsupported`.
+
+Fixes since the beta (#83, #85, #89):
+- A new `/set` is scored straight away, so it shows on `/leaderboard` before the next match finishes.
+- `/leaderboard` with no scores yet showed an error instead of "no rankings" (#82).
+- `/leaderboard` failed in large servers past Discord's 4000 character limit. It now shows as many top rows as fit, your own row if it was cut, and a count of the rest (#87).
+- A user's score was shared across every server they had predictions in; each server's prediction is now scored on its own (#86).
+- Swiss matches on `/results` show each team's record going into the match, e.g. "2-1: Spirit vs 1win" (#84).
+- Single elimination brackets with a third-place match were detected as double elimination, and single elimination progression was scored in the wrong round order. The third-place match now has its own heading on `/results`.
+
+Configuration and deployment:
+- `scripts/configure -source pandascore` now only writes the data source; its `-series-id`, `-tournament-id`, `-name`, `-round` and `-format` flags are removed. Liquipedia tournament names are written as-is instead of being converted to a Mongo-safe database name.
+- `.env` and `config.toml` are no longer copied into the Docker image, and a `.dockerignore` keeps them out of the build. Pass them at runtime (see the README).
+- Go is bumped to 1.26.10 and `golang.org/x/text` to v0.41.0 to clear govulncheck findings. The MongoDB driver dependency is removed.
+
+Testing and CI (#66):
+- The test suite was audited: tests that only checked getters, constructors or mocks were removed along with the dead code they covered (`$`-command helpers, `DecodeBSON`), and replaced with behaviour tests such as the full `/set` flow, the poller tick against a fake PandaScore server, the Liquipedia webhook and the ingest jobs.
+- Store tests run against a real Postgres via testcontainers. CI measures coverage across unit and integration tests together (`-tags=test,integration -coverpkg=./...`) and still enforces 80%. The separate MongoDB/test-server integration job is removed.
+- `scripts/quality_check.sh` mirrors the CI stages.
 
 ## 3.7
 - fix: sort upcoming matches chronologically in `$upcoming`
