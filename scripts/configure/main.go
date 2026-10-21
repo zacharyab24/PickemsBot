@@ -1,15 +1,16 @@
 //go:build !test
 
 /* scripts/configure
- * Generates config.toml from a tournament URL or PandaScore series ID.
+ * Generates config.toml. PandaScore tournaments are chosen per channel with
+ * /config; Liquipedia needs the tournament page for its webhook server.
+ *
+ * PandaScore usage:
+ *   go run ./scripts/configure -source pandascore
  *
  * Liquipedia usage:
  *   go run ./scripts/configure -source liquipedia -url https://liquipedia.net/counterstrike/Foo/2026/Bar
  *   go run ./scripts/configure -source liquipedia -url <url> -stage Stage_1
  *   go run ./scripts/configure -source liquipedia -url <url> -out custom.toml
- *
- * PandaScore usage:
- *   go run ./scripts/configure -source pandascore -series-id 10488 -name "IEM_Cologne_2026" -round "Stage_1"
  */
 
 package main
@@ -25,16 +26,8 @@ func main() {
 	source := flag.String("source", "liquipedia", `Data source: "liquipedia" or "pandascore"`)
 	out := flag.String("out", "config.toml", "Output config file path")
 
-	// Liquipedia flags
 	tourneyURL := flag.String("url", "", "Liquipedia tournament URL (liquipedia source only)")
 	stage := flag.String("stage", "", `Stage name to use, skips interactive picker (liquipedia source only)`)
-	format := flag.String("format", "", `Format override: "swiss" or "single-elimination" (liquipedia source only)`)
-
-	// PandaScore flags
-	seriesID := flag.Int("series-id", 0, "PandaScore series ID (pandascore source only)")
-	tournamentID := flag.Int("tournament-id", 0, "PandaScore tournament ID to narrow to a single stage (pandascore source only)")
-	name := flag.String("name", "", "Tournament name, used as MongoDB database name (pandascore source only)")
-	round := flag.String("round", "", "Round/stage name (pandascore source only)")
 
 	flag.Parse()
 
@@ -42,10 +35,10 @@ func main() {
 
 	switch *source {
 	case "liquipedia":
-		cfg = runLiquipedia(*tourneyURL, *stage, *format)
+		cfg = runLiquipedia(*tourneyURL, *stage)
 
 	case "pandascore":
-		cfg = runPandaScore(*seriesID, *tournamentID, *name, *round)
+		cfg = tournamentConfig{DataSource: "pandascore"}
 
 	default:
 		log.Fatalf("unknown -source %q — use \"liquipedia\" or \"pandascore\"", *source)
@@ -56,20 +49,14 @@ func main() {
 	}
 	fmt.Printf("\nWrote %s:\n", *out)
 	fmt.Printf("  data_source     = %q\n", cfg.DataSource)
-	fmt.Printf("  tournament_name = %q\n", cfg.Name)
-	fmt.Printf("  round           = %q\n", cfg.Round)
-	switch cfg.DataSource {
-	case "liquipedia":
+	if cfg.DataSource == "liquipedia" {
+		fmt.Printf("  tournament_name = %q\n", cfg.Name)
+		fmt.Printf("  round           = %q\n", cfg.Round)
 		fmt.Printf("  page            = %q\n", cfg.Page)
-	case "pandascore":
-		fmt.Printf("  series_id       = %d\n", cfg.SeriesID)
-		if cfg.TournamentID != 0 {
-			fmt.Printf("  tournament_id   = %d\n", cfg.TournamentID)
-		}
 	}
 }
 
-func runLiquipedia(tourneyURL, stage, format string) tournamentConfig {
+func runLiquipedia(tourneyURL, stage string) tournamentConfig {
 	if tourneyURL == "" {
 		log.Fatal("missing required flag: -url")
 	}
@@ -106,29 +93,8 @@ func runLiquipedia(tourneyURL, stage, format string) tournamentConfig {
 
 	return tournamentConfig{
 		DataSource: "liquipedia",
-		Name:       mongoSafe(tournamentName),
+		Name:       tournamentName,
 		Page:       chosenPage,
 		Round:      chosenStage,
-		Format:     format,
-	}
-}
-
-func runPandaScore(seriesID int, tournamentID int, name, round string) tournamentConfig {
-	if seriesID == 0 {
-		log.Fatal("missing required flag: -series-id")
-	}
-	if name == "" {
-		log.Fatal("missing required flag: -name")
-	}
-	if round == "" {
-		log.Fatal("missing required flag: -round")
-	}
-
-	return tournamentConfig{
-		DataSource:   "pandascore",
-		Name:         mongoSafe(name),
-		SeriesID:     seriesID,
-		TournamentID: tournamentID,
-		Round:        round,
 	}
 }

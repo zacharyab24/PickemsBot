@@ -1,0 +1,12 @@
+DROP TABLE IF EXISTS scores;
+DROP TABLE IF EXISTS single_elim_picks;
+DROP TABLE IF EXISTS swiss_picks;
+DROP TABLE IF EXISTS predictions;
+DROP TABLE IF EXISTS guild_config;
+DROP TABLE IF EXISTS match_maps;
+DROP TABLE IF EXISTS matches;
+DROP TABLE IF EXISTS tournaments;
+DROP TABLE IF EXISTS team_rankings;
+DROP TABLE IF EXISTS teams;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS guilds;

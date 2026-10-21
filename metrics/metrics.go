@@ -11,11 +11,15 @@ var PollerTicksTotal = newCounter("poller_ticks_total", "Total number of PandaSc
 // PollerErrorsTotal counts errors encountered during PandaScore poller ticks.
 var PollerErrorsTotal = newCounter("poller_errors_total", "Total number of errors from the PandaScore poller")
 
-// MatchUpdatesTotal counts match result updates successfully written to MongoDB.
+// MatchUpdatesTotal counts match result updates successfully written to Postgres.
 var MatchUpdatesTotal = newCounter("match_updates_total", "Total number of match updates recieved")
 
-// MongoOpsTotal counts MongoDB operations, labelled by operation type (read or write).
-var MongoOpsTotal = newCounterVec("mongodb_operations_total", "Total number of calls made to mongodb", "operation")
+// MonitoringPoolTournaments is set to 1 for each tournament currently tracked
+// by the poller's monitoring pool, labelled by internal id, external PandaScore
+// id, and round. The label set is removed (not set to 0) once unsubscribed.
+var MonitoringPoolTournaments = newGaugeVec("monitoring_pool_tournaments",
+	"Tournaments currently tracked by the poller's monitoring pool (value 1 while tracked).",
+	"tournament_id", "pandascore_id", "round")
 
 // LeaderboardDuration measures time taken to regenerate the leaderboard.
 var LeaderboardDuration = prometheus.NewHistogram(
@@ -23,15 +27,6 @@ var LeaderboardDuration = prometheus.NewHistogram(
 		Name:    "leaderboard_generation_duration_seconds",
 		Help:    "Time taken to regenerate the leaderboard, in seconds.",
 		Buckets: prometheus.DefBuckets,
-	},
-)
-
-// ImageRenderDuration measures time taken for Chromium to render the results image.
-var ImageRenderDuration = prometheus.NewHistogram(
-	prometheus.HistogramOpts{
-		Name:    "image_render_duration_seconds",
-		Help:    "Time taken for Chromium to render the results bracket image, in seconds",
-		Buckets: []float64{0.5, 1, 2, 5, 10, 20, 30},
 	},
 )
 
@@ -43,8 +38,7 @@ func init() {
 		PollerErrorsTotal,
 		MatchUpdatesTotal,
 		LeaderboardDuration,
-		ImageRenderDuration,
-		MongoOpsTotal,
+		MonitoringPoolTournaments,
 	)
 }
 
@@ -59,4 +53,9 @@ func newCounter(name, help string) prometheus.Counter {
 // newCounterVec is a wrapper for prometheus.CounterVec that reduces the inline boilerplate
 func newCounterVec(name, help string, labels ...string) *prometheus.CounterVec {
 	return prometheus.NewCounterVec(prometheus.CounterOpts{Name: name, Help: help}, labels)
+}
+
+// newGaugeVec is a wrapper for prometheus.GaugeVec that reduces the inline boilerplate
+func newGaugeVec(name, help string, labels ...string) *prometheus.GaugeVec {
+	return prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: name, Help: help}, labels)
 }

@@ -6,29 +6,11 @@
 package sources
 
 import (
-	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// region ErrUnrecoverable tests
-
-func TestErrUnrecoverable_Sentinel(t *testing.T) {
-	// Wrapping ErrUnrecoverable should still be detectable via errors.Is
-	wrapped := fmt.Errorf("%w: status 401", ErrUnrecoverable)
-	assert.True(t, errors.Is(wrapped, ErrUnrecoverable))
-}
-
-func TestErrUnrecoverable_UnrelatedError(t *testing.T) {
-	// A plain error should not match ErrUnrecoverable
-	plain := fmt.Errorf("some other error")
-	assert.False(t, errors.Is(plain, ErrUnrecoverable))
-}
-
-// endregion
 
 // region parsePandaScoreMatch tests
 
@@ -147,6 +129,39 @@ func TestParsePandaScoreMatch_RunningStatus(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", node.Status)
+}
+
+func TestParsePandaScoreMatch_ParsesTimestampFromScheduledAt(t *testing.T) {
+	match := map[string]interface{}{
+		"id":           float64(12348),
+		"name":         "Round 1",
+		"status":       "not_started",
+		"scheduled_at": "2025-11-15T14:00:00Z",
+		"opponents":    []interface{}{},
+		"winner":       nil,
+		"results":      []interface{}{},
+	}
+
+	node, err := parsePandaScoreMatch(match)
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(1763215200), node.Timestamp)
+}
+
+func TestParsePandaScoreMatch_MissingScheduledAt_TimestampZero(t *testing.T) {
+	match := map[string]interface{}{
+		"id":        float64(12349),
+		"name":      "Round 1",
+		"status":    "not_started",
+		"opponents": []interface{}{},
+		"winner":    nil,
+		"results":   []interface{}{},
+	}
+
+	node, err := parsePandaScoreMatch(match)
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), node.Timestamp)
 }
 
 func TestParsePandaScoreMatch_TBDOpponents(t *testing.T) {
@@ -351,3 +366,22 @@ func TestParsePandaScoreSchedule_RunningMatch(t *testing.T) {
 }
 
 // endregion
+
+// PandaScore's server-side tournament filter is unreliable for finished
+// matches, so parsing must drop other tournaments' matches itself.
+func TestParsePandaScoreMatches_FiltersToTournament(t *testing.T) {
+	raw := `[
+		{"id": 1, "status": "not_started", "tournament_id": 55},
+		{"id": 2, "status": "not_started", "tournament_id": 99},
+		{"id": 3, "status": "not_started"}
+	]`
+
+	scoped, err := ParsePandaScoreMatches(raw, 55)
+	require.NoError(t, err)
+	require.Len(t, scoped, 1)
+	assert.Equal(t, "1", scoped[0].ID)
+
+	all, err := ParsePandaScoreMatches(raw, 0)
+	require.NoError(t, err)
+	assert.Len(t, all, 3)
+}

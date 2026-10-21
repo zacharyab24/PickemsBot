@@ -1,508 +1,442 @@
-/* match_results_test.go
- * Contains unit tests for match_results.go functions
- * Authors: Zachary Bower
- * AI-Generated: Additional tests for FetchMatchResultsFromDb, GetMatchResults, StoreMatchResults
- */
+//go:build integration
 
 package store
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"pickems-bot/models"
+	"pickems-bot/sources"
 	"pickems-bot/tournament"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/integration/mtest"
 )
 
-// region FetchMatchResultsFromDb tests
-
-func TestFetchMatchResultsFromDb_Swiss(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-
-	mt.Run("successfully fetches swiss results", func(mt *mtest.T) {
-		store := &Store{
-			Client:             mt.Client,
-			TournamentDatabase: mt.DB,
-			Round:              "test_round",
-			Collections: Collections{
-				MatchResults: mt.Coll,
-			},
-		}
-
-		// Mock FindOne returning swiss results
-		swissDoc := mtest.CreateCursorResponse(1, "test.match_results", mtest.FirstBatch, bson.D{
-			{Key: "type", Value: "swiss"},
-			{Key: "round", Value: "test_round"},
-			{Key: "ttl", Value: int64(1700000000)},
-			{Key: "teams", Value: bson.D{
-				{Key: "Team A", Value: "3-0"},
-				{Key: "Team B", Value: "3-1"},
-				{Key: "Team C", Value: "2-3"},
-			}},
-		})
-		mt.AddMockResponses(swissDoc)
-
-		result, err := store.FetchMatchResultsFromDb()
-		require.NoError(t, err)
-		require.NotNil(t, result)
-
-		swissResult, ok := result.(tournament.SwissResult)
-		require.True(t, ok)
-		assert.Equal(t, tournament.Swiss, swissResult.GetType())
-		assert.Equal(t, "test_round", swissResult.GetRound())
-		assert.Equal(t, "3-0", swissResult.Teams["Team A"])
-		assert.Equal(t, "3-1", swissResult.Teams["Team B"])
-	})
+// mockFetcher is a DataSourceFetcher that returns pre-configured data.
+type mockFetcher struct {
+	result   tournament.MatchResult
+	nodes    []sources.MatchNode
+	kind     tournament.Kind
+	schedule []sources.ScheduledMatch
+	err      error
 }
 
-func TestFetchMatchResultsFromDb_Elimination(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-
-	mt.Run("successfully fetches elimination results", func(mt *mtest.T) {
-		store := &Store{
-			Client:             mt.Client,
-			TournamentDatabase: mt.DB,
-			Round:              "test_round",
-			Collections: Collections{
-				MatchResults: mt.Coll,
-			},
-		}
-
-		// Mock FindOne returning elimination results
-		elimDoc := mtest.CreateCursorResponse(1, "test.match_results", mtest.FirstBatch, bson.D{
-			{Key: "type", Value: "single-elimination"},
-			{Key: "round", Value: "test_round"},
-			{Key: "ttl", Value: int64(1700000000)},
-			{Key: "teams", Value: bson.D{
-				{Key: "Team X", Value: bson.D{
-					{Key: "round", Value: "semifinal"},
-					{Key: "status", Value: "advanced"},
-				}},
-				{Key: "Team Y", Value: bson.D{
-					{Key: "round", Value: "quarterfinal"},
-					{Key: "status", Value: "eliminated"},
-				}},
-			}},
-		})
-		mt.AddMockResponses(elimDoc)
-
-		result, err := store.FetchMatchResultsFromDb()
-		require.NoError(t, err)
-		require.NotNil(t, result)
-
-		elimResult, ok := result.(tournament.EliminationResult)
-		require.True(t, ok)
-		assert.Equal(t, tournament.SingleElim, elimResult.GetType())
-		assert.Equal(t, "test_round", elimResult.GetRound())
-		assert.Equal(t, "semifinal", elimResult.Teams["Team X"].Round)
-		assert.Equal(t, "advanced", elimResult.Teams["Team X"].Status)
-	})
+func (m mockFetcher) FetchMatchData(round string, knownKind tournament.Kind) (tournament.MatchResult, []sources.MatchNode, tournament.Kind, error) {
+	return m.result, m.nodes, m.kind, m.err
 }
 
-func TestFetchMatchResultsFromDb_NotFound(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-
-	mt.Run("returns error when no documents found", func(mt *mtest.T) {
-		store := &Store{
-			Client:             mt.Client,
-			TournamentDatabase: mt.DB,
-			Round:              "test_round",
-			Collections: Collections{
-				MatchResults: mt.Coll,
-			},
-		}
-
-		// Mock FindOne returning no documents
-		mt.AddMockResponses(mtest.CreateCursorResponse(0, "test.match_results", mtest.FirstBatch))
-
-		result, err := store.FetchMatchResultsFromDb()
-		assert.Error(t, err)
-		assert.Equal(t, mongo.ErrNoDocuments, err)
-		assert.Nil(t, result)
-	})
+func (m mockFetcher) FetchSchedule() ([]sources.ScheduledMatch, error) {
+	return m.schedule, m.err
 }
 
-func TestFetchMatchResultsFromDb_DatabaseError(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
+// region upsertMatchNodes
 
-	mt.Run("returns error on database failure", func(mt *mtest.T) {
-		store := &Store{
-			Client:             mt.Client,
-			TournamentDatabase: mt.DB,
-			Round:              "test_round",
-			Collections: Collections{
-				MatchResults: mt.Coll,
-			},
-		}
+func TestUpsertMatchNodes_CreatesTeamRows(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
 
-		// Mock FindOne returning error
-		mt.AddMockResponses(mtest.CreateCommandErrorResponse(mtest.CommandError{
-			Code:    11000,
-			Message: "database error",
-		}))
+	tournamentID := seedTournamentNullFormat(t, "test-team-rows")
 
-		result, err := store.FetchMatchResultsFromDb()
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "error fetching results from db")
-		assert.Nil(t, result)
-	})
+	nodes := []sources.MatchNode{
+		{ID: "m1", Team1: "Navi", Team2: "FaZe", Status: "not_started"},
+		{ID: "m2", Team1: "MOUZ", Team2: "Vitality", Status: "not_started"},
+	}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Playoffs", nodes, tournament.Swiss))
+
+	var count int
+	err := testPool.QueryRow(ctx, `SELECT COUNT(*) FROM teams WHERE source = 'pandascore'`).Scan(&count)
+	require.NoError(t, err)
+	assert.Equal(t, 4, count)
 }
 
-func TestFetchMatchResultsFromDb_MissingType(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
+func TestUpsertMatchNodes_SetsTeamFKs(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
 
-	mt.Run("returns error when type field is missing", func(mt *mtest.T) {
-		store := &Store{
-			Client:             mt.Client,
-			TournamentDatabase: mt.DB,
-			Round:              "test_round",
-			Collections: Collections{
-				MatchResults: mt.Coll,
-			},
-		}
+	tournamentID := seedTournamentNullFormat(t, "test-team-fks")
 
-		// Mock FindOne returning document without type field
-		docWithoutType := mtest.CreateCursorResponse(1, "test.match_results", mtest.FirstBatch, bson.D{
-			{Key: "round", Value: "test_round"},
-			{Key: "teams", Value: bson.D{}},
-		})
-		mt.AddMockResponses(docWithoutType)
+	nodes := []sources.MatchNode{
+		{ID: "m1", Team1: "Navi", Team2: "FaZe", Status: "not_started"},
+	}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Playoffs", nodes, tournament.Swiss))
 
-		result, err := store.FetchMatchResultsFromDb()
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "missing or invalid `type` field")
-		assert.Nil(t, result)
-	})
+	var team1ID, team2ID *int
+	err := testPool.QueryRow(ctx, `SELECT team1_id, team2_id FROM matches WHERE tournament_id = $1`, tournamentID).
+		Scan(&team1ID, &team2ID)
+	require.NoError(t, err)
+	assert.NotNil(t, team1ID, "team1_id should be set")
+	assert.NotNil(t, team2ID, "team2_id should be set")
 }
 
-func TestFetchMatchResultsFromDb_UnknownType(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
+func TestUpsertMatchNodes_SetsFormatLazily(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
 
-	mt.Run("returns error for unknown result type", func(mt *mtest.T) {
-		store := &Store{
-			Client:             mt.Client,
-			TournamentDatabase: mt.DB,
-			Round:              "test_round",
-			Collections: Collections{
-				MatchResults: mt.Coll,
-			},
-		}
+	tournamentID := seedTournamentNullFormat(t, "test-lazy-format")
 
-		// Mock FindOne returning document with unknown type
-		unknownTypeDoc := mtest.CreateCursorResponse(1, "test.match_results", mtest.FirstBatch, bson.D{
-			{Key: "type", Value: "unknown-format"},
-			{Key: "round", Value: "test_round"},
-		})
-		mt.AddMockResponses(unknownTypeDoc)
+	var formatBefore *string
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT format FROM tournaments WHERE id = $1`, tournamentID).Scan(&formatBefore))
+	assert.Nil(t, formatBefore, "format should start NULL")
 
-		result, err := store.FetchMatchResultsFromDb()
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unknown match result type: unknown-format")
-		assert.Nil(t, result)
-	})
+	nodes := []sources.MatchNode{{ID: "m1", Team1: "TeamA", Team2: "TeamB", Status: "not_started"}}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Swiss))
+
+	var formatAfter string
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT format FROM tournaments WHERE id = $1`, tournamentID).Scan(&formatAfter))
+	assert.Equal(t, "swiss", formatAfter)
 }
 
-// endregion
+func TestUpsertMatchNodes_DoesNotOverwriteExistingFormat(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
 
-// region GetMatchResults tests
+	tournamentID := seedTournament(t, "test-no-overwrite-format", "swiss")
 
-func TestGetMatchResults_SwissSuccess(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
+	nodes := []sources.MatchNode{{ID: "m1", Team1: "TeamA", Team2: "TeamB", Status: "not_started"}}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.SingleElim))
 
-	mt.Run("successfully gets swiss match results and converts to MatchResult", func(mt *mtest.T) {
-		store := &Store{
-			Client:             mt.Client,
-			TournamentDatabase: mt.DB,
-			Round:              "test_round",
-			Collections: Collections{
-				MatchResults: mt.Coll,
-			},
-		}
-
-		// Mock FetchMatchResultsFromDb returning swiss results
-		swissDoc := mtest.CreateCursorResponse(1, "test.match_results", mtest.FirstBatch, bson.D{
-			{Key: "type", Value: "swiss"},
-			{Key: "round", Value: "test_round"},
-			{Key: "teams", Value: bson.D{
-				{Key: "Team A", Value: "3-0"},
-				{Key: "Team B", Value: "3-1"},
-			}},
-		})
-		mt.AddMockResponses(swissDoc)
-
-		result, err := store.GetMatchResults()
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.Equal(t, tournament.Swiss, result.GetType())
-
-		swissRecord, ok := result.(tournament.SwissResult)
-		require.True(t, ok)
-		assert.Equal(t, "3-0", swissRecord.Teams["Team A"])
-	})
+	var format string
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT format FROM tournaments WHERE id = $1`, tournamentID).Scan(&format))
+	assert.Equal(t, "swiss", format, "existing format should not be overwritten")
 }
 
-func TestGetMatchResults_EliminationSuccess(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
+// TestUpsertMatchNodes_OtherDoesNotLockFormat verifies Other leaves format
+// NULL so a later, better-classified fetch can still set it.
+func TestUpsertMatchNodes_OtherDoesNotLockFormat(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
 
-	mt.Run("successfully gets elimination match results and converts to MatchResult", func(mt *mtest.T) {
-		store := &Store{
-			Client:             mt.Client,
-			TournamentDatabase: mt.DB,
-			Round:              "test_round",
-			Collections: Collections{
-				MatchResults: mt.Coll,
-			},
-		}
+	tournamentID := seedTournamentNullFormat(t, "test-other-no-lock")
 
-		// Mock FetchMatchResultsFromDb returning elimination results
-		elimDoc := mtest.CreateCursorResponse(1, "test.match_results", mtest.FirstBatch, bson.D{
-			{Key: "type", Value: "single-elimination"},
-			{Key: "round", Value: "test_round"},
-			{Key: "teams", Value: bson.D{
-				{Key: "Team X", Value: bson.D{
-					{Key: "round", Value: "semifinal"},
-					{Key: "status", Value: "advanced"},
-				}},
-			}},
-		})
-		mt.AddMockResponses(elimDoc)
+	nodes := []sources.MatchNode{{ID: "m1", Team1: "TeamA", Team2: "TeamB", Status: "not_started"}}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Other))
 
-		result, err := store.GetMatchResults()
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.Equal(t, tournament.SingleElim, result.GetType())
+	var format *string
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT format FROM tournaments WHERE id = $1`, tournamentID).Scan(&format))
+	assert.Nil(t, format, "format should stay NULL after an ambiguous (Other) detection")
 
-		elimRecord, ok := result.(tournament.EliminationResult)
-		require.True(t, ok)
-		assert.Equal(t, "semifinal", elimRecord.Teams["Team X"].Round)
-	})
+	// A later fetch with recognisable sections should still be able to set it.
+	nodes[0].Section = "Round 1"
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Swiss))
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT format FROM tournaments WHERE id = $1`, tournamentID).Scan(&format))
+	require.NotNil(t, format)
+	assert.Equal(t, "swiss", *format)
 }
 
-func TestGetMatchResults_FetchError(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
+func TestUpsertMatchNodes_Idempotent(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
 
-	mt.Run("returns error when fetch fails", func(mt *mtest.T) {
-		store := &Store{
-			Client:             mt.Client,
-			TournamentDatabase: mt.DB,
-			Round:              "test_round",
-			Collections: Collections{
-				MatchResults: mt.Coll,
-			},
-		}
+	tournamentID := seedTournamentNullFormat(t, "test-idempotent")
 
-		// Mock fetch error
-		mt.AddMockResponses(mtest.CreateCommandErrorResponse(mtest.CommandError{
-			Code:    11000,
-			Message: "fetch failed",
-		}))
+	nodes := []sources.MatchNode{
+		{ID: "m1", Team1: "TeamA", Team2: "TeamB", Status: "not_started"},
+	}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Swiss))
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Swiss))
 
-		result, err := store.GetMatchResults()
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "error occured getting match results from db")
-		assert.Nil(t, result)
-	})
+	var matchCount int
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT COUNT(*) FROM matches WHERE tournament_id = $1`, tournamentID).Scan(&matchCount))
+	assert.Equal(t, 1, matchCount)
+
+	var teamCount int
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT COUNT(*) FROM teams WHERE source = 'pandascore'`).Scan(&teamCount))
+	assert.Equal(t, 2, teamCount)
+}
+
+func TestUpsertMatchNodes_UpdatesCompletedMatch(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournamentNullFormat(t, "test-completed-match")
+
+	pending := []sources.MatchNode{{ID: "m1", Team1: "TeamA", Team2: "TeamB", Status: "not_started"}}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", pending, tournament.Swiss))
+
+	finished := []sources.MatchNode{{ID: "m1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA", Score: "2-1", Status: "finished"}}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", finished, tournament.Swiss))
+
+	var status, score string
+	err := testPool.QueryRow(ctx, `SELECT status, COALESCE(score, '') FROM matches WHERE tournament_id = $1`, tournamentID).
+		Scan(&status, &score)
+	require.NoError(t, err)
+	assert.Equal(t, "completed", status)
+	assert.Equal(t, "2-1", score)
+}
+
+func TestUpsertMatchNodes_CompletedAt_NotBumpedOnReUpsert(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournamentNullFormat(t, "test-completed-at-stable")
+
+	finished := []sources.MatchNode{{ID: "m1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA", Score: "2-1", Status: "finished"}}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", finished, tournament.Swiss))
+
+	var firstCompletedAt time.Time
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT completed_at FROM matches WHERE tournament_id = $1`, tournamentID).Scan(&firstCompletedAt))
+	require.False(t, firstCompletedAt.IsZero())
+
+	time.Sleep(10 * time.Millisecond)
+
+	// A sibling match finishing in the same round re-upserts every node,
+	// including this already-completed one - completed_at must not move.
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", finished, tournament.Swiss))
+
+	var secondCompletedAt time.Time
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT completed_at FROM matches WHERE tournament_id = $1`, tournamentID).Scan(&secondCompletedAt))
+	assert.True(t, firstCompletedAt.Equal(secondCompletedAt), "completed_at changed on re-upsert: %v -> %v", firstCompletedAt, secondCompletedAt)
+}
+
+func TestUpsertMatchNodes_WritesScheduledAtFromTimestamp(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournamentNullFormat(t, "test-scheduled-at")
+
+	nodes := []sources.MatchNode{
+		{ID: "m1", Team1: "TeamA", Team2: "TeamB", Status: "not_started", Timestamp: 1763215200},
+	}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Swiss))
+
+	var scheduledAt time.Time
+	err := testPool.QueryRow(ctx, `SELECT scheduled_at FROM matches WHERE tournament_id = $1`, tournamentID).Scan(&scheduledAt)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1763215200), scheduledAt.Unix())
 }
 
 // endregion
 
-// region StoreMatchResults tests
+// region FetchAndSaveMatchResults
 
-func TestStoreMatchResults_InsertSwiss(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
+func TestFetchAndSaveMatchResults_WritesNodes(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
 
-	mt.Run("successfully inserts new swiss match results", func(mt *mtest.T) {
-		store := &Store{
-			Client:             mt.Client,
-			TournamentDatabase: mt.DB,
-			Round:              "test_round",
-			Collections: Collections{
-				MatchResults: mt.Coll,
-			},
-		}
+	nodes := []sources.MatchNode{
+		{ID: "m1", Team1: "TeamA", Team2: "TeamB", Status: "not_started"},
+		{ID: "m2", Team1: "TeamC", Team2: "TeamD", Status: "not_started"},
+	}
+	result := tournament.SwissResult{Round: "Stage 1", Teams: map[string]string{}}
+	s := newTestStoreWithFetcher(t, mockFetcher{result: result, nodes: nodes, kind: tournament.Swiss})
 
-		// Mock FindOne returning no documents (new record)
-		mt.AddMockResponses(mtest.CreateCursorResponse(0, "test.match_results", mtest.FirstBatch))
-		// Mock InsertOne success
-		mt.AddMockResponses(mtest.CreateSuccessResponse())
+	tournamentID := seedTournamentNullFormat(t, "test-fetch-writes")
+	require.NoError(t, s.FetchAndSaveMatchResults(ctx, tournamentID, "Stage 1"))
 
-		matchResult := tournament.SwissResult{
-			Teams: map[string]string{
-				"Team A": "3-0",
-				"Team B": "3-1",
-			},
-		}
-
-		err := store.StoreMatchResults(matchResult)
-		assert.NoError(t, err)
-	})
+	var count int
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT COUNT(*) FROM matches WHERE tournament_id = $1`, tournamentID).Scan(&count))
+	assert.Equal(t, 2, count)
 }
 
-func TestStoreMatchResults_InsertElimination(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
+// TestFetchAndSaveMatchResults_UnsupportedFormat_StillWritesNodes verifies raw
+// match nodes are persisted even when the format has no scoreable MatchResult.
+func TestFetchAndSaveMatchResults_UnsupportedFormat_StillWritesNodes(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
 
-	mt.Run("successfully inserts new elimination match results", func(mt *mtest.T) {
-		store := &Store{
-			Client:             mt.Client,
-			TournamentDatabase: mt.DB,
-			Round:              "test_round",
-			Collections: Collections{
-				MatchResults: mt.Coll,
-			},
-		}
+	nodes := []sources.MatchNode{
+		{ID: "m1", Team1: "TeamA", Team2: "TeamB", Status: "not_started"},
+	}
+	s := newTestStoreWithFetcher(t, mockFetcher{result: nil, nodes: nodes, kind: tournament.DoubleElim})
 
-		// Mock FindOne returning no documents (new record)
-		mt.AddMockResponses(mtest.CreateCursorResponse(0, "test.match_results", mtest.FirstBatch))
-		// Mock InsertOne success
-		mt.AddMockResponses(mtest.CreateSuccessResponse())
+	tournamentID := seedTournamentNullFormat(t, "test-fetch-unsupported")
+	require.NoError(t, s.FetchAndSaveMatchResults(ctx, tournamentID, "Group B"))
 
-		matchResult := tournament.EliminationResult{
-			Teams: map[string]models.TeamProgress{
-				"Team X": {Round: "semifinal", Status: "advanced"},
-				"Team Y": {Round: "quarterfinal", Status: "eliminated"},
-			},
-		}
-
-		err := store.StoreMatchResults(matchResult)
-		assert.NoError(t, err)
-	})
+	var count int
+	require.NoError(t, testPool.QueryRow(ctx, `SELECT COUNT(*) FROM matches WHERE tournament_id = $1`, tournamentID).Scan(&count))
+	assert.Equal(t, 1, count)
 }
 
-func TestStoreMatchResults_UpdateExisting(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
+func TestFetchAndSaveMatchResults_FetcherError(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
 
-	mt.Run("successfully updates existing match results", func(mt *mtest.T) {
-		store := &Store{
-			Client:             mt.Client,
-			TournamentDatabase: mt.DB,
-			Round:              "test_round",
-			Collections: Collections{
-				MatchResults: mt.Coll,
-			},
-		}
+	s := newTestStoreWithFetcher(t, mockFetcher{err: assert.AnError})
+	tournamentID := seedTournamentNullFormat(t, "test-fetch-error")
 
-		// Mock FindOne returning existing document - need cursor response with getMore
-		first := mtest.CreateCursorResponse(1, "test.match_results", mtest.FirstBatch, bson.D{
-			{Key: "round", Value: "test_round"},
-		})
-		getMore := mtest.CreateCursorResponse(0, "test.match_results", mtest.NextBatch)
-		// Mock UpdateOne success
-		updateSuccess := bson.D{
-			{Key: "ok", Value: 1},
-			{Key: "nModified", Value: 1},
-		}
-		mt.AddMockResponses(first, getMore, updateSuccess)
-
-		matchResult := tournament.SwissResult{
-			Teams: map[string]string{
-				"Team A": "3-0",
-			},
-		}
-
-		err := store.StoreMatchResults(matchResult)
-		assert.NoError(t, err)
-	})
+	err := s.FetchAndSaveMatchResults(ctx, tournamentID, "Stage 1")
+	assert.Error(t, err)
 }
 
-func TestStoreMatchResults_FindOneError(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-
-	mt.Run("returns error when FindOne fails", func(mt *mtest.T) {
-		store := &Store{
-			Client:             mt.Client,
-			TournamentDatabase: mt.DB,
-			Round:              "test_round",
-			Collections: Collections{
-				MatchResults: mt.Coll,
-			},
-		}
-
-		// Mock FindOne returning error
-		mt.AddMockResponses(mtest.CreateCommandErrorResponse(mtest.CommandError{
-			Code:    11000,
-			Message: "database error",
-		}))
-
-		matchResult := tournament.SwissResult{
-			Teams: map[string]string{"Team A": "3-0"},
-		}
-
-		err := store.StoreMatchResults(matchResult)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "lookup for existing record failed")
-	})
+// identityEchoFetcher returns a single match node whose external id mirrors
+// whatever tournament it was resolved for, so a test can tell which
+// tournament's identity actually drove the fetch.
+type identityEchoFetcher struct {
+	externalID string
 }
 
-func TestStoreMatchResults_InsertError(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
-
-	mt.Run("returns error when insert fails", func(mt *mtest.T) {
-		store := &Store{
-			Client:             mt.Client,
-			TournamentDatabase: mt.DB,
-			Round:              "test_round",
-			Collections: Collections{
-				MatchResults: mt.Coll,
-			},
-		}
-
-		// Mock FindOne returning no documents
-		mt.AddMockResponses(mtest.CreateCursorResponse(0, "test.match_results", mtest.FirstBatch))
-		// Mock InsertOne error
-		mt.AddMockResponses(mtest.CreateWriteErrorsResponse(mtest.WriteError{
-			Index:   0,
-			Code:    11000,
-			Message: "insert failed",
-		}))
-
-		matchResult := tournament.SwissResult{
-			Teams: map[string]string{"Team A": "3-0"},
-		}
-
-		err := store.StoreMatchResults(matchResult)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to insert new match result")
-	})
+func (f identityEchoFetcher) FetchMatchData(round string, knownKind tournament.Kind) (tournament.MatchResult, []sources.MatchNode, tournament.Kind, error) {
+	nodes := []sources.MatchNode{{ID: f.externalID, Team1: "A", Team2: "B", Status: "not_started"}}
+	return tournament.SwissResult{Round: round, Teams: map[string]string{}}, nodes, tournament.Swiss, nil
 }
 
-func TestStoreMatchResults_UpdateError(t *testing.T) {
-	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
+func (f identityEchoFetcher) FetchSchedule() ([]sources.ScheduledMatch, error) {
+	return nil, nil
+}
 
-	mt.Run("returns error when update fails", func(mt *mtest.T) {
-		store := &Store{
-			Client:             mt.Client,
-			TournamentDatabase: mt.DB,
-			Round:              "test_round",
-			Collections: Collections{
-				MatchResults: mt.Coll,
-			},
-		}
+// TestFetchAndSaveMatchResults_UsesEachTournamentsOwnIdentity verifies each
+// tournament's fetch uses its own external id, not another tournament's.
+func TestFetchAndSaveMatchResults_UsesEachTournamentsOwnIdentity(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
 
-		// Mock FindOne returning existing document
-		existingDoc := mtest.CreateCursorResponse(1, "test.match_results", mtest.FirstBatch, bson.D{
-			{Key: "round", Value: "test_round"},
-		})
-		mt.AddMockResponses(existingDoc)
-		// Mock UpdateOne error
-		mt.AddMockResponses(mtest.CreateWriteErrorsResponse(mtest.WriteError{
-			Index:   0,
-			Code:    11000,
-			Message: "update failed",
-		}))
+	resolve := func(t Tournament) (DataSourceFetcher, error) {
+		return identityEchoFetcher{externalID: t.ExternalID}, nil
+	}
+	s := newTestStoreWithFetcherResolver(t, resolve)
 
-		matchResult := tournament.SwissResult{
-			Teams: map[string]string{"Team A": "3-0"},
-		}
+	tournamentA := seedTournamentNullFormat(t, "tournament-a")
+	tournamentB := seedTournamentNullFormat(t, "tournament-b")
 
-		err := store.StoreMatchResults(matchResult)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to update match result")
-	})
+	require.NoError(t, s.FetchAndSaveMatchResults(ctx, tournamentA, "Stage 1"))
+	require.NoError(t, s.FetchAndSaveMatchResults(ctx, tournamentB, "Stage 1"))
+
+	var externalIDA, externalIDB string
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT external_id FROM matches WHERE tournament_id = $1`, tournamentA).Scan(&externalIDA))
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT external_id FROM matches WHERE tournament_id = $1`, tournamentB).Scan(&externalIDB))
+
+	assert.Equal(t, "tournament-a", externalIDA, "tournament A's fetch should have used its own external id")
+	assert.Equal(t, "tournament-b", externalIDB, "tournament B's fetch should have used its own external id")
 }
 
 // endregion
+
+// region GetMatchResults
+
+func TestGetMatchResults_Swiss(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournament(t, "test-get-results-swiss", "swiss")
+	nodes := []sources.MatchNode{
+		{ID: "m1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA", Score: "3-0", Status: "finished"},
+		{ID: "m2", Team1: "TeamC", Team2: "TeamD", Status: "not_started"},
+	}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Swiss))
+
+	result, err := s.GetMatchResults(ctx, tournamentID, "Stage 1")
+	require.NoError(t, err)
+	assert.Equal(t, tournament.Swiss, result.GetType())
+}
+
+func TestGetMatchResults_NoNodes(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournament(t, "test-get-results-empty", "swiss")
+
+	_, err := s.GetMatchResults(ctx, tournamentID, "Stage 1")
+	assert.Error(t, err)
+}
+
+// endregion
+
+// A newly set prediction must reach the leaderboard straight away, and only in
+// the guild it was set in.
+func TestScorePrediction_ScoresOnlyThatGuild(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournament(t, "test-score-prediction", "swiss")
+	nodes := []sources.MatchNode{
+		{ID: "m1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA", Score: "2-0", Status: "finished"},
+		{ID: "m2", Team1: "TeamC", Team2: "TeamD", Status: "not_started"},
+	}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Swiss))
+
+	seedGuild(t, "guild-1")
+	seedGuild(t, "guild-2")
+	seedUser(t, "user-1", "Player1")
+	pred := models.Prediction{UserID: "user-1", Username: "Player1", Round: "Stage 1", Format: "swiss", Win: []string{"TeamA"}}
+	require.NoError(t, s.UpsertPrediction(ctx, "guild-1", tournamentID, pred))
+	require.NoError(t, s.UpsertPrediction(ctx, "guild-2", tournamentID, pred))
+
+	require.NoError(t, s.ScorePrediction(ctx, "guild-1", tournamentID, "Stage 1", pred))
+
+	entries, err := s.GetLeaderboard(ctx, "guild-1", tournamentID)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "user-1", entries[0].UserID)
+
+	entries, err = s.GetLeaderboard(ctx, "guild-2", tournamentID)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "guild-2's prediction should not be scored by guild-1's /set")
+}
+
+func TestUpdateScores_ScoresEachGuildsOwnPrediction(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournament(t, "test-update-scores-guilds", "swiss")
+	nodes := []sources.MatchNode{
+		{ID: "m1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA", Score: "2-0", Status: "finished"},
+	}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Swiss))
+
+	seedGuild(t, "guild-1")
+	seedGuild(t, "guild-2")
+	seedUser(t, "user-1", "Player1")
+	base := models.Prediction{UserID: "user-1", Username: "Player1", Round: "Stage 1", Format: "swiss"}
+	pred1, pred2 := base, base
+	pred1.Lose = []string{"TeamB"}
+	pred2.Lose = []string{"TeamA"}
+	require.NoError(t, s.UpsertPrediction(ctx, "guild-1", tournamentID, pred1))
+	require.NoError(t, s.UpsertPrediction(ctx, "guild-2", tournamentID, pred2))
+
+	result := tournament.SwissResult{Round: "Stage 1", Teams: map[string]string{"TeamA": "3-0", "TeamB": "0-3"}}
+	require.NoError(t, s.updateScores(ctx, tournamentID, "Stage 1", result))
+
+	entries, err := s.GetLeaderboard(ctx, "guild-1", tournamentID)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, 1, entries[0].Successes)
+	assert.Equal(t, 0, entries[0].Failed)
+
+	entries, err = s.GetLeaderboard(ctx, "guild-2", tournamentID)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, 0, entries[0].Successes)
+	assert.Equal(t, 1, entries[0].Failed)
+}
+
+func TestUpsertMatchResults_ScoresPredictionsForResultRound(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournament(t, "test-upsert-results", "swiss")
+	nodes := []sources.MatchNode{{ID: "m1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA", Score: "2-0", Status: "finished"}}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Swiss))
+	seedGuild(t, "guild-1")
+	seedUser(t, "user-1", "Player1")
+	require.NoError(t, s.UpsertPrediction(ctx, "guild-1", tournamentID, models.Prediction{
+		UserID: "user-1", Username: "Player1", Round: "Stage 1", Format: "swiss",
+		Win: []string{"TeamA"}, Lose: []string{"TeamB"},
+	}))
+
+	result := tournament.SwissResult{Round: "Stage 1", Teams: map[string]string{"TeamA": "3-0", "TeamB": "0-3"}}
+	require.NoError(t, s.UpsertMatchResults(ctx, tournamentID, result))
+
+	entries, err := s.GetLeaderboard(ctx, "guild-1", tournamentID)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, 2, entries[0].Successes)
+}

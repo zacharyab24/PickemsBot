@@ -1,5 +1,94 @@
 # Changelog
 
+## 4.0
+
+A ground-up rework of how the bot talks to Discord and stores data. Every `$` prefix command has been replaced by a slash command, results are drawn with Discord components instead of a rendered image, and the bot can now follow a different tournament in each channel.
+
+Highlights:
+- Slash commands replace prefix commands: `/set`, `/check`, `/leaderboard`, `/upcoming`, `/results`, `/team`, `/teams` and the new admin-only `/config`. `$help` is gone; Discord shows each command's description natively.
+- `/config` lets server admins choose which tournament and round each channel tracks. Nothing else works in a channel until it has been configured.
+- `/results` is now built from Components V2 cards (one per round) instead of a bracket image, and pages with Previous/Next buttons for large stages.
+- Upcoming matches and results work for any tournament format. Predictions (`/set`, `/check`, `/leaderboard`) support Swiss and single elimination; other formats get a clear "not supported" message instead of an error.
+- Errors are sent as replies to your command instead of separate channel messages.
+
+Breaking changes:
+- All `$` commands are removed.
+- Storage moved from MongoDB to PostgreSQL. Data from 3.x is not migrated; predictions start fresh.
+- Tournament and round are no longer set in `config.toml`; use `/config` per channel.
+- `config.toml` no longer reads `upcoming_only`, `liquipedia.params`, `liquipedia.format`, `pandascore.series_id` or `pandascore.tournament_id`. A PandaScore deployment only needs `data_source` and `pandascore.api_url`; `tournament_name`, `round` and `liquipedia.page` are only required for Liquipedia. Old configs still load, the retired keys are ignored.
+
+Slash commands and Components V2 (#74):
+- All commands are slash commands routed through `InteractionCreate`, with team name autocomplete on `/team`.
+- `/results` renders each round as a `Container` of match `Section`s, with the score on a disabled button (green when finished, blue when live). PandaScore and Liquipedia section labels are mapped to consistent round names (Quarter-finals, Semi-finals, Grand Final, etc.).
+- The `pickems-renderer` / `chromedp` image renderer and the `image_render_duration_seconds` metric are removed.
+
+`/results` improvements (#77, #78, #79):
+- Formats without a dedicated layout (double elimination, round robin, unknown) fall back to a chronological list instead of "Unsupported tournament format."
+- Swiss results use the same card layout as single elimination.
+- Results are split into pages that stay under Discord's 40-component limit, with Previous/Next buttons. Large stages previously failed with `COMPONENT_MAX_TOTAL_COMPONENTS_EXCEEDED`. `/results` opens on the latest page.
+- fix: an undecided "TBD vs TBD" match no longer shows TBD as the winner.
+
+Predictions and tournament formats (#78, #80):
+- Info commands (`/upcoming`, `/results`, `/team`, `/teams`) no longer depend on the tournament format.
+- `/set`, `/check` and `/leaderboard` check the format first and reply "Predictions are not supported for this tournament format (X). Upcoming matches and results are still available." for double elimination, round robin, or a format that hasn't been detected yet.
+- Round robin is detected as its own format instead of "other".
+- An ambiguous format guess ("other", e.g. from an empty bracket before a tournament starts) is no longer stored permanently, so the format can still be detected once match data arrives.
+- The "TBD" bracket placeholder is no longer offered as a pickable team.
+
+PostgreSQL migration (#72, #73):
+- MongoDB is replaced by PostgreSQL (pgx/v5), with the schema managed by `golang-migrate` in `migrations/`. Migrations are not applied by the bot; run them before starting it.
+- `POSTGRES_URI` in `.env` replaces the Mongo connection string.
+- fix: PandaScore tournament ids and internal database ids are no longer mixed up in the poller.
+
+Poller (#77):
+- The poller tracks whichever tournaments channels are configured for, instead of one tournament from `config.toml`. It rebuilds its list from the database on startup and polls each tournament independently, so one slow fetch doesn't hold up the others.
+- Finished tournaments stop being polled.
+- New `GET /poller` endpoint and `monitoring_pool_tournaments` metric show what is being polled.
+- fix: each tournament's matches were fetched using the first configured tournament's identity, saving data under the wrong tournament.
+- fix: `/upcoming` errored on a tournament with nothing scheduled instead of saying there are no upcoming matches.
+- fix: `/config set-tournament` and `set-round` could time out ("The application did not respond") on slow database writes.
+- fix: double-elimination match data was never saved, so `/results` was always empty for it.
+
+Observability:
+- `/health` now reports `postgres` instead of `mongodb`. The `mongodb_operations_total` metric is removed.
+
+`/config` admin command - per-channel tournament configuration:
+- Added `/config` (admin-gated, requires Manage Server) to set which tournament and round a channel tracks. Subcommands: `view`, `set-tournament`, `set-round`. Successful `set-tournament` and `set-round` changes are announced in the channel; `view` and errors are only shown to the admin.
+- `set-tournament` takes a tournament and a round, both autocompleted. The tournament list shows distinct names, so a tournament split across several stages no longer appears multiple times; the round list is scoped to the rounds available for the chosen tournament.
+- `set-round` changes the round without re-picking the tournament, autocompleting only the rounds valid for the currently-configured tournament. Because each (tournament, round) stage is its own catalog row, switching round repoints the channel at the matching row.
+- Both commands resolve the (name, round) pair to a specific tournament row and store its id and round together, so `guild_config.round` always matches the selected stage rather than free-typed text.
+- `guild_config` is now seeded per channel by `/config`; every command that resolves tournament context reads it. The tournament catalog is populated independently (the ingest jobs, below), keeping `/config` source-agnostic across PandaScore and Liquipedia.
+- Store: `EnsureGuild`, `ListTournamentNames`, `ListRoundsForTournament`, `GetTournamentByNameAndRound`, `GetTournament`. App: `GetConfig`, `SetConfigTournament`, `SetConfigRound`, `ListTournamentNames`, `ListRoundsForTournament`, `RoundsForConfiguredTournament`.
+
+In-process data ingestion (`ingest` package):
+- The standalone data-seeding scripts (`scripts/dataseeding`) were folded into the app and now run as background goroutines launched from `main.go`, each on its own schedule.
+- `TournamentSync` (hourly) refreshes the tournament catalog from PandaScore's upcoming + running endpoints, upserting active tournaments and sweeping any that dropped out of the active set to `is_finished`. It gates each request on the app's PandaScore rate limiter (`App.Wait`), so it and the live poller share one API budget.
+- `VRSSync` (hourly) refreshes the VRS world rankings from the public GitHub snapshot, no-opping when the snapshot date is unchanged.
+- Fetch/parse moved into `sources` (`GetUpcomingPandaScoreTournaments`, `GetRunningPandaScoreTournaments`, `FetchLatestVRSStandings`, `ParseVRSStandings`); DB writes into `store` (`SyncTournaments`, `SyncStandings`). `App.Wait` was added alongside `App.Allow` (blocking vs non-blocking on the shared limiter, so batch jobs pace instead of drop).
+
+Tournament format detection:
+- A tournament's format (swiss / single-elimination / double-elimination / other) is now detected from its PandaScore bracket structure rather than match-name text: any loser-bracket feeder edge means double-elimination, winner-only edges mean single-elimination, and no bracket edges means a group stage (round-robin when the match count is n*(n-1)/2, otherwise swiss). Detection runs best-effort in the background when a tournament is configured via `/config`, and the result is stored on the tournament row.
+- Formats that can't run predictions (double-elimination, other) are now first-class via a null-object format: read-only features (schedule, results) keep working, while the prediction commands refuse cleanly with a "not supported" message instead of erroring on an unknown format.
+- Store: `SetTournamentFormat`, and `Tournament` now carries all row columns. Sources: `GetPandaScoreBracket`, `CountTeams`. Tournament: `DetectKindFromBracket`, the `Other` kind, and `ErrPredictionsUnsupported`.
+
+Fixes since the beta (#83, #85, #89):
+- A new `/set` is scored straight away, so it shows on `/leaderboard` before the next match finishes.
+- `/leaderboard` with no scores yet showed an error instead of "no rankings" (#82).
+- `/leaderboard` failed in large servers past Discord's 4000 character limit. It now shows as many top rows as fit, your own row if it was cut, and a count of the rest (#87).
+- A user's score was shared across every server they had predictions in; each server's prediction is now scored on its own (#86).
+- Swiss matches on `/results` show each team's record going into the match, e.g. "2-1: Spirit vs 1win" (#84).
+- Single elimination brackets with a third-place match were detected as double elimination, and single elimination progression was scored in the wrong round order. The third-place match now has its own heading on `/results`.
+
+Configuration and deployment:
+- `scripts/configure -source pandascore` now only writes the data source; its `-series-id`, `-tournament-id`, `-name`, `-round` and `-format` flags are removed. Liquipedia tournament names are written as-is instead of being converted to a Mongo-safe database name.
+- `.env` and `config.toml` are no longer copied into the Docker image, and a `.dockerignore` keeps them out of the build. Pass them at runtime (see the README).
+- Go is bumped to 1.26.10 and `golang.org/x/text` to v0.41.0 to clear govulncheck findings. The MongoDB driver dependency is removed.
+
+Testing and CI (#66):
+- The test suite was audited: tests that only checked getters, constructors or mocks were removed along with the dead code they covered (`$`-command helpers, `DecodeBSON`), and replaced with behaviour tests such as the full `/set` flow, the poller tick against a fake PandaScore server, the Liquipedia webhook and the ingest jobs.
+- Store tests run against a real Postgres via testcontainers. CI measures coverage across unit and integration tests together (`-tags=test,integration -coverpkg=./...`) and still enforces 80%. The separate MongoDB/test-server integration job is removed.
+- `scripts/quality_check.sh` mirrors the CI stages.
+
 ## 3.7
 - fix: sort upcoming matches chronologically in `$upcoming`
 - fix: leaderboard now updates immediately when `$set` is called

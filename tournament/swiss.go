@@ -8,15 +8,13 @@ import (
 
 	"pickems-bot/models"
 	"pickems-bot/sources"
-
-	"go.mongodb.org/mongo-driver/bson"
 )
 
 // SwissResult is the unified in-memory + on-disk representation of a Swiss
 // tournament's match data. Teams maps team name → score string (e.g. "3-0").
 type SwissResult struct {
-	Round string            `bson:"round,omitempty"`
-	Teams map[string]string `bson:"teams,omitempty"`
+	Round string
+	Teams map[string]string
 }
 
 // SwissReport is the structured result returned by swissFormat.CalculateScore.
@@ -90,6 +88,9 @@ var _ Format = swissFormat{}
 func init() { register(swissFormat{}) }
 
 func (swissFormat) Name() Kind { return Swiss }
+
+// SupportsPredictions is always true for Swiss.
+func (swissFormat) SupportsPredictions() bool { return true }
 
 // RequiredPredictions returns the total picks needed for a 3-win / 3-loss
 // Swiss bracket of the given size. Breakdown:
@@ -204,15 +205,6 @@ func (swissFormat) CalculateScore(p models.Prediction, r MatchResult) (ScoreRepo
 	}, nil
 }
 
-// DecodeBSON unmarshals a Swiss BSON record back into a SwissResult.
-func (swissFormat) DecodeBSON(b []byte) (MatchResult, error) {
-	var s SwissResult
-	if err := bson.Unmarshal(b, &s); err != nil {
-		return nil, fmt.Errorf("swiss: failed to decode BSON: %w", err)
-	}
-	return s, nil
-}
-
 // BuildFromMatchNodes assembles a SwissResult from parsed match nodes.
 func (swissFormat) BuildFromMatchNodes(nodes []sources.MatchNode, round string) (MatchResult, error) {
 	scores, err := calculateSwissScores(nodes)
@@ -256,6 +248,12 @@ func evaluateBucket(teams []string, scores map[string]string, classify func(wins
 		})
 	}
 	return entries, nil
+}
+
+// SwissRecords returns each team's "W-L" record across the given match nodes.
+func SwissRecords(matchNodes []sources.MatchNode) map[string]string {
+	scores, _ := calculateSwissScores(matchNodes)
+	return scores
 }
 
 // calculateSwissScores processes match nodes and calculates Swiss scores. Called by BuildFromMatchNodes.

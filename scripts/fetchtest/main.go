@@ -15,6 +15,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -23,6 +24,7 @@ import (
 	"github.com/joho/godotenv"
 	"pickems-bot/sources"
 	"pickems-bot/store"
+	"pickems-bot/tournament"
 )
 
 func main() {
@@ -31,7 +33,7 @@ func main() {
 	}
 
 	if len(os.Args) < 4 {
-		fmt.Fprintf(os.Stderr, "Usage: fetchtest <liquipedia|pandascore> <page|seriesID> <round>\n")
+		fmt.Fprintf(os.Stderr, "Usage: fetchtest <liquipedia|pandascore> <page|seriesID> <round> [pandascoreTournamentID]\n")
 		os.Exit(1)
 	}
 
@@ -58,17 +60,29 @@ func main() {
 		if err != nil {
 			log.Fatalf("seriesID must be an integer, got %q", arg)
 		}
-		fetcher = store.NewPandaScoreFetcher("https://api.pandascore.co/csgo/matches", apiKey, seriesID, 0)
+		tournamentID := 0
+		if len(os.Args) > 4 {
+			if tournamentID, err = strconv.Atoi(os.Args[4]); err != nil {
+				log.Fatalf("tournamentID must be an integer, got %q", os.Args[4])
+			}
+		}
+		fetcher = store.NewPandaScoreFetcher("https://api.pandascore.co/csgo/matches", apiKey, seriesID, tournamentID)
+		if tournamentID == 0 {
+			printSeriesTournaments(apiKey, seriesID)
+		} else {
+			printBracket(apiKey, tournamentID)
+		}
 
 	default:
 		log.Fatalf("unknown source %q — use 'liquipedia' or 'pandascore'", source)
 	}
 
 	fmt.Printf("=== FetchMatchData (round=%q) ===\n", round)
-	_, matchNodes, err := fetcher.FetchMatchData(round)
+	result, matchNodes, kind, err := fetcher.FetchMatchData(round, "")
 	if err != nil {
 		log.Fatalf("FetchMatchData error: %v", err)
 	}
+	fmt.Printf("kind: %s, result: %v\n", kind, result != nil)
 	printMatchNodes(matchNodes)
 
 	fmt.Printf("\n=== FetchSchedule ===\n")
@@ -84,10 +98,10 @@ func printMatchNodes(nodes []sources.MatchNode) {
 		fmt.Println("  (no matches)")
 		return
 	}
-	fmt.Printf("  %-12s %-25s %-25s %-25s %-8s %s\n", "ID", "Team1", "Team2", "Winner", "Score", "Status")
-	fmt.Printf("  %-12s %-25s %-25s %-25s %-8s %s\n", "---", "-----", "-----", "------", "-----", "------")
+	fmt.Printf("  %-12s %-25s %-25s %-25s %-8s %-12s %s\n", "ID", "Team1", "Team2", "Winner", "Score", "Status", "Section")
+	fmt.Printf("  %-12s %-25s %-25s %-25s %-8s %-12s %s\n", "---", "-----", "-----", "------", "-----", "------", "-------")
 	for _, n := range nodes {
-		fmt.Printf("  %-12s %-25s %-25s %-25s %-8s %s\n", n.ID[:min(12, len(n.ID))], n.Team1, n.Team2, n.Winner, n.Score, n.Status)
+		fmt.Printf("  %-12s %-25s %-25s %-25s %-8s %-12s %s\n", n.ID[:min(12, len(n.ID))], n.Team1, n.Team2, n.Winner, n.Score, n.Status, n.Section)
 	}
 	fmt.Printf("  Total: %d matches\n", len(nodes))
 }
@@ -114,4 +128,55 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// printSeriesTournaments lists the tournaments in a series, to pick one to pass as pandascoreTournamentID.
+func printSeriesTournaments(apiKey string, seriesID int) {
+	raw, err := sources.GetPandaScoreMatches("https://api.pandascore.co/csgo/matches", apiKey, seriesID, 0)
+	if err != nil {
+		log.Fatalf("GetPandaScoreMatches error: %v", err)
+	}
+	var matches []struct {
+		TournamentID int `json:"tournament_id"`
+		Tournament   struct {
+			Name string `json:"name"`
+		} `json:"tournament"`
+	}
+	if err := json.Unmarshal([]byte(raw), &matches); err != nil {
+		log.Fatalf("decode matches: %v", err)
+	}
+	counts := map[int]int{}
+	names := map[int]string{}
+	var order []int
+	for _, m := range matches {
+		if counts[m.TournamentID] == 0 {
+			order = append(order, m.TournamentID)
+		}
+		counts[m.TournamentID]++
+		names[m.TournamentID] = m.Tournament.Name
+	}
+	fmt.Println("=== Tournaments in series ===")
+	for _, id := range order {
+		fmt.Printf("  %-10d %-30s %d matches\n", id, names[id], counts[id])
+	}
+	fmt.Println()
+}
+
+// printBracket shows the bracket feeder edges and the format checkAndStoreFormat would store.
+func printBracket(apiKey string, tournamentID int) {
+	bracket, err := sources.GetPandaScoreBracket(apiKey, tournamentID)
+	if err != nil {
+		log.Fatalf("GetPandaScoreBracket error: %v", err)
+	}
+	fmt.Println("=== Bracket ===")
+	for _, m := range bracket {
+		var teams []string
+		for _, o := range m.Opponents {
+			if o.Opponent != nil {
+				teams = append(teams, o.Opponent.Name)
+			}
+		}
+		fmt.Printf("  %-10d %-40v fed by %+v\n", m.ID, teams, m.PreviousMatches)
+	}
+	fmt.Printf("detected kind: %s\n\n", tournament.DetectKindFromBracket(bracket, sources.CountTeams(bracket)))
 }

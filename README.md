@@ -1,56 +1,77 @@
 # Pick'Ems Bot
 ## About
-This is a discord bot used to track Pick'Ems for the CS2 Copenhagen major. The source of data for this project is 
-[Liquipedia](https://liquipedia.net/counterstrike). Originally, the bot did data scraping using soup to extract the data from the liquipedia match page, however, this proved to be inefficient, unreliable, and cause unexpected errors. We now use the Liquipedia api and db to obtain information. This data is stored in our own database to reduce the number of calls we must make to Liquipedia's servers, reducing latency and complying with the [API usage requirements](https://liquipedia.net/api-terms-of-use).
+A Discord bot for running CS2 Pick'Ems in your server. Members predict how a tournament stage will play out, and the bot scores those predictions as results come in.
 
-## Bot Commands
-The following are discord messages that the bot will respond to. These can be in a server the bot is added to or dm'd to the bot. Note that there is no server-specific rankings. It is all global
-- `$set [team1] [team2] ... [team10]`: Sets your Pick'Ems. 1 & 2 are the 3-0 teams, 3-8 are the 3-1 / 3-2 teams, and 9-10 are the 0-3 teams. Please note that the teams names need to be specified exactly how they appear on liquipedia (not case sensitive) as I'm not doing any proper checking. Names that contains two or more words need to be encased in \" \". E.g. `"The MongolZ"`. Note, the bot now supports fuzzy matching, so `Mongolz` \(or probably even just `mongols`) would work too.
-- `$check`: shows the current status of your Pick'Ems
-- `$teams`: shows the teams currently in the current stage of the tournament, sorted by VRS world ranking. Use this list to set your Pick'Ems.
-- `$team <name>`: looks up a team's current VRS world ranking, points total, and roster. Fuzzy matching applies, so approximate names work.
-- `$leaderboard`: shows which users have the best Pick'Ems in the current stage. This is sorted by number of successful picks. There is no tie breaker in the event two users have the same number of successes
-- `$upcoming`: shows todays live and upcoming matches
-- `$results`: shows the match results for the current round of the tournament including: team names, bracket position, match score. This is handled by a seperate module, which can be found [here](https://github.com/zacharyab24/pickems-renderer)
+Match data comes from [PandaScore](https://pandascore.co) (polled) or [Liquipedia](https://liquipedia.net/counterstrike) (webhook driven), and VRS world rankings from Valve's [regional standings](https://github.com/ValveSoftware/counter-strike_regional_standings). Everything is stored in PostgreSQL so the bot makes as few calls to the data sources as possible, in line with their [API terms](https://liquipedia.net/api-terms-of-use).
 
-## Usage
+## Commands
+Each channel follows its own tournament and round, chosen with `/config`. Predictions and leaderboards are per server.
+
+- `/config view | set-tournament | set-round`: choose which tournament and round this channel tracks. Requires the Manage Server permission. Nothing else works in a channel until it is configured.
+- `/set`: set your Pick'Ems from a form of team dropdowns. Swiss stages ask for two 3-0 teams, six advancing teams and two 0-3 teams; single elimination asks for the winner, runner-up and both 3rd/4th place teams.
+- `/check [user]`: show your Pick'Ems, or another user's, and how they are scoring.
+- `/leaderboard`: rank everyone in this server by correct picks. There is no tiebreaker.
+- `/upcoming`: show live and upcoming matches.
+- `/results`: show match results, grouped by round and paged for large stages.
+- `/teams`: list the teams in the current stage, sorted by VRS world ranking.
+- `/team <name>`: show a team's VRS ranking, points and roster. Team names autocomplete.
+
+Predictions are supported for Swiss and single elimination stages. Other formats (double elimination, round robin) still get `/upcoming` and `/results`.
+
+## Self-hosting
 
 ### Configuration
 
-The bot reads from two files:
+The bot reads from two files, neither of which is tracked in git:
 
-- `.env` — secrets only (Discord tokens, Mongo URI, Liquipedia API key). Not tracked in git.
-- `config.toml` — tournament settings (page, round, etc.). Not tracked in git; generate it with `go run ./scripts/configure` (see below).
+- `.env`: secrets.
+- `config.toml`: deployment settings. Generate it with `go run ./scripts/configure` (see below).
 
-Required `.env` keys:
+`.env` keys:
 
 ```
 DISCORD_PROD_TOKEN=...
-DISCORD_BETA_TOKEN=... (optional but useful for testing)
-MONGO_PROD_URI=...
-LIQUIDPEDIADB_API_KEY=...
+DISCORD_BETA_TOKEN=...      # used when config.toml has test = true
+POSTGRES_URI=...
+PANDASCORE_API_KEY=...      # PandaScore data, and the tournament list /config picks from
+LIQUIDPEDIADB_API_KEY=...   # only needed for Liquipedia tournaments
 ```
-Note: this repo does not contain these secrets. If you wish to self host this bot, you are responsible for obtaining your own liquipedia key. Checkout the [liquipedia api](https://liquipedia.net/api) for more information
 
-### Generating config.toml for a new tournament
+You are responsible for obtaining your own API keys. See the [PandaScore](https://developers.pandascore.co) and [Liquipedia](https://liquipedia.net/api) API docs.
 
-Use the configure script — point it at any Liquipedia tournament page and it'll fetch the wikitext, find the available stages, and write `config.toml`:
+### Database
+
+The schema lives in `migrations/` and is managed with [golang-migrate](https://github.com/golang-migrate/migrate). The bot does not apply migrations itself; run them before starting it:
 
 ```bash
-go run ./scripts/configure -url https://liquipedia.net/counterstrike/Intel_Extreme_Masters/2026/Cologne
+migrate -path migrations -database "$POSTGRES_URI" up
 ```
 
-If the tournament has multiple stages, you'll get an interactive picker. Skip the prompt with `-stage`:
+### Generating config.toml
+
+For PandaScore, tournaments are picked per channel with `/config`, so the config only needs the data source:
 
 ```bash
-go run ./scripts/configure -url https://liquipedia.net/counterstrike/PGL/2026/Bucharest -stage Europe
+go run ./scripts/configure -source pandascore
 ```
 
-For multi-stage pages where auto-detection would pick the wrong format, pass `-format`:
+For Liquipedia, point the script at a tournament page. It fetches the page, finds the available stages and writes the page and round the webhook server should update:
 
 ```bash
-go run ./scripts/configure -url https://liquipedia.net/counterstrike/Intel_Extreme_Masters/2026/Cologne -stage Stage_1 -format swiss
+go run ./scripts/configure -source liquipedia -url https://liquipedia.net/counterstrike/Intel_Extreme_Masters/2026/Cologne
 ```
+
+If the tournament has multiple stages you'll get an interactive picker. Skip it with `-stage`:
+
+```bash
+go run ./scripts/configure -source liquipedia -url https://liquipedia.net/counterstrike/PGL/2026/Bucharest -stage Europe
+```
+
+Optional settings you can add to `config.toml` by hand:
+
+- `test = true`: use the beta Discord token and debug logging.
+- `log_level = "debug" | "info" | "warn" | "error"`
+- `dev_guild_id = "..."`: register slash commands in one server only, which updates instantly while testing.
 
 ### Running
 
@@ -58,12 +79,18 @@ go run ./scripts/configure -url https://liquipedia.net/counterstrike/Intel_Extre
 go run .
 ```
 
-Or via Docker (persistent — survives shell exit):
+Or via Docker:
 
 ```bash
 docker build -t pickems-bot .
-docker run --env-file .env -v "$PWD/config.toml:/app/config.toml:ro" pickems-bot
+docker run --env-file .env -v "$PWD/config.toml:/app/config.toml:ro" -p 8080:8080 -p 9090:9090 pickems-bot
 ```
+
+`.env` and `config.toml` are excluded from the image (see `.dockerignore`), so they must be passed in at runtime as above. Port 8080 serves the Liquipedia webhook; port 9090 serves `/health`, `/poller` and Prometheus metrics.
+
+## Development
+
+`./scripts/quality_check.sh` runs the same checks as CI: formatting, build, vet, lint, staticcheck, tests with an 80% coverage gate, and govulncheck. Store tests run against a throwaway Postgres container, so Docker must be running. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Changelog
 

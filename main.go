@@ -2,8 +2,9 @@
 
 /* main.go
  * The "main" method for running the bot. For details about the bot see `readme.md`
- * Tournament settings live in config.toml (see `go run ./scripts/configure`).
- * Secrets (Discord tokens, Mongo URI, Liquipedia API key) live in .env.
+ * Deployment settings live in config.toml (see `go run ./scripts/configure`);
+ * tournaments are chosen per channel with /config.
+ * Secrets (Discord tokens, Postgres URI, API keys) live in .env.
  * Authors: Zachary Bower
  */
 
@@ -19,6 +20,7 @@ import (
 	"pickems-bot/app"
 	bot "pickems-bot/bot"
 	"pickems-bot/config"
+	"pickems-bot/ingest"
 	"pickems-bot/web"
 
 	"github.com/joho/godotenv"
@@ -53,42 +55,22 @@ func main() {
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
 
-	apiInstance, err := app.NewApp(cfg, os.Getenv("MONGO_PROD_URI"), logger)
+	apiInstance, err := app.NewApp(cfg, os.Getenv("POSTGRES_URI"), logger)
 	if err != nil {
 		logger.Error("failed to initialize app", "error", err)
 		os.Exit(1)
 	}
-	defer func() {
-		if err = apiInstance.Store.GetClient().Disconnect(context.TODO()); err != nil {
-			panic(err)
-		}
-	}()
+	defer apiInstance.Store.Close()
 
-	logger.Debug("populating matches from data source", "source", cfg.DataSource, "schedule_only", cfg.UpcomingOnly)
-	if err := apiInstance.PopulateMatches(cfg.UpcomingOnly); err != nil {
-		logger.Error("failed to populate matches", "error", err)
-		os.Exit(1)
+	// Background ingestion jobs keep the tournament catalog (/config picklist)
+	// and VRS rankings fresh, independent of the live-match poller.
+	ingestCtx := context.Background()
+	if pandaKey := os.Getenv("PANDASCORE_API_KEY"); pandaKey != "" {
+		go ingest.NewTournamentSync(apiInstance, pandaKey, time.Hour, logger).Start(ingestCtx)
+	} else {
+		logger.Warn("PANDASCORE_API_KEY not set, tournament catalog sync disabled")
 	}
-	logger.Debug("match data populated")
-
-	if err := apiInstance.GenerateLeaderboard(); err != nil {
-		logger.Error("failed to generate leaderboard", "error", err)
-		os.Exit(1)
-	}
-	logger.Debug("leaderboard generated")
-
-	// Regenerate the result image on startup so it always reflects the current
-	// tournament/bracket. The image on disk can be stale if the bot was previously
-	// run against a different tournament and the file was not cleared between restarts.
-	// Fatal in full mode — $results will be broken if this fails. In upcoming_only
-	// mode there are no match results yet so this is expected to fail; skip it.
-	if !cfg.UpcomingOnly {
-		if err := web.RenderResultsImage(apiInstance); err != nil {
-			logger.Error("could not render results image on startup", "error", err)
-			os.Exit(1)
-		}
-		logger.Debug("results image rendered")
-	}
+	go ingest.NewVRSSync(apiInstance, time.Hour, logger).Start(ingestCtx)
 
 	var discordToken string
 	if cfg.Test {
@@ -96,7 +78,7 @@ func main() {
 	} else {
 		discordToken = os.Getenv("DISCORD_PROD_TOKEN")
 	}
-	botInstance, err := bot.NewBot(discordToken, apiInstance, logger)
+	botInstance, err := bot.NewBot(discordToken, apiInstance, logger, cfg.GuildID)
 	if err != nil {
 		logger.Error("failed to initialize bot", "error", err)
 		os.Exit(1)
@@ -115,22 +97,36 @@ func main() {
 		}
 	}()
 
-	switch cfg.DataSource {
-	case "pandascore":
-		poller := web.NewPoller(apiInstance, cfg.PandaScore.SeriesID, cfg.PandaScore.TournamentID, os.Getenv("PANDASCORE_API_KEY"), cfg.PandaScore.APIURL, logger)
-		go poller.Start()
-		logger.Info("PandaScore poller started")
-	case "liquipedia":
+	// BootstrapPool re-seeds the monitoring pool (which starts empty on each
+	// restart) from guild_config before the poller starts.
+	if err := apiInstance.BootstrapPool(context.Background()); err != nil {
+		logger.Error("failed to bootstrap monitoring pool", "error", err)
+		os.Exit(1)
+	}
+	poller := web.NewPoller(apiInstance, os.Getenv("PANDASCORE_API_KEY"), cfg.PandaScore.APIURL, logger)
+	go poller.Start()
+	logger.Info("PandaScore poller started")
+
+	// cfg.DataSource is already validated by app.NewApp above (it errors out
+	// on anything but "pandascore"/"liquipedia"), so liquipedia's dedicated
+	// webhook server is the only extra bootstrap needed here - PandaScore
+	// tournaments and match data are populated via ingest.TournamentSync and
+	// /config, not from config.toml.
+	if cfg.DataSource == "liquipedia" {
+		dbTournamentID, err := apiInstance.Store.EnsureTournament(context.Background(), cfg.Liquipedia.Page, "liquipedia", cfg.TournamentName, 0)
+		if err != nil {
+			logger.Error("failed to ensure tournament in database", "error", err)
+			os.Exit(1)
+		}
 		go func() {
-			if err := web.Start(web.Config{Addr: ":8080", API: apiInstance, Page: cfg.Liquipedia.Page, Logger: logger}); err != nil {
+			if err := web.Start(web.Config{Addr: ":8080", API: apiInstance, Page: cfg.Liquipedia.Page, TournamentID: dbTournamentID, Round: cfg.Round, Logger: logger}); err != nil {
 				logger.Error("web server exited", "error", err)
 				os.Exit(1)
 			}
 		}()
-		logger.Info("Liquipedia webhook server starting", "addr", ":8080")
-	default:
-		logger.Error("unknown data_source in config.toml", "data_source", cfg.DataSource)
-		os.Exit(1)
+		logger.Info("Liquipedia webhook server starting", "addr", ":8080", "db_tournament_id", dbTournamentID)
+	} else {
+		logger.Info("PandaScore data source configured; tournaments are tracked via /config")
 	}
 
 	if err := botInstance.Run(); err != nil {

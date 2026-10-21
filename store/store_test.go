@@ -1,35 +1,25 @@
-/* store_test.go
- * Contains unit tests for store.go and store_interface.go
- * Authors: Zachary Bower
- */
+//go:build integration
 
 package store
 
 import (
+	"context"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// Test getter methods
-func TestStore_GetRound(t *testing.T) {
-	s := &Store{Round: "test_round"}
-	if s.GetRound() != "test_round" {
-		t.Errorf("Expected 'test_round', got '%s'", s.GetRound())
-	}
+func TestNewStore_EmptyConnString(t *testing.T) {
+	_, err := NewStore("", nil, nil)
+	assert.Error(t, err)
 }
 
-func TestStore_GetDatabase(t *testing.T) {
-	// Test that the getter works - actual database would be set by NewStore
-	s := &Store{}
-	result := s.GetDatabase()
+func TestNewStore_PingsAndCloses(t *testing.T) {
+	s, err := NewStore(testConnStr, nil, nil)
+	require.NoError(t, err)
 
-	// Just verify method exists and compiles correctly
-	_ = result
-}
-
-func TestStore_GetClient(t *testing.T) {
-	s := &Store{Client: nil}
-	result := s.GetClient()
-
-	// Just test that method exists and returns (even if nil)
-	_ = result
+	require.NoError(t, s.Ping(context.Background()))
+	s.Close()
+	assert.Error(t, s.Ping(context.Background()), "a closed store should not ping")
 }

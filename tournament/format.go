@@ -13,7 +13,7 @@ import (
 )
 
 // Kind is the canonical string identifier for a tournament format.
-// Values are persisted in MongoDB and surfaced in API/wikitext, so changing
+// Values are persisted in tournaments.format and predictions, so changing
 // these strings is a breaking change.
 type Kind string
 
@@ -26,6 +26,9 @@ const (
 	SingleElim Kind = "single-elimination"
 	// DoubleElim is not fully supported yet. Only exists for upcoming only mode
 	DoubleElim Kind = "double-elimination"
+	// RoundRobin is detected but not supported for predictions yet.
+	RoundRobin Kind = "round-robin"
+	Other      Kind = "other"
 )
 
 // MatchResult is the unified interface implemented by every per-format result
@@ -66,8 +69,10 @@ type Format interface {
 	// is malformed for this format (e.g. wrong field set populated).
 	PredictionFields(p models.Prediction) ([]models.PredictionField, error)
 
-	// DB Interaction
-	DecodeBSON(bytes []byte) (MatchResult, error)
+	// SupportsPredictions reports whether this format can run predictions at
+	// all - false for formats the bot can only display raw match data for
+	// (double-elimination, round-robin, other/unrecognised).
+	SupportsPredictions() bool
 
 	// Parsing
 	BuildFromMatchNodes(nodes []sources.MatchNode, round string) (MatchResult, error)
@@ -146,7 +151,8 @@ func FilterNodesByKind(nodes []sources.MatchNode, kind Kind) []sources.MatchNode
 			s := strings.ToLower(n.Section)
 			if strings.Contains(s, "bracket") ||
 				strings.Contains(s, "final") ||
-				strings.Contains(s, "playoff") {
+				strings.Contains(s, "playoff") ||
+				isThirdPlace(n) {
 				filtered = append(filtered, n)
 			}
 		}
@@ -159,8 +165,13 @@ func FilterNodesByKind(nodes []sources.MatchNode, kind Kind) []sources.MatchNode
 // DetectKindFromMatchNodes infers the tournament format from the Section fields
 // present in a slice of match nodes returned by the LiquipediaDB API.
 // Priority: DoubleElim (upper + lower keywords) > Swiss (round keyword) > SingleElim (final keywords).
-// Returns an error if no section keywords match any known format.
+// Errors only when nodes itself is empty (nothing to detect from at all) -
+// a non-empty page whose sections match no known keywords resolves to Other
+// rather than failing the whole fetch, matching DetectKindFromBracket.
 func DetectKindFromMatchNodes(nodes []sources.MatchNode) (Kind, error) {
+	if len(nodes) == 0 {
+		return "", fmt.Errorf("could not detect tournament format: no match nodes provided")
+	}
 	var hasRound, hasFinal, hasUpper, hasLower bool
 	for _, n := range nodes {
 		s := strings.ToLower(n.Section)
@@ -185,6 +196,54 @@ func DetectKindFromMatchNodes(nodes []sources.MatchNode) (Kind, error) {
 	case hasFinal:
 		return SingleElim, nil
 	default:
-		return "", fmt.Errorf("could not detect tournament format from match node sections")
+		return Other, nil
 	}
+}
+
+// DetectKindFromBracket infers the tournament format from a slice of BracketMatch
+// returned by the PandaScore API
+// Priority: DoubleElim (upper + lower edges) > SingleElim (upper edges only) > Swiss (no edges) > Other (unknown or empty).
+func DetectKindFromBracket(matches []sources.BracketMatch, teamCount int) Kind {
+	if len(matches) == 0 {
+		return Other
+	}
+	feedsAnother := make(map[int]bool)
+	for _, m := range matches {
+		for _, e := range m.PreviousMatches {
+			feedsAnother[e.FromMatchID] = true
+		}
+	}
+	var hasWinnerEdge, hasLoserEdge bool
+	for _, m := range matches {
+		for _, e := range m.PreviousMatches {
+			switch strings.ToLower(e.Type) {
+			case "winner":
+				hasWinnerEdge = true
+			case "loser":
+				// A loser-fed match that feeds nothing is a third-place decider, not a lower bracket.
+				if feedsAnother[m.ID] {
+					hasLoserEdge = true
+				}
+			}
+		}
+	}
+	switch {
+	case hasLoserEdge:
+		return DoubleElim // a loser bracket only exists in double-elim
+	case hasWinnerEdge:
+		return SingleElim // a single winner-fed tree
+	default:
+		if isRoundRobin(len(matches), teamCount) {
+			return RoundRobin
+		}
+		return Swiss // no feeder edges anywhere -> standings-based
+	}
+}
+
+// isRoundRobin returns true if the given number of matches and teams corresponds
+func isRoundRobin(numMatches, teamCount int) bool {
+	if teamCount > 1 && numMatches == teamCount*(teamCount-1)/2 {
+		return true
+	}
+	return false
 }

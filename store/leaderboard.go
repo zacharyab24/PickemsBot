@@ -1,92 +1,48 @@
-/* leaderboard.go
- * Contains the methods for interacting with the leaderboard collection
- * Authors: Zachary Bower
- */
-
 package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"reflect"
-	"time"
-
-	"pickems-bot/metrics"
-	"pickems-bot/models"
-
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// LeaderboardEntry represents a single entry in the leaderboard for a user
+// LeaderboardEntry represents a single user's score for a tournament.
 type LeaderboardEntry struct {
-	UserID             string `bson:"userid,omitempty"`
-	Username           string `bson:"username,omitempty"`
-	Score              int    `bson:"score,omitempty"`
-	models.ScoreResult `bson:",inline"`
+	UserID    string
+	Username  string
+	Successes int
+	Pending   int
+	Failed    int
 }
 
-// Leaderboard represents the tournament leaderboard stored in MongoDB
-type Leaderboard struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty"`
-	Round     string             `bson:"round,omitempty"`
-	UpdatedAt time.Time          `bson:"updated_at"`
-	Entries   []LeaderboardEntry `bson:"entries"`
-}
-
-// FetchLeaderboardFromDB returns the leaderboard entries for the current round.
-func (s *Store) FetchLeaderboardFromDB() ([]LeaderboardEntry, error) {
-	metrics.MongoOpsTotal.WithLabelValues("read").Inc()
-	s.Collections.Leaderboard.Name()
-	opts := options.FindOne()
-
-	var res Leaderboard
-	err := s.Collections.Leaderboard.FindOne(context.TODO(), bson.D{{Key: "round", Value: s.Round}}, opts).Decode(&res)
+// GetLeaderboard returns all user scores for the given guild and tournament, ordered by successes descending.
+func (s *PostgresStore) GetLeaderboard(ctx context.Context, guildID string, tournamentID int) ([]LeaderboardEntry, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT u.user_id, u.username,
+		       SUM(sc.successes) AS successes,
+		       SUM(sc.pending)   AS pending,
+		       SUM(sc.failed)    AS failed
+		FROM scores sc
+		JOIN predictions p ON p.id = sc.prediction_id
+		JOIN users u ON u.user_id = p.user_id
+		WHERE p.guild_id = $1 AND p.tournament_id = $2
+		GROUP BY u.user_id, u.username
+		ORDER BY successes DESC, pending DESC
+	`, guildID, tournamentID)
 	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, err
+		return nil, fmt.Errorf("GetLeaderboard: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []LeaderboardEntry
+	for rows.Next() {
+		var e LeaderboardEntry
+		if err := rows.Scan(&e.UserID, &e.Username, &e.Successes, &e.Pending, &e.Failed); err != nil {
+			return nil, fmt.Errorf("GetLeaderboard: scan: %w", err)
 		}
-		return nil, fmt.Errorf("failed to fetch leaderboard from database: %w", err)
+		entries = append(entries, e)
 	}
-
-	return res.Entries, nil
-}
-
-// StoreLeaderboard persists the given leaderboard, inserting a new document or replacing an existing one for the current round.
-func (s *Store) StoreLeaderboard(leaderboard Leaderboard) error {
-	metrics.MongoOpsTotal.WithLabelValues("write").Inc()
-	if reflect.DeepEqual(leaderboard, Leaderboard{}) {
-		return fmt.Errorf("leaderboard is empty")
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("GetLeaderboard: rows: %w", err)
 	}
-
-	// Attempt to find an existing document
-	var res Leaderboard
-	err := s.Collections.Leaderboard.FindOne(context.TODO(), bson.D{{Key: "round", Value: s.Round}}).Decode(&res)
-	notFound := err == mongo.ErrNoDocuments
-
-	if err != nil && !notFound {
-		return fmt.Errorf("lookup for existing record failed: %w", err)
-	}
-
-	// Perform insert or update
-	s.logger().Info("updating leaderboard in db", "round", s.Round)
-	if notFound {
-		_, err := s.Collections.Leaderboard.InsertOne(context.TODO(), leaderboard)
-		if err != nil {
-			return fmt.Errorf("leaderboard insert failed: %w", err)
-		}
-		return nil
-	}
-
-	filter := bson.M{"round": s.Round}
-	update := bson.D{{Key: "$set", Value: leaderboard}}
-
-	_, err = s.Collections.Leaderboard.UpdateOne(context.TODO(), filter, update)
-	if err != nil {
-		return fmt.Errorf("leaderboard update failed: %w", err)
-	}
-	return nil
+	return entries, nil
 }

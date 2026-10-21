@@ -2,25 +2,14 @@ package bot
 
 import (
 	"fmt"
-	"log/slog"
 	format "pickems-bot/tournament"
-	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
 
-const burple = 0x7289DA
 const green = 0x57F287
-const red = 0xED4245
-
-// CleanIndent removes structural code indentation from raw multiline strings
-func cleanIndent(s string) string {
-	// Matches any leading whitespace characters at the start of a line
-	re := regexp.MustCompile(`(?m)^[ \t]+`)
-	return re.ReplaceAllString(s, "")
-}
 
 // singleElimField formats a single-elimination predictions list as an embed field,
 // ordered Champion → Runner-up → 3rd/4th → … .
@@ -94,14 +83,57 @@ func swissBucketField(label string, entries []format.BucketEntry) *discordgo.Mes
 	return &discordgo.MessageEmbedField{Name: label, Value: sb.String(), Inline: false}
 }
 
-// sendError sends a red error embed to the given channel.
-func sendError(session DiscordSession, channelID string, msg string) {
-	embed := &discordgo.MessageEmbed{
-		Title:       "Error",
-		Description: msg,
-		Color:       red,
+// respondError sends an inline error message as an interaction response.
+func respondError(session DiscordSession, i *discordgo.Interaction, msg string) {
+	session.InteractionRespond(i, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{Content: msg},
+	})
+}
+
+// respondEphemeral sends an ephemeral (only visible to the invoking user) message
+// as an interaction response. Used by /config so admin output doesn't clutter the channel.
+func respondEphemeral(session DiscordSession, i *discordgo.Interaction, msg string) {
+	session.InteractionRespond(i, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: msg,
+			Flags:   discordgo.MessageFlagsEphemeral,
+		},
+	})
+}
+
+// deferPublic acknowledges an interaction with a public "thinking..." state,
+// giving the caller more than Discord's 3-second window before it must
+// finalise via finalizeDeferred or failDeferredPrivately.
+func deferPublic(session DiscordSession, i *discordgo.Interaction) error {
+	return session.InteractionRespond(i, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+	})
+}
+
+// failDeferredPrivately replaces a public deferred response with an ephemeral
+// msg. A deferred response's visibility can't be changed, so it's deleted and
+// msg is sent as an ephemeral followup.
+func (b *Bot) failDeferredPrivately(session DiscordSession, i *discordgo.Interaction, action, msg string) {
+	if err := session.InteractionResponseDelete(i); err != nil {
+		b.logger().Error("failed to delete deferred response", "action", action, "error", err)
 	}
-	if _, err := session.ChannelMessageSendEmbed(channelID, embed); err != nil {
-		slog.Error("failed to send error embed", "error", fmt.Errorf("sendError: %w", err))
+	if _, err := session.FollowupMessageCreate(i, true, &discordgo.WebhookParams{
+		Content: msg,
+		Flags:   discordgo.MessageFlagsEphemeral,
+	}); err != nil {
+		b.logger().Error("failed to send ephemeral followup", "action", action, "error", err)
+	}
+}
+
+// finalizeDeferred edits a previously-deferred response (see deferPublic)
+// with msg, on both the success and failure outcome of whatever ran in
+// between - action names the caller for the log line if the edit itself
+// fails, which would otherwise leave Discord showing "thinking..." forever
+// with no server-side record of why.
+func (b *Bot) finalizeDeferred(session DiscordSession, i *discordgo.Interaction, action, msg string) {
+	if _, err := session.InteractionResponseEdit(i, &discordgo.WebhookEdit{Content: &msg}); err != nil {
+		b.logger().Error("failed to edit deferred response", "action", action, "error", err)
 	}
 }

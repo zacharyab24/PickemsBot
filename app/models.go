@@ -14,14 +14,16 @@ type ScoreResult struct {
 
 // TournamentInfo provides metadata for the configured tournament
 type TournamentInfo struct {
-	TournamentName string
-	Round          string
-	Format         string
-	NumTeams       int
+	TournamentName      string
+	Round               string
+	Format              string
+	NumTeams            int
+	SupportsPredictions bool
 }
 
 // LeaderboardUser represents a single user on the leaderboard
 type LeaderboardUser struct {
+	UserID    string
 	Username  string
 	Rank      int
 	Successes int

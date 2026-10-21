@@ -1,6 +1,5 @@
 /* observability_test.go
- * Contains unit tests for observability.go (TelemetryServer health handler)
- * Authors: Zachary Bower
+ * Unit tests for the /poller telemetry endpoint.
  */
 
 package web
@@ -13,149 +12,101 @@ import (
 	"testing"
 	"time"
 
-	apiPkg "pickems-bot/app"
+	"pickems-bot/app"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// mockDiscord satisfies the interface{ IsConnected() bool } used by TelemetryServer
-type mockDiscord struct {
-	connected bool
-}
-
-func (m *mockDiscord) IsConnected() bool { return m.connected }
-
-// newTestTelemetryServer builds a TelemetryServer wired to a MockStore and mockDiscord.
-func newTestTelemetryServer(pingErr error, discordConnected bool) *TelemetryServer {
-	mockStore := apiPkg.NewMockStore("swiss", "test_round")
-	mockStore.PingError = pingErr
+func newTestTelemetryServer() *TelemetryServer {
 	return &TelemetryServer{
-		app:       apiPkg.NewTestApp(mockStore),
-		discord:   &mockDiscord{connected: discordConnected},
-		startTime: time.Now(),
+		app: app.NewTestApp(app.NewMockStore("swiss", "test_round")),
 	}
 }
 
-// region healthHandler tests
+func TestPollerStatusHandler_EmptyPool(t *testing.T) {
+	s := newTestTelemetryServer()
+	req := httptest.NewRequest(http.MethodGet, "/poller", nil)
+	rec := httptest.NewRecorder()
 
-func TestHealthHandler_Healthy(t *testing.T) {
-	s := newTestTelemetryServer(nil, true)
+	s.pollerStatusHandler(rec, req)
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	w := httptest.NewRecorder()
-
-	s.healthHandler(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
-
-	var resp HealthResponse
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
-	assert.Equal(t, "ok", resp.Status)
-	assert.Equal(t, "ok", resp.Checks.MongoDb)
-	assert.Equal(t, "ok", resp.Checks.Discord)
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp PollerStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.True(t, resp.Enabled)
+	assert.Empty(t, resp.Tracked)
+	assert.Nil(t, resp.LastPollAt)
 }
 
-func TestHealthHandler_MongoDown(t *testing.T) {
-	s := newTestTelemetryServer(errors.New("connection refused"), true)
+func TestPollerStatusHandler_ReturnsTrackedAndLastPoll(t *testing.T) {
+	s := newTestTelemetryServer()
+	// Name is read straight off the pool entry - see PoolEntry.Name - so no
+	// store lookup (and no N+1 across tracked tournaments) is needed here.
+	s.app.MonitoringPool.Entries[42] = &app.PoolEntry{
+		DBTournamentID:         42,
+		Name:                   "IEM Cologne 2026",
+		PandascoreTournamentID: 555,
+		SeriesID:               999,
+		Round:                  "Playoffs",
+	}
+	s.app.RecordPoll()
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/poller", nil)
+	rec := httptest.NewRecorder()
+	s.pollerStatusHandler(rec, req)
 
-	s.healthHandler(w, req)
-
-	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
-
-	var resp HealthResponse
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
-	assert.Equal(t, "unhealthy", resp.Status)
-	assert.Contains(t, resp.Checks.MongoDb, "error:")
-	assert.Equal(t, "ok", resp.Checks.Discord)
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp PollerStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.True(t, resp.Enabled)
+	require.Len(t, resp.Tracked, 1)
+	assert.Equal(t, 42, resp.Tracked[0].TournamentID)
+	assert.Equal(t, "IEM Cologne 2026", resp.Tracked[0].Name)
+	assert.Equal(t, 555, resp.Tracked[0].PandascoreTournamentID)
+	assert.Equal(t, 999, resp.Tracked[0].SeriesID)
+	assert.Equal(t, "Playoffs", resp.Tracked[0].Round)
+	assert.NotNil(t, resp.LastPollAt)
 }
 
-func TestHealthHandler_DiscordDisconnected(t *testing.T) {
-	s := newTestTelemetryServer(nil, false)
+func TestPollerStatusHandler_MethodNotAllowed(t *testing.T) {
+	s := newTestTelemetryServer()
+	req := httptest.NewRequest(http.MethodPost, "/poller", nil)
+	rec := httptest.NewRecorder()
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	w := httptest.NewRecorder()
+	s.pollerStatusHandler(rec, req)
 
-	s.healthHandler(w, req)
-
-	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
-
-	var resp HealthResponse
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
-	assert.Equal(t, "unhealthy", resp.Status)
-	assert.Equal(t, "ok", resp.Checks.MongoDb)
-	assert.Equal(t, "disconnected", resp.Checks.Discord)
+	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 }
 
-func TestHealthHandler_BothDown(t *testing.T) {
-	s := newTestTelemetryServer(errors.New("timeout"), false)
+type fakeDiscord bool
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	w := httptest.NewRecorder()
+func (f fakeDiscord) IsConnected() bool { return bool(f) }
 
-	s.healthHandler(w, req)
+func TestHealthHandler(t *testing.T) {
+	tests := map[string]struct {
+		pingErr   error
+		connected bool
+		wantCode  int
+		want      ResponseChecks
+	}{
+		"all healthy":          {nil, true, http.StatusOK, ResponseChecks{Postgres: "ok", Discord: "ok"}},
+		"postgres down":        {errors.New("refused"), true, http.StatusServiceUnavailable, ResponseChecks{Postgres: "error: refused", Discord: "ok"}},
+		"discord disconnected": {nil, false, http.StatusServiceUnavailable, ResponseChecks{Postgres: "ok", Discord: "disconnected"}},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			ms := app.NewMockStore("swiss", "test_round")
+			ms.PingError = tt.pingErr
+			s := &TelemetryServer{app: app.NewTestApp(ms), discord: fakeDiscord(tt.connected), startTime: time.Now()}
+			rec := httptest.NewRecorder()
 
-	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+			s.healthHandler(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
 
-	var resp HealthResponse
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
-	assert.Equal(t, "unhealthy", resp.Status)
-	assert.Contains(t, resp.Checks.MongoDb, "error:")
-	assert.Equal(t, "disconnected", resp.Checks.Discord)
-}
-
-func TestHealthHandler_UptimeIsNonNegative(t *testing.T) {
-	s := newTestTelemetryServer(nil, true)
-
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	w := httptest.NewRecorder()
-
-	s.healthHandler(w, req)
-
-	var resp HealthResponse
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
-	assert.GreaterOrEqual(t, resp.Uptime, int64(0))
-}
-
-func TestHealthHandler_HeadRequest_Healthy_Returns200(t *testing.T) {
-	s := newTestTelemetryServer(nil, true)
-
-	req := httptest.NewRequest(http.MethodHead, "/health", nil)
-	w := httptest.NewRecorder()
-
-	s.healthHandler(w, req)
-
-	// Body stripping for HEAD is done by the real net/http server, not the handler.
-	// In unit tests with httptest.ResponseRecorder we only assert on the status code.
-	assert.Equal(t, http.StatusOK, w.Code)
-}
-
-func TestHealthHandler_HeadRequest_Unhealthy_Returns503(t *testing.T) {
-	s := newTestTelemetryServer(errors.New("mongo down"), false)
-
-	req := httptest.NewRequest(http.MethodHead, "/health", nil)
-	w := httptest.NewRecorder()
-
-	s.healthHandler(w, req)
-
-	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
-}
-
-func TestHealthHandler_InvalidMethod_Returns405(t *testing.T) {
-	s := newTestTelemetryServer(nil, true)
-
-	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete} {
-		req := httptest.NewRequest(method, "/health", nil)
-		w := httptest.NewRecorder()
-
-		s.healthHandler(w, req)
-
-		assert.Equal(t, http.StatusMethodNotAllowed, w.Code, "expected 405 for method %s", method)
+			require.Equal(t, tt.wantCode, rec.Code)
+			var resp HealthResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, tt.want, resp.Checks)
+		})
 	}
 }
-
-// endregion

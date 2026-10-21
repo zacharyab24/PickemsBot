@@ -35,16 +35,17 @@ func TestSetSwissPredictions(t *testing.T) {
 		{32, 4, 12, 4},
 	}
 	for _, c := range cases {
-		input := make([]string, 5*c.totalTeams/8)
-		for i := range input {
-			input[i] = fmt.Sprintf("team%d", i)
-		}
-		win, adv, lose := setSwissPredictions(input)
-		assert.Len(t, win, c.wantWin, "totalTeams=%d win bucket", c.totalTeams)
-		assert.Len(t, adv, c.wantAdv, "totalTeams=%d advance bucket", c.totalTeams)
-		assert.Len(t, lose, c.wantLose, "totalTeams=%d lose bucket", c.totalTeams)
-		// No teams should be silently dropped
-		assert.Equal(t, len(input), len(win)+len(adv)+len(lose), "totalTeams=%d total coverage", c.totalTeams)
+		t.Run(fmt.Sprintf("%d teams", c.totalTeams), func(t *testing.T) {
+			input := make([]string, 5*c.totalTeams/8)
+			for i := range input {
+				input[i] = fmt.Sprintf("team%d", i)
+			}
+			win, adv, lose := setSwissPredictions(input)
+			assert.Len(t, win, c.wantWin, "win bucket")
+			assert.Len(t, adv, c.wantAdv, "advance bucket")
+			assert.Len(t, lose, c.wantLose, "lose bucket")
+			assert.Equal(t, len(input), len(win)+len(adv)+len(lose), "no team should be dropped")
+		})
 	}
 }
 
@@ -61,7 +62,9 @@ func TestSwiss_RequiredPredictions(t *testing.T) {
 		{32, 20},
 	}
 	for _, c := range cases {
-		assert.Equal(t, c.want, swissFormat{}.RequiredPredictions(c.teams), "teamCount=%d", c.teams)
+		t.Run(fmt.Sprintf("%d teams", c.teams), func(t *testing.T) {
+			assert.Equal(t, c.want, swissFormat{}.RequiredPredictions(c.teams))
+		})
 	}
 }
 
@@ -252,6 +255,14 @@ func TestCalculateSwissScores_PendingMatches(t *testing.T) {
 	assert.Equal(t, "0-0", scores["TeamC"])
 }
 
+func TestSwissRecords(t *testing.T) {
+	records := SwissRecords([]sources.MatchNode{
+		{ID: "1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA"},
+		{ID: "2", Team1: "TeamA", Team2: "TeamC", Winner: "TBD"},
+	})
+	assert.Equal(t, map[string]string{"TeamA": "1-0", "TeamB": "0-1", "TeamC": "0-0"}, records)
+}
+
 // TestCalculateSwissScores_EmptyInput tests with no matches
 func TestCalculateSwissScores_EmptyInput(t *testing.T) {
 	scores, err := calculateSwissScores([]sources.MatchNode{})
@@ -310,9 +321,10 @@ func TestNormalizeSwissSections(t *testing.T) {
 		{"Quarterfinals", "Quarterfinals"},
 	}
 	for _, c := range cases {
-		nodes := []sources.MatchNode{{Section: c.input}}
-		got := NormalizeSwissSections(nodes)
-		assert.Equal(t, c.want, got[0].Section, "input: %q", c.input)
+		t.Run(c.input, func(t *testing.T) {
+			got := NormalizeSwissSections([]sources.MatchNode{{Section: c.input}})
+			assert.Equal(t, c.want, got[0].Section)
+		})
 	}
 }
 

@@ -1,0 +1,10 @@
+# Secrets and per-deployment config are supplied at runtime, never built in.
+.env
+config.toml
+
+.git
+.github
+.idea
+*.out
+/pickems-bot
+/main

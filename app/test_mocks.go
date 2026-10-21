@@ -1,5 +1,5 @@
 /* test_mocks.go
- * Contains mock structures and interfaces for testing the App package
+ * MockStore implementing store.Interface for unit tests.
  * Authors: Zachary Bower
  */
 
@@ -15,82 +15,217 @@ import (
 	"pickems-bot/store"
 	"pickems-bot/tournament"
 
-	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/time/rate"
 )
 
-// MockStore implements the Store interface for testing
+// MockStore implements store.Interface for testing.
 type MockStore struct {
-	// Storage for mock data
 	Predictions      map[string]models.Prediction
 	MatchResults     tournament.MatchResult
 	ScheduledMatches []sources.ScheduledMatch
 	ValidTeams       []string
 	Format           tournament.Kind
+	VRSEntries       []store.VRSEntry
+	Leaderboard      []store.LeaderboardEntry
+	MatchNodes       []sources.MatchNode
+	MatchKind        tournament.Kind
+	GuildConfig      store.GuildConfig
+	// UpsertedGuildConfig captures the last config passed to UpsertGuildConfig, for assertions.
+	UpsertedGuildConfig *store.GuildConfig
+	// TournamentStillReferencedResult is returned by TournamentStillReferenced.
+	TournamentStillReferencedResult bool
+	// ListTrackedTournamentIDsResult is returned by ListTrackedTournamentIDs.
+	ListTrackedTournamentIDsResult []int
 
-	// VRS data
-	VRSEntries []store.VRSEntry
+	// Error injection
+	EnsureTournamentError          error
+	PingError                      error
+	GetGuildConfigError            error
+	UpsertGuildConfigError         error
+	TournamentStillReferencedError error
+	ListTrackedTournamentIDsError  error
+	EnsureScheduledMatchesError    error
+	ListValidTeamsError            error
+	GetMatchResultsError           error
+	UpsertMatchResultsError        error
+	FetchAndSaveMatchResultsError  error
+	GetMatchNodesError             error
+	GetMatchScheduleError          error
+	UpsertMatchScheduleError       error
+	FetchAndSaveScheduleError      error
+	UpsertPredictionError          error
+	GetPredictionError             error
+	GetPredictionByUsernameError   error
+	ListPredictionsError           error
+	GetLeaderboardError            error
+	ListVRSRankingsError           error
 
-	// Error injection for testing error paths
-	EnsureScheduledMatchesError      error
-	GetValidTeamsError               error
-	StoreUserPredictionError         error
-	GetUserPredictionError           error
-	GetUserPredictionByUsernameError error
-	GetMatchResultsError             error
-	GetAllUserPredictionsError       error
-	FetchMatchScheduleError          error
-	StoreMatchScheduleError          error
-	StoreMatchScheduleCallCount      int
-	FetchAndUpdateMatchResultsError  error
-	StoreLeaderboardError            error
-	FetchLeaderboardFromDBError      error
-	FetchVrsDataFromDBError          error
-	FetchAndStoreScheduleError       error
-	FetchMatchNodesFromDbError       error
-	PingError                        error
+	StoreMatchScheduleCallCount       int
+	FetchAndSaveMatchResultsCallCount int
+	Tournaments                       []store.Tournament
+	ListTournamentNamesError          error
+	ListRoundsError                   error
+	GetTournamentError                error
+	EnsureGuildError                  error
 
-	MatchNodes []sources.MatchNode
-	MatchKind  tournament.Kind
+	SyncedTournaments            []store.TournamentCatalogEntry
+	SyncTournamentsError         error
+	SyncTournamentsNewlyFinished []int
+	SyncedStandings              []store.VRSEntry
+	SyncStandingsResult          bool
+	SyncStandingsError           error
 
-	// Leaderboard storage
-	Leaderboard       []store.LeaderboardEntry
-	LeaderboardStored chan struct{}
+	SetFormatID              int
+	SetFormatValue           string
+	SetTournamentFormatError error
 
-	// Database and Round info
-	DatabaseName string
-	RoundName    string
-
-	// Store fields needed for compatibility
-	Round    string
-	Database interface{ Name() string }
+	ScoredPredictions    []models.Prediction
+	ScorePredictionError error
 }
 
-// mockDatabase implements the minimal Database interface needed for tests
-type mockDatabase struct {
-	name string
-}
-
-func (m *mockDatabase) Name() string {
-	return m.name
-}
-
-// NewMockStore creates a new MockStore with default values
+// NewMockStore creates a MockStore pre-wired for the given format and round.
 func NewMockStore(kind tournament.Kind, round string) *MockStore {
+	tournamentID := 1
+	format := string(kind)
+	cfg := store.GuildConfig{
+		GuildID:      "test_guild",
+		TournamentID: &tournamentID,
+		Round:        &round,
+		Format:       &format,
+	}
 	return &MockStore{
 		Predictions:      make(map[string]models.Prediction),
 		ScheduledMatches: []sources.ScheduledMatch{},
 		ValidTeams:       []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J", "Team K", "Team L", "Team M", "Team N", "Team O", "Team P"},
 		Format:           kind,
-		DatabaseName:     "test_db",
-		RoundName:        round,
-		Round:            round,
-		Database:         &mockDatabase{name: "test_db"},
+		GuildConfig:      cfg,
 	}
 }
 
-// EnsureScheduledMatches mock implementation
-func (m *MockStore) EnsureScheduledMatches() error {
+// EnsureTournament implements store.Interface.
+func (m *MockStore) EnsureTournament(_ context.Context, _, _, _ string, _ int) (int, error) {
+	if m.EnsureTournamentError != nil {
+		return 0, m.EnsureTournamentError
+	}
+	return 1, nil
+}
+
+// Ping implements store.Interface.
+func (m *MockStore) Ping(ctx context.Context) error { return m.PingError }
+
+// Close implements store.Interface.
+func (m *MockStore) Close() {}
+
+// GetGuildConfig implements store.Interface.
+func (m *MockStore) GetGuildConfig(ctx context.Context, guildID, channelID string) (store.GuildConfig, error) {
+	if m.GetGuildConfigError != nil {
+		return store.GuildConfig{}, m.GetGuildConfigError
+	}
+	return m.GuildConfig, nil
+}
+
+// UpsertGuildConfig implements store.Interface.
+func (m *MockStore) UpsertGuildConfig(ctx context.Context, cfg store.GuildConfig) error {
+	m.UpsertedGuildConfig = &cfg
+	return m.UpsertGuildConfigError
+}
+
+// EnsureGuild implements store.Interface.
+func (m *MockStore) EnsureGuild(ctx context.Context, guildID string) error {
+	return m.EnsureGuildError
+}
+
+// TournamentStillReferenced implements store.Interface.
+func (m *MockStore) TournamentStillReferenced(ctx context.Context, tournamentID int) (bool, error) {
+	return m.TournamentStillReferencedResult, m.TournamentStillReferencedError
+}
+
+// ListTrackedTournamentIDs implements store.Interface.
+func (m *MockStore) ListTrackedTournamentIDs(ctx context.Context) ([]int, error) {
+	return m.ListTrackedTournamentIDsResult, m.ListTrackedTournamentIDsError
+}
+
+// ListTournamentNames implements store.Interface, deriving distinct names from
+// the seeded Tournaments slice.
+func (m *MockStore) ListTournamentNames(_ context.Context) ([]string, error) {
+	if m.ListTournamentNamesError != nil {
+		return nil, m.ListTournamentNamesError
+	}
+	seen := map[string]bool{}
+	var names []string
+	for _, t := range m.Tournaments {
+		if !seen[t.Name] {
+			seen[t.Name] = true
+			names = append(names, t.Name)
+		}
+	}
+	return names, nil
+}
+
+// ListRoundsForTournament implements store.Interface, returning the non-empty
+// rounds of seeded tournaments sharing the given name.
+func (m *MockStore) ListRoundsForTournament(_ context.Context, name string) ([]string, error) {
+	if m.ListRoundsError != nil {
+		return nil, m.ListRoundsError
+	}
+	var rounds []string
+	for _, t := range m.Tournaments {
+		if t.Name == name && t.Round != "" {
+			rounds = append(rounds, t.Round)
+		}
+	}
+	return rounds, nil
+}
+
+// GetTournamentByNameAndRound implements store.Interface, resolving a (name, round)
+// pair against the seeded Tournaments slice.
+func (m *MockStore) GetTournamentByNameAndRound(_ context.Context, name, round string) (store.Tournament, error) {
+	if m.GetTournamentError != nil {
+		return store.Tournament{}, m.GetTournamentError
+	}
+	for _, t := range m.Tournaments {
+		if t.Name == name && t.Round == round {
+			return t, nil
+		}
+	}
+	return store.Tournament{}, fmt.Errorf("tournament not found: %s / %s", name, round)
+}
+
+// GetTournament implements store.Interface, resolving by internal id against the
+// seeded Tournaments slice.
+func (m *MockStore) GetTournament(_ context.Context, id int) (store.Tournament, error) {
+	if m.GetTournamentError != nil {
+		return store.Tournament{}, m.GetTournamentError
+	}
+	for _, t := range m.Tournaments {
+		if t.ID == id {
+			return t, nil
+		}
+	}
+	return store.Tournament{}, fmt.Errorf("tournament not found: id=%d", id)
+}
+
+// SyncTournaments implements store.Interface, recording the active set it was
+// given and returning the configured SyncTournamentsNewlyFinished ids.
+func (m *MockStore) SyncTournaments(_ context.Context, active []store.TournamentCatalogEntry) ([]int, error) {
+	if m.SyncTournamentsError != nil {
+		return nil, m.SyncTournamentsError
+	}
+	m.SyncedTournaments = active
+	return m.SyncTournamentsNewlyFinished, nil
+}
+
+// SetTournamentFormat implements store.Interface, recording the last (id, format) set.
+func (m *MockStore) SetTournamentFormat(_ context.Context, id int, format string) error {
+	if m.SetTournamentFormatError != nil {
+		return m.SetTournamentFormatError
+	}
+	m.SetFormatID, m.SetFormatValue = id, format
+	return nil
+}
+
+// EnsureScheduledMatches implements store.Interface.
+func (m *MockStore) EnsureScheduledMatches(ctx context.Context, tournamentID int) error {
 	if m.EnsureScheduledMatchesError != nil {
 		return m.EnsureScheduledMatchesError
 	}
@@ -100,51 +235,16 @@ func (m *MockStore) EnsureScheduledMatches() error {
 	return nil
 }
 
-// GetValidTeams mock implementation
-func (m *MockStore) GetValidTeams() ([]string, tournament.Kind, error) {
-	if m.GetValidTeamsError != nil {
-		return nil, "", m.GetValidTeamsError
+// ListValidTeams implements store.Interface.
+func (m *MockStore) ListValidTeams(ctx context.Context, tournamentID int, round string) ([]string, tournament.Kind, error) {
+	if m.ListValidTeamsError != nil {
+		return nil, "", m.ListValidTeamsError
 	}
 	return m.ValidTeams, m.Format, nil
 }
 
-// StoreUserPrediction mock implementation
-func (m *MockStore) StoreUserPrediction(userID string, prediction models.Prediction) error {
-	if m.StoreUserPredictionError != nil {
-		return m.StoreUserPredictionError
-	}
-	m.Predictions[userID] = prediction
-	return nil
-}
-
-// GetUserPrediction mock implementation
-func (m *MockStore) GetUserPrediction(userID string) (models.Prediction, error) {
-	if m.GetUserPredictionError != nil {
-		return models.Prediction{}, m.GetUserPredictionError
-	}
-	pred, ok := m.Predictions[userID]
-	if !ok {
-		return models.Prediction{}, mongo.ErrNoDocuments
-	}
-	return pred, nil
-}
-
-// GetUserPredictionByUsername mock implementation — case-insensitive search over stored predictions
-func (m *MockStore) GetUserPredictionByUsername(username string) (models.Prediction, error) {
-	if m.GetUserPredictionByUsernameError != nil {
-		return models.Prediction{}, m.GetUserPredictionByUsernameError
-	}
-	lower := strings.ToLower(username)
-	for _, pred := range m.Predictions {
-		if strings.ToLower(pred.Username) == lower {
-			return pred, nil
-		}
-	}
-	return models.Prediction{}, mongo.ErrNoDocuments
-}
-
-// GetMatchResults mock implementation
-func (m *MockStore) GetMatchResults() (tournament.MatchResult, error) {
+// GetMatchResults implements store.Interface.
+func (m *MockStore) GetMatchResults(ctx context.Context, tournamentID int, round string) (tournament.MatchResult, error) {
 	if m.GetMatchResultsError != nil {
 		return nil, m.GetMatchResultsError
 	}
@@ -154,164 +254,167 @@ func (m *MockStore) GetMatchResults() (tournament.MatchResult, error) {
 	return m.MatchResults, nil
 }
 
-// GetAllUserPredictions mock implementation
-func (m *MockStore) GetAllUserPredictions() ([]models.Prediction, error) {
-	if m.GetAllUserPredictionsError != nil {
-		return nil, m.GetAllUserPredictionsError
-	}
-
-	var predictions []models.Prediction
-	for _, pred := range m.Predictions {
-		predictions = append(predictions, pred)
-	}
-
-	if len(predictions) == 0 {
-		return nil, mongo.ErrNoDocuments
-	}
-
-	return predictions, nil
+// UpsertMatchResults implements store.Interface.
+func (m *MockStore) UpsertMatchResults(ctx context.Context, tournamentID int, result tournament.MatchResult) error {
+	return m.UpsertMatchResultsError
 }
 
-// FetchMatchSchedule mock implementation
-func (m *MockStore) FetchMatchSchedule() ([]sources.ScheduledMatch, error) {
-	if m.FetchMatchScheduleError != nil {
-		return nil, m.FetchMatchScheduleError
+// FetchAndSaveMatchResults implements store.Interface.
+func (m *MockStore) FetchAndSaveMatchResults(ctx context.Context, tournamentID int, round string) error {
+	m.FetchAndSaveMatchResultsCallCount++
+	return m.FetchAndSaveMatchResultsError
+}
+
+// GetMatchNodes implements store.Interface.
+func (m *MockStore) GetMatchNodes(ctx context.Context, tournamentID int, round string) ([]sources.MatchNode, tournament.Kind, error) {
+	if m.GetMatchNodesError != nil {
+		return nil, "", m.GetMatchNodesError
+	}
+	return m.MatchNodes, m.MatchKind, nil
+}
+
+// GetMatchSchedule implements store.Interface.
+func (m *MockStore) GetMatchSchedule(ctx context.Context, tournamentID int) ([]sources.ScheduledMatch, error) {
+	if m.GetMatchScheduleError != nil {
+		return nil, m.GetMatchScheduleError
 	}
 	return m.ScheduledMatches, nil
 }
 
-// StoreMatchSchedule mock implementation
-func (m *MockStore) StoreMatchSchedule(matches []sources.ScheduledMatch) error {
+// UpsertMatchSchedule implements store.Interface.
+func (m *MockStore) UpsertMatchSchedule(ctx context.Context, tournamentID int, matches []sources.ScheduledMatch) error {
 	m.StoreMatchScheduleCallCount++
-	if m.StoreMatchScheduleError != nil {
-		return m.StoreMatchScheduleError
+	if m.UpsertMatchScheduleError != nil {
+		return m.UpsertMatchScheduleError
 	}
 	m.ScheduledMatches = matches
 	return nil
 }
 
-// Helper methods for setting up test scenarios
-
-// SetSwissResults sets up mock Swiss tournament results
-func (m *MockStore) SetSwissResults(scores map[string]string) {
-	m.MatchResults = tournament.SwissResult{
-		Round: m.RoundName,
-		Teams: scores,
-	}
+// FetchAndSaveSchedule implements store.Interface.
+func (m *MockStore) FetchAndSaveSchedule(ctx context.Context, tournamentID int) error {
+	return m.FetchAndSaveScheduleError
 }
 
-// SetEliminationResults sets up mock single-elimination tournament results
-func (m *MockStore) SetEliminationResults(progression map[string]models.TeamProgress) {
-	m.MatchResults = tournament.EliminationResult{
-		Round: m.RoundName,
-		Teams: progression,
+// UpsertPrediction implements store.Interface.
+func (m *MockStore) UpsertPrediction(ctx context.Context, guildID string, tournamentID int, prediction models.Prediction) error {
+	if m.UpsertPredictionError != nil {
+		return m.UpsertPredictionError
 	}
+	m.Predictions[prediction.UserID] = prediction
+	return nil
+}
+
+// ScorePrediction implements store.Interface.
+func (m *MockStore) ScorePrediction(ctx context.Context, guildID string, tournamentID int, round string, prediction models.Prediction) error {
+	m.ScoredPredictions = append(m.ScoredPredictions, prediction)
+	return m.ScorePredictionError
+}
+
+// GetPrediction implements store.Interface.
+func (m *MockStore) GetPrediction(ctx context.Context, userID, guildID string, tournamentID int, round string) (models.Prediction, error) {
+	if m.GetPredictionError != nil {
+		return models.Prediction{}, m.GetPredictionError
+	}
+	pred, ok := m.Predictions[userID]
+	if !ok {
+		return models.Prediction{}, fmt.Errorf("prediction not found for user %s", userID)
+	}
+	return pred, nil
+}
+
+// GetPredictionByUsername implements store.Interface.
+func (m *MockStore) GetPredictionByUsername(ctx context.Context, username, guildID string, tournamentID int, round string) (models.Prediction, error) {
+	if m.GetPredictionByUsernameError != nil {
+		return models.Prediction{}, m.GetPredictionByUsernameError
+	}
+	lower := strings.ToLower(username)
+	for _, pred := range m.Predictions {
+		if strings.ToLower(pred.Username) == lower {
+			return pred, nil
+		}
+	}
+	return models.Prediction{}, fmt.Errorf("prediction not found for username %s", username)
+}
+
+// ListPredictions implements store.Interface.
+func (m *MockStore) ListPredictions(ctx context.Context, guildID string, tournamentID int, round string) ([]models.Prediction, error) {
+	if m.ListPredictionsError != nil {
+		return nil, m.ListPredictionsError
+	}
+	var out []models.Prediction
+	for _, p := range m.Predictions {
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+// GetLeaderboard implements store.Interface.
+func (m *MockStore) GetLeaderboard(ctx context.Context, guildID string, tournamentID int) ([]store.LeaderboardEntry, error) {
+	if m.GetLeaderboardError != nil {
+		return nil, m.GetLeaderboardError
+	}
+	return m.Leaderboard, nil
+}
+
+// ListVRSRankings implements store.Interface.
+func (m *MockStore) ListVRSRankings(ctx context.Context) ([]store.VRSEntry, error) {
+	if m.ListVRSRankingsError != nil {
+		return nil, m.ListVRSRankingsError
+	}
+	return m.VRSEntries, nil
+}
+
+// SyncStandings implements store.Interface, recording the entries it was given.
+func (m *MockStore) SyncStandings(_ context.Context, entries []store.VRSEntry) (bool, error) {
+	if m.SyncStandingsError != nil {
+		return false, m.SyncStandingsError
+	}
+	m.SyncedStandings = entries
+	return m.SyncStandingsResult, nil
+}
+
+// --- Test setup helpers ---
+
+// SetSwissResults configures the mock to return a SwissResult for GetMatchResults calls.
+func (m *MockStore) SetSwissResults(scores map[string]string) {
+	round := ""
+	if m.GuildConfig.Round != nil {
+		round = *m.GuildConfig.Round
+	}
+	m.MatchResults = tournament.SwissResult{Round: round, Teams: scores}
+}
+
+// SetEliminationResults configures the mock to return an EliminationResult for GetMatchResults calls.
+func (m *MockStore) SetEliminationResults(progression map[string]models.TeamProgress) {
+	round := ""
+	if m.GuildConfig.Round != nil {
+		round = *m.GuildConfig.Round
+	}
+	m.MatchResults = tournament.EliminationResult{Round: round, Teams: progression}
 	m.Format = tournament.SingleElim
-	// Update valid teams from progression
 	m.ValidTeams = make([]string, 0, len(progression))
 	for team := range progression {
 		m.ValidTeams = append(m.ValidTeams, team)
 	}
 }
 
-// SetScheduleError sets an error for FetchMatchSchedule (convenience method)
-func (m *MockStore) SetScheduleError(err error) {
-	m.FetchMatchScheduleError = err
-}
-
-// SetScheduledMatches sets up mock scheduled matches
+// SetScheduledMatches sets the scheduled matches returned by GetMatchSchedule and EnsureScheduledMatches.
 func (m *MockStore) SetScheduledMatches(matches []sources.ScheduledMatch) {
 	m.ScheduledMatches = matches
 }
 
-// GetDatabase returns the mock database interface
-func (m *MockStore) GetDatabase() interface{ Name() string } {
-	return m.Database
-}
-
-// GetRound returns the round name
-func (m *MockStore) GetRound() string {
-	return m.Round
-}
-
-// FetchAndStoreSchedule mock implementation
-func (m *MockStore) FetchAndStoreSchedule() error {
-	return m.FetchAndStoreScheduleError
-}
-
-// mockClient implements minimal client interface
-type mockClient struct{}
-
-func (mc *mockClient) Disconnect(ctx context.Context) error {
-	return nil
-}
-
-// GetClient returns the mock MongoDB client
-func (m *MockStore) GetClient() interface{ Disconnect(context.Context) error } {
-	return &mockClient{}
-}
-
-// FetchAndUpdateMatchResults mock implementation
-func (m *MockStore) FetchAndUpdateMatchResults() error {
-	if m.FetchAndUpdateMatchResultsError != nil {
-		return m.FetchAndUpdateMatchResultsError
-	}
-	return nil
-}
-
-// FetchMatchNodesFromDb mock implementation
-func (m *MockStore) FetchMatchNodesFromDb() ([]sources.MatchNode, tournament.Kind, error) {
-	if m.FetchMatchNodesFromDbError != nil {
-		return nil, "", m.FetchMatchNodesFromDbError
-	}
-	return m.MatchNodes, m.MatchKind, nil
-}
-
-// StoreLeaderboard mock implementation
-func (m *MockStore) StoreLeaderboard(leaderboard store.Leaderboard) error {
-	if m.StoreLeaderboardError != nil {
-		return m.StoreLeaderboardError
-	}
-	m.Leaderboard = leaderboard.Entries
-	if m.LeaderboardStored != nil {
-		select {
-		case m.LeaderboardStored <- struct{}{}:
-		default:
-		}
-	}
-	return nil
-}
-
-// FetchLeaderboardFromDB mock implementation
-func (m *MockStore) FetchLeaderboardFromDB() ([]store.LeaderboardEntry, error) {
-	if m.FetchLeaderboardFromDBError != nil {
-		return nil, m.FetchLeaderboardFromDBError
-	}
-	return m.Leaderboard, nil
-}
-
-// Ping mock implementation returns PingError
-func (m *MockStore) Ping(ctx context.Context) error { return m.PingError }
-
-// FetchVrsDataFromDB mock implementation
-func (m *MockStore) FetchVrsDataFromDB() ([]store.VRSEntry, error) {
-	if m.FetchVrsDataFromDBError != nil {
-		return nil, m.FetchVrsDataFromDBError
-	}
-	return m.VRSEntries, nil
-}
-
-// SetVRSEntries sets the mock VRS entries
+// SetVRSEntries sets the VRS entries returned by ListVRSRankings.
 func (m *MockStore) SetVRSEntries(entries []store.VRSEntry) {
 	m.VRSEntries = entries
 }
 
-// NewTestApp creates a minimal App for unit tests in other packages that need
-// an App instance with a rate limiter but without a real MongoDB connection.
-// The injected store is used as-is; callers are responsible for configuring it.
+// NewTestApp creates a minimal App for unit tests with unlimited rate limiters.
 func NewTestApp(s store.Interface) *App {
 	return &App{
-		Store:       s,
-		rateLimiter: rate.NewLimiter(rate.Inf, 1),
+		Store:             s,
+		pandaScoreLimiter: rate.NewLimiter(rate.Inf, 1),
+		liquipediaLimiter: rate.NewLimiter(rate.Inf, 1),
+		MonitoringPool:    newMonitoringPool(),
 	}
 }

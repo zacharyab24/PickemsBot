@@ -15,17 +15,21 @@ import (
 
 // Config holds the configuration for the web server
 type Config struct {
-	Addr   string
-	API    *app.App
-	Page   string // Liquipedia page path, used for webhook filtering
-	Logger *slog.Logger
+	Addr         string
+	API          *app.App
+	Page         string // Liquipedia page path, used for webhook filtering
+	TournamentID int    // tournament ID this server handles
+	Round        string // active round for this tournament
+	Logger       *slog.Logger
 }
 
 // Server is the HTTP server that handles webhook requests
 type Server struct {
-	api  *app.App
-	page string // Liquipedia page path, used for webhook filtering
-	log  *slog.Logger
+	api          *app.App
+	page         string // Liquipedia page path, used for webhook filtering
+	tournamentID int
+	round        string
+	log          *slog.Logger
 }
 
 // logger returns the server's logger, falling back to the global default when none was injected.
@@ -43,9 +47,11 @@ func Start(cfg Config) error {
 		serverLog = cfg.Logger.With("component", "web")
 	}
 	s := &Server{
-		api:  cfg.API,
-		page: cfg.Page,
-		log:  serverLog,
+		api:          cfg.API,
+		page:         cfg.Page,
+		tournamentID: cfg.TournamentID,
+		round:        cfg.Round,
+		log:          serverLog,
 	}
 
 	mux := http.NewServeMux()

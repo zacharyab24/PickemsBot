@@ -1,19 +1,11 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
-
-	"pickems-bot/app"
-	"pickems-bot/metrics"
-	"pickems-bot/sources"
-	"pickems-bot/tournament"
-
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/zacharyab24/pickems-renderer/render"
 )
 
 // LiquipediaEvent represents the webhook event payload from Liquipedia
@@ -61,73 +53,14 @@ func (s *Server) LiquipediaWebhookHandler(w http.ResponseWriter, r *http.Request
 
 	// Kick async pipeline – call into your existing packages (/api, /bot, etc)
 	go func(e LiquipediaEvent) {
-		if err := s.api.UpdateMatchSchedule(); err != nil {
+		ctx := context.Background()
+		if err := s.api.UpdateMatchSchedule(ctx, s.tournamentID, "liquipedia"); err != nil {
 			s.logger().Warn("update match schedule failed", "error", fmt.Errorf("webhook pipeline: %w", err))
 		}
-		if err := s.api.UpdateMatchResults(); err != nil {
+		if err := s.api.UpdateMatchResults(ctx, s.tournamentID, s.round, "liquipedia"); err != nil {
 			s.logger().Error("update match results failed", "error", fmt.Errorf("webhook pipeline: %w", err))
-			return
-		}
-		if err := s.api.GenerateLeaderboard(); err != nil {
-			s.logger().Error("generate leaderboard failed", "error", fmt.Errorf("webhook pipeline: %w", err))
-			return
-		}
-		if err := RenderResultsImage(s.api); err != nil {
-			s.logger().Error("render results image failed", "error", fmt.Errorf("webhook pipeline: %w", err))
 		}
 	}(event)
 
 	w.WriteHeader(http.StatusOK)
-}
-
-const resultImagePath = "resources/result.png"
-
-// RenderResultsImage fetches match nodes from the DB and regenerates the result image on disk.
-// It is called at startup and after each webhook update to ensure the image is always current.
-func RenderResultsImage(a *app.App) error {
-	timer := prometheus.NewTimer(metrics.ImageRenderDuration)
-	defer timer.ObserveDuration()
-
-	if err := os.MkdirAll("resources", 0755); err != nil {
-		return fmt.Errorf("failed to create resources directory: %w", err)
-	}
-	nodes, kind, err := a.Store.FetchMatchNodesFromDb()
-	if err != nil {
-		return fmt.Errorf("failed to fetch match nodes: %w", err)
-	}
-	if kind == "" {
-		return fmt.Errorf("kind was empty, cannot generate results image")
-	}
-	// Trim 3rd-place consolation match and normalise section names so the
-	// renderer places each match in the correct column. Liquipedia returns
-	// all bracket nodes with Section = "Bracket/8" (the template name), but
-	// the renderer groups by Section to build columns and only recognises
-	// names like "Quarterfinals", "Semifinals", "Grand Final".
-	if kind == tournament.SingleElim {
-		nodes = tournament.TrimSingleElimNodes(nodes)
-		nodes = tournament.NormalizeSingleElimSections(nodes)
-	}
-
-	renderNodes := toRenderNodes(nodes)
-	if err := render.RenderBracket(renderNodes, string(kind), a.Store.GetRound(), resultImagePath); err != nil {
-		return fmt.Errorf("RenderBracket failed: %w", err)
-	}
-	return nil
-}
-
-// toRenderNodes converts sources.MatchNode slice to the renderer's input type.
-// The two types are structurally identical; this bridges the package boundary.
-func toRenderNodes(nodes []sources.MatchNode) []render.MatchNode {
-	out := make([]render.MatchNode, len(nodes))
-	for i, n := range nodes {
-		out[i] = render.MatchNode{
-			ID:      n.ID,
-			Team1:   n.Team1,
-			Team2:   n.Team2,
-			Winner:  n.Winner,
-			Score:   n.Score,
-			Section: n.Section,
-		}
-	}
-	return out
 }

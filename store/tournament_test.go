@@ -1,0 +1,234 @@
+//go:build integration
+
+package store
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestListTournamentNames_DistinctOrderedByName(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	// Two rounds of the same tournament must collapse to one name in the picklist.
+	seedTournamentWithRound(t, "z1", "Zebra Cup", "Playoffs")
+	seedTournamentWithRound(t, "a1", "Alpha Major", "Qualifier")
+	seedTournamentWithRound(t, "a2", "Alpha Major", "Playoffs")
+
+	got, err := s.ListTournamentNames(ctx)
+	require.NoError(t, err)
+	// Distinct, ordered by name: Alpha before Zebra.
+	assert.Equal(t, []string{"Alpha Major", "Zebra Cup"}, got)
+}
+
+func TestListTournamentNames_Empty(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	got, err := s.ListTournamentNames(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+func TestListRoundsForTournament_ScopedAndOrdered(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	seedTournamentWithRound(t, "a1", "Alpha Major", "Qualifier")
+	seedTournamentWithRound(t, "a2", "Alpha Major", "Playoffs")
+	seedTournamentWithRound(t, "b1", "Beta Cup", "Group Stage")
+
+	got, err := s.ListRoundsForTournament(ctx, "Alpha Major")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Playoffs", "Qualifier"}, got) // ordered by round
+}
+
+func TestListRoundsForTournament_SkipsEmptyRounds(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	// A round-less row (round IS NULL) contributes nothing to the round picklist.
+	seedTournament(t, "Alpha Major", "swiss")
+
+	got, err := s.ListRoundsForTournament(ctx, "Alpha Major")
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+func TestGetTournamentByNameAndRound_ResolvesRow(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	seedTournamentWithRound(t, "a1", "Alpha Major", "Qualifier")
+	playoffsID := seedTournamentWithRound(t, "a2", "Alpha Major", "Playoffs")
+
+	got, err := s.GetTournamentByNameAndRound(ctx, "Alpha Major", "Playoffs")
+	require.NoError(t, err)
+	assert.Equal(t, playoffsID, got.ID)
+	assert.Equal(t, "Alpha Major", got.Name)
+	assert.Equal(t, "Playoffs", got.Round)
+}
+
+func TestGetTournamentByNameAndRound_NoMatch(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	seedTournamentWithRound(t, "a1", "Alpha Major", "Qualifier")
+
+	_, err := s.GetTournamentByNameAndRound(ctx, "Alpha Major", "Grand Final")
+	assert.Error(t, err)
+}
+
+func TestGetTournament_ByID(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	id := seedTournamentWithRound(t, "a1", "Alpha Major", "Qualifier")
+
+	got, err := s.GetTournament(ctx, id)
+	require.NoError(t, err)
+	assert.Equal(t, "Alpha Major", got.Name)
+	assert.Equal(t, "Qualifier", got.Round)
+}
+
+func TestSyncTournaments_UpsertsActiveSet(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	_, err := s.SyncTournaments(ctx, []TournamentCatalogEntry{
+		{ExternalID: "21474", Name: "BLAST Bounty Summer 2026", Round: "Qualifier", SeriesID: "10801"},
+		{ExternalID: "21475", Name: "BLAST Bounty Summer 2026", Round: "Playoffs", SeriesID: "10801"},
+	})
+	require.NoError(t, err)
+
+	names, err := s.ListTournamentNames(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"BLAST Bounty Summer 2026"}, names) // collapsed to one name
+
+	rounds, err := s.ListRoundsForTournament(ctx, "BLAST Bounty Summer 2026")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"Qualifier", "Playoffs"}, rounds)
+}
+
+func TestSyncTournaments_MarksDroppedAsFinished(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	_, err := s.SyncTournaments(ctx, []TournamentCatalogEntry{
+		{ExternalID: "1", Name: "Event A", Round: "Playoffs", SeriesID: "100"},
+		{ExternalID: "2", Name: "Event B", Round: "Playoffs", SeriesID: "200"},
+	})
+	require.NoError(t, err)
+
+	// Event B drops out of the active set -> swept to finished; A stays active.
+	newlyFinished, err := s.SyncTournaments(ctx, []TournamentCatalogEntry{
+		{ExternalID: "1", Name: "Event A", Round: "Playoffs", SeriesID: "100"},
+	})
+	require.NoError(t, err)
+
+	assert.False(t, tournamentFinished(t, ctx, "1"), "Event A still active")
+	assert.True(t, tournamentFinished(t, ctx, "2"), "Event B dropped -> finished")
+	assert.Equal(t, []int{tournamentID(t, ctx, "2")}, newlyFinished, "sweep returns Event B's id")
+}
+
+func TestSyncTournaments_ReactivatesReturningTournament(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	_, err := s.SyncTournaments(ctx, []TournamentCatalogEntry{
+		{ExternalID: "1", Name: "Event A", Round: "Playoffs", SeriesID: "100"},
+		{ExternalID: "2", Name: "Event B", Round: "Playoffs", SeriesID: "200"},
+	})
+	require.NoError(t, err)
+	_, err = s.SyncTournaments(ctx, []TournamentCatalogEntry{
+		{ExternalID: "1", Name: "Event A", Round: "Playoffs", SeriesID: "100"},
+	}) // B -> finished
+	require.NoError(t, err)
+	newlyFinished, err := s.SyncTournaments(ctx, []TournamentCatalogEntry{
+		{ExternalID: "1", Name: "Event A", Round: "Playoffs", SeriesID: "100"},
+		{ExternalID: "2", Name: "Event B", Round: "Playoffs", SeriesID: "200"},
+	}) // B reappears in the active set
+	require.NoError(t, err)
+
+	assert.False(t, tournamentFinished(t, ctx, "2"), "Event B reappeared -> reactivated")
+	assert.Empty(t, newlyFinished, "reactivation is not a finished-sweep transition")
+}
+
+func TestSyncTournaments_EmptyActiveError(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	_, err := s.SyncTournaments(ctx, nil)
+	assert.Error(t, err)
+}
+
+func tournamentFinished(t *testing.T, ctx context.Context, externalID string) bool {
+	t.Helper()
+	var finished bool
+	err := testPool.QueryRow(ctx,
+		`SELECT is_finished FROM tournaments WHERE source='pandascore' AND external_id=$1`, externalID).Scan(&finished)
+	require.NoError(t, err)
+	return finished
+}
+
+func tournamentID(t *testing.T, ctx context.Context, externalID string) int {
+	t.Helper()
+	var id int
+	err := testPool.QueryRow(ctx,
+		`SELECT id FROM tournaments WHERE source='pandascore' AND external_id=$1`, externalID).Scan(&id)
+	require.NoError(t, err)
+	return id
+}
+
+func TestEnsureTournament_UpsertsBySourceAndExternalID(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	first, err := s.EnsureTournament(ctx, "IEM/2026/Cologne", "liquipedia", "IEM Cologne", 0)
+	require.NoError(t, err)
+	again, err := s.EnsureTournament(ctx, "IEM/2026/Cologne", "liquipedia", "IEM Cologne 2026", 0)
+	require.NoError(t, err)
+	other, err := s.EnsureTournament(ctx, "IEM/2026/Cologne", "pandascore", "IEM Cologne", 5)
+	require.NoError(t, err)
+
+	assert.Equal(t, first, again, "same (source, external_id) should resolve to the same row")
+	assert.NotEqual(t, first, other)
+	got, err := s.GetTournament(ctx, first)
+	require.NoError(t, err)
+	assert.Equal(t, "IEM Cologne 2026", got.Name, "name should be refreshed on conflict")
+	assert.Nil(t, got.Format)
+	withSeries, err := s.GetTournament(ctx, other)
+	require.NoError(t, err)
+	assert.Equal(t, "5", withSeries.SeriesID)
+}
+
+func TestSetTournamentFormat_Overwrites(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+	id := seedTournamentNullFormat(t, "test-set-format")
+
+	require.NoError(t, s.SetTournamentFormat(ctx, id, "swiss"))
+	require.NoError(t, s.SetTournamentFormat(ctx, id, "double-elimination"))
+
+	got, err := s.GetTournament(ctx, id)
+	require.NoError(t, err)
+	require.NotNil(t, got.Format)
+	assert.Equal(t, "double-elimination", *got.Format)
+}

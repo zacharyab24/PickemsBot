@@ -1,7 +1,3 @@
-/* config_test.go
- * Tests for the config loader.
- */
-
 package config
 
 import (
@@ -10,25 +6,24 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func writeTemp(t *testing.T, contents string) string {
 	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.toml")
-	if err := os.WriteFile(path, []byte(contents), 0600); err != nil {
-		t.Fatalf("writeTemp: %v", err)
-	}
+	path := filepath.Join(t.TempDir(), "config.toml")
+	require.NoError(t, os.WriteFile(path, []byte(contents), 0600))
 	return path
 }
 
-func TestLoad_AllFields_Liquipedia(t *testing.T) {
+func TestLoad_Liquipedia(t *testing.T) {
 	path := writeTemp(t, `
-tournament_name = "MyEvent_2026"
 data_source = "liquipedia"
+tournament_name = "MyEvent_2026"
 round = "Stage_1"
-upcoming_only = true
 test = true
+log_level = "warn"
+dev_guild_id = "123"
 
 [liquipedia]
 api_url = "https://api.liquipedia.net/api/v3/match"
@@ -36,164 +31,108 @@ page = "Foo/2026/Bar/Stage_1"
 `)
 
 	cfg, err := Load(path)
-	assert.NoError(t, err)
-	assert.Equal(t, "MyEvent_2026", cfg.TournamentName)
-	assert.Equal(t, "liquipedia", cfg.DataSource)
-	assert.Equal(t, "https://api.liquipedia.net/api/v3/match", cfg.Liquipedia.APIURL)
-	assert.Equal(t, "Foo/2026/Bar/Stage_1", cfg.Liquipedia.Page)
-	assert.Equal(t, "Stage_1", cfg.Round)
-	assert.True(t, cfg.UpcomingOnly)
-	assert.True(t, cfg.Test)
+	require.NoError(t, err)
+	assert.Equal(t, Config{
+		DataSource:     "liquipedia",
+		GuildID:        "123",
+		Test:           true,
+		LogLevel:       "warn",
+		TournamentName: "MyEvent_2026",
+		Round:          "Stage_1",
+		Liquipedia:     LiquipediaConfig{APIURL: "https://api.liquipedia.net/api/v3/match", Page: "Foo/2026/Bar/Stage_1"},
+	}, cfg)
 }
 
-func TestLoad_AllFields_PandaScore(t *testing.T) {
+// PandaScore tournaments come from /config, so only the API URL is needed.
+func TestLoad_PandaScore_OnlyNeedsAPIURL(t *testing.T) {
 	path := writeTemp(t, `
-tournament_name = "MyEvent_2026"
 data_source = "pandascore"
-round = "Stage_1"
-upcoming_only = true
-test = true
 
 [pandascore]
 api_url = "https://api.pandascore.co/csgo/matches"
-series_id = 10583
 `)
 
 	cfg, err := Load(path)
-	assert.NoError(t, err)
-	assert.Equal(t, "MyEvent_2026", cfg.TournamentName)
+	require.NoError(t, err)
 	assert.Equal(t, "pandascore", cfg.DataSource)
 	assert.Equal(t, "https://api.pandascore.co/csgo/matches", cfg.PandaScore.APIURL)
-	assert.Equal(t, 10583, cfg.PandaScore.SeriesID)
-	assert.Equal(t, "Stage_1", cfg.Round)
-	assert.True(t, cfg.UpcomingOnly)
-	assert.True(t, cfg.Test)
-}
-
-func TestLoad_DefaultBoolsAndOptionalParams(t *testing.T) {
-	path := writeTemp(t, `
-tournament_name = "X"
-data_source = "liquipedia"
-round = "Z"
-
-[liquipedia]
-api_url = "https://api.liquipedia.net/api/v3/match"
-page = "Y/Z"
-`)
-
-	cfg, err := Load(path)
-	assert.NoError(t, err)
-	assert.False(t, cfg.UpcomingOnly)
 	assert.False(t, cfg.Test)
 }
 
-func TestLoad_MissingTournamentName(t *testing.T) {
+// Configs written before the field audit must still load.
+func TestLoad_IgnoresRetiredFields(t *testing.T) {
 	path := writeTemp(t, `
-data_source = "liquipedia"
-round = "Z"
-
-[liquipedia]
-api_url = "https://api.liquipedia.net/api/v3/match"
-page = "Y/Z"
-`)
-
-	_, err := Load(path)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "required")
-}
-
-func TestLoad_MissingPage(t *testing.T) {
-	path := writeTemp(t, `
-tournament_name = "X"
-data_source = "liquipedia"
-round = "Z"
-
-[liquipedia]
-api_url = "https://api.liquipedia.net/api/v3/match"
-`)
-
-	_, err := Load(path)
-	assert.Error(t, err)
-}
-
-func TestLoad_MissingAPIURL_Liquipedia(t *testing.T) {
-	path := writeTemp(t, `
-tournament_name = "X"
-data_source = "liquipedia"
-round = "Z"
-
-[liquipedia]
-page = "Y/Z"
-`)
-
-	_, err := Load(path)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "api_url")
-}
-
-func TestLoad_MissingRound(t *testing.T) {
-	path := writeTemp(t, `
-tournament_name = "X"
-data_source = "liquipedia"
-
-[liquipedia]
-api_url = "https://api.liquipedia.net/api/v3/match"
-page = "Y/Z"
-`)
-
-	_, err := Load(path)
-	assert.Error(t, err)
-}
-
-func TestLoad_MissingSeriesID(t *testing.T) {
-	path := writeTemp(t, `
-tournament_name = "X"
 data_source = "pandascore"
-round = "Z"
+tournament_name = "Old"
+round = "Playoffs"
+upcoming_only = false
+
+[liquipedia]
+params = ""
+format = ""
 
 [pandascore]
 api_url = "https://api.pandascore.co/csgo/matches"
+series_id = 10488
+tournament_id = 20710
 `)
 
 	_, err := Load(path)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "series_id")
+	assert.NoError(t, err)
 }
 
-func TestLoad_MissingAPIURL_PandaScore(t *testing.T) {
-	path := writeTemp(t, `
+func TestLoad_Invalid(t *testing.T) {
+	tests := map[string]struct {
+		contents  string
+		wantInErr string
+	}{
+		"liquipedia missing tournament_name": {`
+data_source = "liquipedia"
+round = "Z"
+[liquipedia]
+api_url = "u"
+page = "Y/Z"
+`, "tournament_name"},
+		"liquipedia missing round": {`
+data_source = "liquipedia"
 tournament_name = "X"
+[liquipedia]
+api_url = "u"
+page = "Y/Z"
+`, "round"},
+		"liquipedia missing page": {`
+data_source = "liquipedia"
+tournament_name = "X"
+round = "Z"
+[liquipedia]
+api_url = "u"
+`, "liquipedia.page"},
+		"liquipedia missing api_url": {`
+data_source = "liquipedia"
+tournament_name = "X"
+round = "Z"
+[liquipedia]
+page = "Y/Z"
+`, "liquipedia.api_url"},
+		"pandascore blank api_url": {`
 data_source = "pandascore"
-round = "Z"
-
 [pandascore]
-series_id = 12345
-`)
-
-	_, err := Load(path)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "api_url")
-}
-
-func TestLoad_UnsupportedDataSource(t *testing.T) {
-	path := writeTemp(t, `
-tournament_name = "X"
-data_source = "unknown"
-round = "Z"
-`)
-
-	_, err := Load(path)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported")
+api_url = "  "
+`, "pandascore.api_url"},
+		"unsupported data source": {`data_source = "hltv"`, "unsupported"},
+		"missing data source":     {`test = true`, "unsupported"},
+		"invalid toml":            {`this is not = valid toml [[[`, "decode"},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := Load(writeTemp(t, tt.contents))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantInErr)
+		})
+	}
 }
 
 func TestLoad_FileNotFound(t *testing.T) {
-	_, err := Load("/nonexistent/path/config.toml")
-	assert.Error(t, err)
-}
-
-func TestLoad_InvalidTOML(t *testing.T) {
-	path := writeTemp(t, "this is not = valid toml [[[")
-	_, err := Load(path)
+	_, err := Load(filepath.Join(t.TempDir(), "missing.toml"))
 	assert.Error(t, err)
 }
