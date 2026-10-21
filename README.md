@@ -62,8 +62,10 @@ Or via Docker (persistent — survives shell exit):
 
 ```bash
 docker build -t pickems-bot .
-docker run --env-file .env -v "$PWD/config.toml:/app/config.toml:ro" pickems-bot
+docker run --env-file .env -v "$PWD/config.toml:/app/config.toml:ro" -p 8080:8080 -p 9090:9090 pickems-bot
 ```
+
+`.env` and `config.toml` are excluded from the image (see `.dockerignore`), so they must be passed in at runtime as above.
 
 ## Changelog
 

@@ -22,11 +22,8 @@ WORKDIR /app
 
 COPY --from=builder /app/pickems .
 
-# Copy secrets
-COPY .env ./
-COPY config.toml ./
-
-# Required environment variables at runtime:
+# config.toml is mounted at /app/config.toml at runtime, never baked in.
+# Required environment variables at runtime (e.g. --env-file .env):
 #   DISCORD_PROD_TOKEN    - Discord bot token
 #   DISCORD_BETA_TOKEN    - Discord bot token (test server)
 #   POSTGRES_URI          - PostgreSQL connection string
