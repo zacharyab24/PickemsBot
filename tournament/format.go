@@ -74,9 +74,6 @@ type Format interface {
 	// (double-elimination, round-robin, other/unrecognised).
 	SupportsPredictions() bool
 
-	// DB Interaction
-	DecodeBSON(bytes []byte) (MatchResult, error)
-
 	// Parsing
 	BuildFromMatchNodes(nodes []sources.MatchNode, round string) (MatchResult, error)
 }

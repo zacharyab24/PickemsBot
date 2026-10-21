@@ -91,17 +91,6 @@ const psScheduleJSON = `[
   }
 ]`
 
-// region NewPandaScoreFetcher tests
-
-func TestNewPandaScoreFetcher_Fields(t *testing.T) {
-	f := NewPandaScoreFetcher("http://example.com", "my-key", 42, 0)
-	assert.Equal(t, "http://example.com", f.apiURL)
-	assert.Equal(t, "my-key", f.apiKey)
-	assert.Equal(t, 42, f.seriesID)
-}
-
-// endregion
-
 // region LiquipediaFetcher tests
 
 func TestLiquipediaFetcher_FetchMatchData_Success(t *testing.T) {

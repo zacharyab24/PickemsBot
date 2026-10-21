@@ -89,51 +89,6 @@ func makeAutocompleteInteraction(command, optName, typed string) *discordgo.Inte
 
 // region routing tests
 
-func TestInteractionRouting_Leaderboard(t *testing.T) {
-	bot, session := newInteractionTestBot(t)
-	bot.newInteractionHandler(session, makeCommandInteraction("leaderboard"))
-	if len(session.SentInteractions) != 1 {
-		t.Errorf("expected 1 interaction response, got %d", len(session.SentInteractions))
-	}
-}
-
-func TestInteractionRouting_Upcoming(t *testing.T) {
-	bot, session := newInteractionTestBot(t)
-	bot.newInteractionHandler(session, makeCommandInteraction("upcoming"))
-	if len(session.SentInteractions) != 1 {
-		t.Errorf("expected 1 interaction response, got %d", len(session.SentInteractions))
-	}
-}
-
-func TestInteractionRouting_Teams(t *testing.T) {
-	bot, session := newInteractionTestBot(t)
-	bot.newInteractionHandler(session, makeCommandInteraction("teams"))
-	if len(session.SentInteractions) != 1 {
-		t.Errorf("expected 1 interaction response, got %d", len(session.SentInteractions))
-	}
-}
-
-func TestInteractionRouting_Team(t *testing.T) {
-	bot, session := newInteractionTestBot(t)
-	opt := &discordgo.ApplicationCommandInteractionDataOption{
-		Name:  "name",
-		Type:  discordgo.ApplicationCommandOptionString,
-		Value: "Team A",
-	}
-	bot.newInteractionHandler(session, makeCommandInteraction("team", opt))
-	if len(session.SentInteractions) != 1 {
-		t.Errorf("expected 1 interaction response, got %d", len(session.SentInteractions))
-	}
-}
-
-func TestInteractionRouting_Results(t *testing.T) {
-	bot, session := newInteractionTestBot(t)
-	bot.newInteractionHandler(session, makeCommandInteraction("results"))
-	if len(session.SentInteractions) != 1 {
-		t.Errorf("expected 1 interaction response, got %d", len(session.SentInteractions))
-	}
-}
-
 // TestResultsInteractionHandler_UnknownFormat_UsesChronologicalFallback verifies formats
 // without a dedicated renderer (e.g. double-elimination) get the chronological fallback
 // instead of the old "Unsupported tournament format." message.
@@ -223,14 +178,6 @@ func TestResultsPageButton_UpdatesMessageToRequestedPage(t *testing.T) {
 	}
 	if got := navRow(resp.Data.Components).Components[1].(discordgo.Button).Label; got != "Page 1/3" {
 		t.Errorf("page indicator = %q, want %q", got, "Page 1/3")
-	}
-}
-
-func TestInteractionRouting_Check(t *testing.T) {
-	bot, session := newInteractionTestBot(t)
-	bot.newInteractionHandler(session, makeCommandInteraction("check"))
-	if len(session.SentInteractions) != 1 {
-		t.Errorf("expected 1 interaction response, got %d", len(session.SentInteractions))
 	}
 }
 

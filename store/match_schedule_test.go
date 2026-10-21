@@ -104,3 +104,29 @@ func TestEnsureScheduledMatches_AllCompleted(t *testing.T) {
 	err := s.EnsureScheduledMatches(ctx, tournamentID)
 	assert.NoError(t, err)
 }
+
+func TestFetchAndSaveSchedule_StoresChronologically(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStoreWithFetcher(t, mockFetcher{schedule: []sources.ScheduledMatch{
+		{Team1: "Late", Team2: "Match", EpochTime: 2_000_000_000, BestOf: "3"},
+		{Team1: "Early", Team2: "Match", EpochTime: 1_900_000_000, BestOf: "1"},
+	}})
+	tournamentID := seedTournament(t, "test-fetch-schedule", "swiss")
+
+	require.NoError(t, s.FetchAndSaveSchedule(ctx, tournamentID))
+
+	got, err := s.GetMatchSchedule(ctx, tournamentID)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.Equal(t, "Early", got[0].Team1)
+	assert.Equal(t, "Late", got[1].Team1)
+}
+
+func TestFetchAndSaveSchedule_FetcherError(t *testing.T) {
+	cleanDB(t)
+	s := newTestStoreWithFetcher(t, mockFetcher{err: assert.AnError})
+	tournamentID := seedTournament(t, "test-fetch-schedule-err", "swiss")
+
+	assert.ErrorIs(t, s.FetchAndSaveSchedule(context.Background(), tournamentID), assert.AnError)
+}

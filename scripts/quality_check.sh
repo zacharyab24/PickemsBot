@@ -116,9 +116,9 @@ fi
 run_stage 3 "Verify build" "go build ./..."
 
 # ============================================================================
-# Stage 4: Run go vet
+# Stage 4: Run go vet (integration-tagged files are only compiled with the tag)
 # ============================================================================
-run_stage 4 "Go vet" "go vet ./..."
+run_stage 4 "Go vet" "go vet ./... && go vet -tags=integration ./..."
 
 # ============================================================================
 # Stage 5: Install and run golint
@@ -155,7 +155,7 @@ if ! command -v staticcheck &> /dev/null; then
     go install honnef.co/go/tools/cmd/staticcheck@latest
 fi
 
-if staticcheck ./... 2>&1; then
+if staticcheck ./... 2>&1 && staticcheck -tags=integration ./... 2>&1; then
     print_success "Static analysis passed"
 else
     print_failure "Static analysis FAILED"
@@ -165,26 +165,38 @@ else
 fi
 
 # ============================================================================
-# Stage 7: Run tests with coverage
+# Stage 7: Unit tests (fast feedback before starting containers)
 # ============================================================================
-print_stage 7 "Run tests with coverage"
+run_stage 7 "Unit tests" "CI=true go test ./... -tags=test"
+
+# ============================================================================
+# Stage 8: Container runtime (store integration tests use testcontainers)
+# ============================================================================
+run_stage 8 "Container runtime available" "docker info > /dev/null"
+
+# ============================================================================
+# Stage 9: Unit + integration tests with coverage
+# -coverpkg counts code exercised by any package's tests, e.g. app code driven
+# through the bot handler tests.
+# ============================================================================
+print_stage 9 "Unit + integration tests with coverage"
 
 # Coverage file (use simple name in current directory to avoid path issues)
 COVERAGE_FILE="coverage.out"
 
-if CI=true go test ./... -tags=test -coverprofile="$COVERAGE_FILE" -v 2>&1; then
+if CI=true go test ./... -tags=test,integration -coverpkg=./... -coverprofile="$COVERAGE_FILE" -v 2>&1; then
     print_success "All tests passed"
 else
     print_failure "Tests FAILED"
     echo ""
-    echo -e "${RED}Build halted at stage 7: Run tests${NC}"
+    echo -e "${RED}Build halted at stage 9: Unit + integration tests${NC}"
     exit 1
 fi
 
 # ============================================================================
-# Stage 8: Check coverage threshold
+# Stage 10: Check coverage threshold
 # ============================================================================
-print_stage 8 "Check coverage threshold (minimum ${COVERAGE_THRESHOLD}%)"
+print_stage 10 "Check coverage threshold (minimum ${COVERAGE_THRESHOLD}%)"
 
 # Extract total coverage percentage
 coverage_output=$(go tool cover -func="$COVERAGE_FILE" | grep total: || echo "total: 0.0%")
@@ -201,16 +213,16 @@ if awk "BEGIN {exit !($coverage < $COVERAGE_THRESHOLD)}"; then
     echo -e "${YELLOW}To view detailed coverage report, run:${NC}"
     echo "  go tool cover -html=$COVERAGE_FILE"
     echo ""
-    echo -e "${RED}Build halted at stage 8: Coverage check${NC}"
+    echo -e "${RED}Build halted at stage 10: Coverage check${NC}"
     exit 1
 else
     print_success "Coverage ${coverage}% meets threshold of ${COVERAGE_THRESHOLD}%"
 fi
 
 # ============================================================================
-# Stage 9: Install and run govulncheck
+# Stage 11: Install and run govulncheck
 # ============================================================================
-print_stage 9 "Vulnerability check (govulncheck)"
+print_stage 11 "Vulnerability check (govulncheck)"
 
 # Check if govulncheck is installed, install if not
 if ! command -v govulncheck &> /dev/null; then
@@ -223,7 +235,7 @@ if govulncheck ./... 2>&1; then
 else
     print_failure "Vulnerability check FAILED"
     echo ""
-    echo -e "${RED}Build halted at stage 9: Vulnerability check${NC}"
+    echo -e "${RED}Build halted at stage 11: Vulnerability check${NC}"
     exit 1
 fi
 

@@ -6,9 +6,11 @@ package web
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"pickems-bot/app"
 
@@ -75,4 +77,36 @@ func TestPollerStatusHandler_MethodNotAllowed(t *testing.T) {
 	s.pollerStatusHandler(rec, req)
 
 	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
+}
+
+type fakeDiscord bool
+
+func (f fakeDiscord) IsConnected() bool { return bool(f) }
+
+func TestHealthHandler(t *testing.T) {
+	tests := map[string]struct {
+		pingErr   error
+		connected bool
+		wantCode  int
+		want      ResponseChecks
+	}{
+		"all healthy":          {nil, true, http.StatusOK, ResponseChecks{Postgres: "ok", Discord: "ok"}},
+		"postgres down":        {errors.New("refused"), true, http.StatusServiceUnavailable, ResponseChecks{Postgres: "error: refused", Discord: "ok"}},
+		"discord disconnected": {nil, false, http.StatusServiceUnavailable, ResponseChecks{Postgres: "ok", Discord: "disconnected"}},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			ms := app.NewMockStore("swiss", "test_round")
+			ms.PingError = tt.pingErr
+			s := &TelemetryServer{app: app.NewTestApp(ms), discord: fakeDiscord(tt.connected), startTime: time.Now()}
+			rec := httptest.NewRecorder()
+
+			s.healthHandler(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+
+			require.Equal(t, tt.wantCode, rec.Code)
+			var resp HealthResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, tt.want, resp.Checks)
+		})
+	}
 }

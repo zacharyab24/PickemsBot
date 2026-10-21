@@ -194,3 +194,41 @@ func tournamentID(t *testing.T, ctx context.Context, externalID string) int {
 	require.NoError(t, err)
 	return id
 }
+
+func TestEnsureTournament_UpsertsBySourceAndExternalID(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	first, err := s.EnsureTournament(ctx, "IEM/2026/Cologne", "liquipedia", "IEM Cologne", 0)
+	require.NoError(t, err)
+	again, err := s.EnsureTournament(ctx, "IEM/2026/Cologne", "liquipedia", "IEM Cologne 2026", 0)
+	require.NoError(t, err)
+	other, err := s.EnsureTournament(ctx, "IEM/2026/Cologne", "pandascore", "IEM Cologne", 5)
+	require.NoError(t, err)
+
+	assert.Equal(t, first, again, "same (source, external_id) should resolve to the same row")
+	assert.NotEqual(t, first, other)
+	got, err := s.GetTournament(ctx, first)
+	require.NoError(t, err)
+	assert.Equal(t, "IEM Cologne 2026", got.Name, "name should be refreshed on conflict")
+	assert.Nil(t, got.Format)
+	withSeries, err := s.GetTournament(ctx, other)
+	require.NoError(t, err)
+	assert.Equal(t, "5", withSeries.SeriesID)
+}
+
+func TestSetTournamentFormat_Overwrites(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+	id := seedTournamentNullFormat(t, "test-set-format")
+
+	require.NoError(t, s.SetTournamentFormat(ctx, id, "swiss"))
+	require.NoError(t, s.SetTournamentFormat(ctx, id, "double-elimination"))
+
+	got, err := s.GetTournament(ctx, id)
+	require.NoError(t, err)
+	require.NotNil(t, got.Format)
+	assert.Equal(t, "double-elimination", *got.Format)
+}

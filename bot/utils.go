@@ -2,7 +2,6 @@ package bot
 
 import (
 	"fmt"
-	"log/slog"
 	format "pickems-bot/tournament"
 	"sort"
 	"strings"
@@ -11,7 +10,6 @@ import (
 )
 
 const green = 0x57F287
-const red = 0xED4245
 
 // singleElimField formats a single-elimination predictions list as an embed field,
 // ordered Champion → Runner-up → 3rd/4th → … .
@@ -86,8 +84,6 @@ func swissBucketField(label string, entries []format.BucketEntry) *discordgo.Mes
 }
 
 // respondError sends an inline error message as an interaction response.
-// Use this in slash command handlers; sendError sends a standalone channel message
-// which leaves the interaction in a perpetual "thinking" state.
 func respondError(session DiscordSession, i *discordgo.Interaction, msg string) {
 	session.InteractionRespond(i, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -139,17 +135,5 @@ func (b *Bot) failDeferredPrivately(session DiscordSession, i *discordgo.Interac
 func (b *Bot) finalizeDeferred(session DiscordSession, i *discordgo.Interaction, action, msg string) {
 	if _, err := session.InteractionResponseEdit(i, &discordgo.WebhookEdit{Content: &msg}); err != nil {
 		b.logger().Error("failed to edit deferred response", "action", action, "error", err)
-	}
-}
-
-// sendError sends a red error embed to the given channel.
-func sendError(session DiscordSession, channelID string, msg string) {
-	embed := &discordgo.MessageEmbed{
-		Title:       "Error",
-		Description: msg,
-		Color:       red,
-	}
-	if _, err := session.ChannelMessageSendEmbed(channelID, embed); err != nil {
-		slog.Error("failed to send error embed", "error", fmt.Errorf("sendError: %w", err))
 	}
 }

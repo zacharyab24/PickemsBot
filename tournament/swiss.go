@@ -8,8 +8,6 @@ import (
 
 	"pickems-bot/models"
 	"pickems-bot/sources"
-
-	"go.mongodb.org/mongo-driver/bson"
 )
 
 // SwissResult is the unified in-memory + on-disk representation of a Swiss
@@ -205,15 +203,6 @@ func (swissFormat) CalculateScore(p models.Prediction, r MatchResult) (ScoreRepo
 			Failed:    failed,
 		},
 	}, nil
-}
-
-// DecodeBSON unmarshals a Swiss BSON record back into a SwissResult.
-func (swissFormat) DecodeBSON(b []byte) (MatchResult, error) {
-	var s SwissResult
-	if err := bson.Unmarshal(b, &s); err != nil {
-		return nil, fmt.Errorf("swiss: failed to decode BSON: %w", err)
-	}
-	return s, nil
 }
 
 // BuildFromMatchNodes assembles a SwissResult from parsed match nodes.

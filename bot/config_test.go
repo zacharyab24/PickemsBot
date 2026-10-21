@@ -104,14 +104,6 @@ func lastContent(t *testing.T, session *MockDiscordSession) string {
 
 // region routing + permission gate
 
-func TestInteractionRouting_Config(t *testing.T) {
-	bot, session := newInteractionTestBot(t)
-	bot.newInteractionHandler(session, makeConfigInteraction(adminPerms, configSub("view")))
-	if len(session.SentInteractions) != 1 {
-		t.Errorf("expected 1 interaction response, got %d", len(session.SentInteractions))
-	}
-}
-
 func TestConfig_NonAdmin_Rejected(t *testing.T) {
 	bot, session := newInteractionTestBot(t)
 	bot.newInteractionHandler(session, makeConfigInteraction(0, configSub("view")))

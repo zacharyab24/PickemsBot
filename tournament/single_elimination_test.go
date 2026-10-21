@@ -5,6 +5,7 @@
 package tournament
 
 import (
+	"fmt"
 	"testing"
 
 	"pickems-bot/models"
@@ -161,7 +162,9 @@ func TestSingleElim_RequiredPredictions(t *testing.T) {
 		{32, 16},
 	}
 	for _, c := range cases {
-		assert.Equal(t, c.want, singleElimFormat{}.RequiredPredictions(c.teams), "teamCount=%d", c.teams)
+		t.Run(fmt.Sprintf("%d teams", c.teams), func(t *testing.T) {
+			assert.Equal(t, c.want, singleElimFormat{}.RequiredPredictions(c.teams))
+		})
 	}
 }
 
@@ -309,7 +312,9 @@ func TestBracketDepth(t *testing.T) {
 		{16, 4}, // Bracket/16 + 3rd-place
 	}
 	for _, c := range cases {
-		assert.Equal(t, c.want, bracketDepth(c.n), "n=%d", c.n)
+		t.Run(fmt.Sprintf("%d matches", c.n), func(t *testing.T) {
+			assert.Equal(t, c.want, bracketDepth(c.n))
+		})
 	}
 }
 
@@ -379,9 +384,11 @@ func TestCanonicalElimRound(t *testing.T) {
 		{"Play-in Stage", "Play-in Stage"},
 	}
 	for _, tt := range tests {
-		if got := CanonicalElimRound(tt.input); got != tt.want {
-			t.Errorf("CanonicalElimRound(%q) = %q, want %q", tt.input, got, tt.want)
-		}
+		t.Run(tt.input, func(t *testing.T) {
+			if got := CanonicalElimRound(tt.input); got != tt.want {
+				t.Errorf("CanonicalElimRound(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
 	}
 }
 

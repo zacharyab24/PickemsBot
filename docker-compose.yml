@@ -64,9 +64,3 @@ services:
     command: -config.file=/etc/promtail/config.yml
     restart: unless-stopped
 
-  test-server:
-    image: ghcr.io/zacharyab24/pickems-test-server:latest
-    ports:
-      - "8081:8081"
-    profiles:
-      - integration

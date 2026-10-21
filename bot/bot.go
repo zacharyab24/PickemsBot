@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"pickems-bot/app"
 	"pickems-bot/tournament"
-	"strings"
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
@@ -64,19 +63,4 @@ func NewBot(botToken string, apiPtr *app.App, log *slog.Logger, devGuildID strin
 // IsConnected reports whether the Discord gateway session is open
 func (b *Bot) IsConnected() bool {
 	return b.session != nil && b.session.DataReady
-}
-
-// startsWith is an internal helper to check if a string starts with a given substring
-func startsWith(inputString string, substring string) bool {
-	//Check if the substring is present in the input string
-	if !strings.Contains(inputString, substring) {
-		return false
-	}
-	strLength := len(substring)
-	for i := range strLength {
-		if inputString[i] != substring[i] {
-			return false
-		}
-	}
-	return true
 }

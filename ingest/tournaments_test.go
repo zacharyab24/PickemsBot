@@ -8,10 +8,14 @@ package ingest
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"pickems-bot/app"
+	"pickems-bot/internal/testutil"
 	"pickems-bot/store"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func newTestSync(a *app.App) *TournamentSync {
@@ -61,5 +65,84 @@ func TestFinalizeFinishedTournament_ResultsFetchError_Propagates(t *testing.T) {
 
 	if err := sync.finalizeFinishedTournament(context.Background(), 7); err == nil {
 		t.Error("expected the results fetch error to propagate")
+	}
+}
+
+// pandaScoreCatalog serves the upcoming and running tournament listings.
+func pandaScoreCatalog(upcoming, running string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/csgo/tournaments/upcoming":
+			_, _ = w.Write([]byte(upcoming))
+		case "/csgo/tournaments/running":
+			_, _ = w.Write([]byte(running))
+		default:
+			http.NotFound(w, r)
+		}
+	}
+}
+
+func TestTournamentSync_RunOnce_SyncsUpcomingAndRunning(t *testing.T) {
+	testutil.RouteDefaultClient(t, pandaScoreCatalog(
+		`[{"id": 11, "name": "Playoffs", "serie_id": 3, "league": {"name": "IEM"}, "serie": {"name": "Cologne 2026"}}]`,
+		`[{"id": 12, "name": "Stage 1", "serie_id": 4, "league": {"name": "BLAST"}, "serie": {"full_name": "Bounty Summer"}}]`,
+	))
+	ms := app.NewMockStore("swiss", "test_round")
+
+	newTestSync(app.NewTestApp(ms)).runOnce(context.Background())
+
+	assert.Equal(t, []store.TournamentCatalogEntry{
+		{ExternalID: "11", Name: "IEM Cologne 2026", Round: "Playoffs", SeriesID: "3"},
+		{ExternalID: "12", Name: "BLAST Bounty Summer", Round: "Stage 1", SeriesID: "4"},
+	}, ms.SyncedTournaments)
+}
+
+// A tournament leaving the active set gets one last results fetch and is
+// dropped from the pool; anything still configured but missing is re-added.
+func TestTournamentSync_RunOnce_FinalizesFinishedAndReconcilesPool(t *testing.T) {
+	testutil.RouteDefaultClient(t, pandaScoreCatalog(`[{"id": 11, "name": "Playoffs", "league": {"name": "IEM"}}]`, `[]`))
+	ms := app.NewMockStore("swiss", "test_round")
+	ms.Tournaments = []store.Tournament{
+		{ID: 1, Source: "pandascore", ExternalID: "10", Round: "Group Stage"},
+		{ID: 2, Source: "pandascore", ExternalID: "11", Round: "Playoffs"},
+	}
+	ms.SyncTournamentsNewlyFinished = []int{1}
+	ms.ListTrackedTournamentIDsResult = []int{2}
+	a := app.NewTestApp(ms)
+	a.Subscribe(context.Background(), 1)
+
+	newTestSync(a).runOnce(context.Background())
+
+	assert.Equal(t, 1, ms.FetchAndSaveMatchResultsCallCount, "expected a final results fetch for the finished tournament")
+	ids := map[int]bool{}
+	for _, e := range a.Snapshot() {
+		ids[e.DBTournamentID] = true
+	}
+	assert.Equal(t, map[int]bool{2: true}, ids)
+}
+
+func TestTournamentSync_RunOnce_SkipsSyncOnBadFetch(t *testing.T) {
+	tests := map[string]http.HandlerFunc{
+		"running fetch fails": func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/csgo/tournaments/running" {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			_, _ = w.Write([]byte(`[{"id": 11, "name": "Playoffs"}]`))
+		},
+		"unauthorized":       func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusUnauthorized) },
+		"malformed response": func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("{")) },
+		// An empty set would mark every catalog row finished.
+		"empty active set": pandaScoreCatalog(`[]`, `[]`),
+	}
+	for name, h := range tests {
+		t.Run(name, func(t *testing.T) {
+			testutil.RouteDefaultClient(t, h)
+			ms := app.NewMockStore("swiss", "test_round")
+
+			newTestSync(app.NewTestApp(ms)).runOnce(context.Background())
+
+			assert.Nil(t, ms.SyncedTournaments)
+		})
 	}
 }

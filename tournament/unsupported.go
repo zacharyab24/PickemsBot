@@ -50,10 +50,6 @@ func (unsupportedFormat) PredictionFields(models.Prediction) ([]models.Predictio
 	return nil, ErrPredictionsUnsupported
 }
 
-func (unsupportedFormat) DecodeBSON([]byte) (MatchResult, error) {
-	return nil, ErrPredictionsUnsupported
-}
-
 func (unsupportedFormat) BuildFromMatchNodes([]sources.MatchNode, string) (MatchResult, error) {
 	return nil, ErrPredictionsUnsupported
 }

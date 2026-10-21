@@ -221,3 +221,31 @@ func TestListValidTeams(t *testing.T) {
 	assert.Contains(t, teams, "TeamDelta")
 	assert.NotContains(t, teams, "TBD")
 }
+
+func TestUpsertPrediction_SingleElim_RoundTrips(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournament(t, "test-single-elim", "single-elimination")
+	seedGuild(t, "guild-1")
+	seedUser(t, "user-1", "Player1")
+	for _, name := range []string{"TeamA", "TeamB", "TeamC", "TeamD"} {
+		seedTeam(t, name, "test", name)
+	}
+	progression := map[string]models.TeamProgress{
+		"TeamA": {Round: "Grand Final", Status: "advanced"},
+		"TeamB": {Round: "Grand Final", Status: "eliminated"},
+		"TeamC": {Round: "Semi Final", Status: "eliminated"},
+		"TeamD": {Round: "Semi Final", Status: "eliminated"},
+	}
+
+	require.NoError(t, s.UpsertPrediction(ctx, "guild-1", tournamentID, models.Prediction{
+		UserID: "user-1", Username: "Player1", Round: "Playoffs", Format: "single-elimination", Progression: progression,
+	}))
+
+	got, err := s.GetPrediction(ctx, "user-1", "guild-1", tournamentID, "Playoffs")
+	require.NoError(t, err)
+	assert.Equal(t, "single-elimination", got.Format)
+	assert.Equal(t, progression, got.Progression)
+}

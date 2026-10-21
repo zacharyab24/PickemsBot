@@ -17,10 +17,11 @@ import (
 
 // mockFetcher is a DataSourceFetcher that returns pre-configured data.
 type mockFetcher struct {
-	result tournament.MatchResult
-	nodes  []sources.MatchNode
-	kind   tournament.Kind
-	err    error
+	result   tournament.MatchResult
+	nodes    []sources.MatchNode
+	kind     tournament.Kind
+	schedule []sources.ScheduledMatch
+	err      error
 }
 
 func (m mockFetcher) FetchMatchData(round string, knownKind tournament.Kind) (tournament.MatchResult, []sources.MatchNode, tournament.Kind, error) {
@@ -28,7 +29,7 @@ func (m mockFetcher) FetchMatchData(round string, knownKind tournament.Kind) (to
 }
 
 func (m mockFetcher) FetchSchedule() ([]sources.ScheduledMatch, error) {
-	return nil, nil
+	return m.schedule, m.err
 }
 
 // region upsertMatchNodes
@@ -414,4 +415,28 @@ func TestUpdateScores_ScoresEachGuildsOwnPrediction(t *testing.T) {
 	require.Len(t, entries, 1)
 	assert.Equal(t, 0, entries[0].Successes)
 	assert.Equal(t, 1, entries[0].Failed)
+}
+
+func TestUpsertMatchResults_ScoresPredictionsForResultRound(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournament(t, "test-upsert-results", "swiss")
+	nodes := []sources.MatchNode{{ID: "m1", Team1: "TeamA", Team2: "TeamB", Winner: "TeamA", Score: "2-0", Status: "finished"}}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Swiss))
+	seedGuild(t, "guild-1")
+	seedUser(t, "user-1", "Player1")
+	require.NoError(t, s.UpsertPrediction(ctx, "guild-1", tournamentID, models.Prediction{
+		UserID: "user-1", Username: "Player1", Round: "Stage 1", Format: "swiss",
+		Win: []string{"TeamA"}, Lose: []string{"TeamB"},
+	}))
+
+	result := tournament.SwissResult{Round: "Stage 1", Teams: map[string]string{"TeamA": "3-0", "TeamB": "0-3"}}
+	require.NoError(t, s.UpsertMatchResults(ctx, tournamentID, result))
+
+	entries, err := s.GetLeaderboard(ctx, "guild-1", tournamentID)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, 2, entries[0].Successes)
 }

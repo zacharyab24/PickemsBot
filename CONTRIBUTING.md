@@ -71,8 +71,12 @@ This project aims for **at least 80% test coverage** overall.
 
 The CI pipeline runs:
 
-- `go test ./... -coverprofile=coverage.out -v`
+- `go test ./... -tags=test,integration -coverpkg=./... -coverprofile=coverage.out -v`
 - A coverage gate that **fails the build if total coverage is below 80%**.
+
+Store tests carry the `integration` build tag and run against a throwaway Postgres
+started by testcontainers, so Docker must be running. `./scripts/quality_check.sh`
+runs the same checks locally.
 
 Guidelines:
 

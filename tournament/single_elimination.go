@@ -10,8 +10,6 @@ import (
 
 	"pickems-bot/models"
 	"pickems-bot/sources"
-
-	"go.mongodb.org/mongo-driver/bson"
 )
 
 // ElimPredictionEntry is the per-team result for a single-elimination prediction.
@@ -172,15 +170,6 @@ func (singleElimFormat) CalculateScore(p models.Prediction, r MatchResult) (Scor
 			Failed:    failed,
 		},
 	}, nil
-}
-
-// DecodeBSON unmarshals a single-elim BSON record back into an EliminationResult.
-func (singleElimFormat) DecodeBSON(b []byte) (MatchResult, error) {
-	var e EliminationResult
-	if err := bson.Unmarshal(b, &e); err != nil {
-		return nil, fmt.Errorf("single-elimination: failed to decode BSON: %w", err)
-	}
-	return e, nil
 }
 
 // BuildFromMatchNodes assembles an EliminationResult from parsed match nodes.

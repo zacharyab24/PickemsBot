@@ -12,9 +12,11 @@ func TestUnsupportedFormat_ResolvesForUnscoreableKinds(t *testing.T) {
 	// Get must succeed for these kinds so non-prediction paths resolve the format
 	// cleanly instead of erroring on an unregistered kind.
 	for _, k := range []Kind{Other, DoubleElim} {
-		f, err := Get(k)
-		require.NoError(t, err, "kind %q should resolve to the unsupported format", k)
-		assert.Equal(t, k, f.Name())
+		t.Run(string(k), func(t *testing.T) {
+			f, err := Get(k)
+			require.NoError(t, err)
+			assert.Equal(t, k, f.Name())
+		})
 	}
 }
 
@@ -33,8 +35,5 @@ func TestUnsupportedFormat_PredictionMethodsRefuse(t *testing.T) {
 	assert.ErrorIs(t, err, ErrPredictionsUnsupported)
 
 	_, err = f.BuildFromMatchNodes(nil, "Playoffs")
-	assert.ErrorIs(t, err, ErrPredictionsUnsupported)
-
-	_, err = f.DecodeBSON(nil)
 	assert.ErrorIs(t, err, ErrPredictionsUnsupported)
 }

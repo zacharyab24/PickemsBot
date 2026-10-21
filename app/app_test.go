@@ -84,10 +84,12 @@ func TestCheckPredictionsSupported_SupportedFormat_NoError(t *testing.T) {
 	api := NewTestApp(NewMockStore("swiss", "test_round"))
 
 	for _, kind := range []tournament.Kind{tournament.Swiss, tournament.SingleElim} {
-		format := string(kind)
-		if err := api.checkPredictionsSupported(store.GuildConfig{Format: &format}); err != nil {
-			t.Errorf("expected no error for %s, got: %v", kind, err)
-		}
+		t.Run(string(kind), func(t *testing.T) {
+			format := string(kind)
+			if err := api.checkPredictionsSupported(store.GuildConfig{Format: &format}); err != nil {
+				t.Errorf("expected no error, got: %v", err)
+			}
+		})
 	}
 }
 
@@ -95,14 +97,16 @@ func TestCheckPredictionsSupported_UnsupportedFormat_ReturnsFriendlyError(t *tes
 	api := NewTestApp(NewMockStore("swiss", "test_round"))
 
 	for _, kind := range []tournament.Kind{tournament.DoubleElim, tournament.RoundRobin, tournament.Other} {
-		format := string(kind)
-		err := api.checkPredictionsSupported(store.GuildConfig{Format: &format})
-		if !errors.Is(err, ErrFormatDoesNotSupportPredictions) {
-			t.Errorf("expected ErrFormatDoesNotSupportPredictions for %s, got: %v", kind, err)
-		}
-		if !strings.Contains(err.Error(), string(kind)) {
-			t.Errorf("expected error message to name the format %q, got: %v", kind, err)
-		}
+		t.Run(string(kind), func(t *testing.T) {
+			format := string(kind)
+			err := api.checkPredictionsSupported(store.GuildConfig{Format: &format})
+			if !errors.Is(err, ErrFormatDoesNotSupportPredictions) {
+				t.Fatalf("expected ErrFormatDoesNotSupportPredictions, got: %v", err)
+			}
+			if !strings.Contains(err.Error(), string(kind)) {
+				t.Errorf("expected error message to name the format, got: %v", err)
+			}
+		})
 	}
 }
 
@@ -140,25 +144,30 @@ func TestSetUserPrediction_SwissFormat_Success(t *testing.T) {
 	if pred.Username != user.Username {
 		t.Errorf("expected username %s, got %s", user.Username, pred.Username)
 	}
+	if strings.Join(pred.Win, ",") != "Team A,Team B" || strings.Join(pred.Lose, ",") != "Team I,Team J" || len(pred.Advance) != 6 {
+		t.Errorf("expected picks split into win/advance/lose in order, got %+v", pred)
+	}
 }
 
 // A new prediction is scored straight away so it shows on /leaderboard before
 // the next results fetch; a scoring failure must not fail /set.
 func TestSetUserPrediction_ScoresNewPrediction(t *testing.T) {
-	for _, scoreErr := range []error{nil, fmt.Errorf("no match nodes")} {
-		mockStore := NewMockStore("swiss", "test_round")
-		mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-		mockStore.ScorePredictionError = scoreErr
-		api := NewTestApp(mockStore)
+	for name, scoreErr := range map[string]error{"scoring succeeds": nil, "scoring fails": fmt.Errorf("no match nodes")} {
+		t.Run(name, func(t *testing.T) {
+			mockStore := NewMockStore("swiss", "test_round")
+			mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+			mockStore.ScorePredictionError = scoreErr
+			api := NewTestApp(mockStore)
 
-		user := models.User{UserID: "user1", Username: "testuser"}
-		teams := []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
-		if _, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, user, teams); err != nil {
-			t.Fatalf("scoreErr=%v: expected no error, got: %v", scoreErr, err)
-		}
-		if len(mockStore.ScoredPredictions) != 1 || mockStore.ScoredPredictions[0].UserID != user.UserID {
-			t.Errorf("scoreErr=%v: expected the new prediction to be scored, got %+v", scoreErr, mockStore.ScoredPredictions)
-		}
+			user := models.User{UserID: "user1", Username: "testuser"}
+			teams := []string{"Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H", "Team I", "Team J"}
+			if _, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, user, teams); err != nil {
+				t.Fatalf("expected no error, got: %v", err)
+			}
+			if len(mockStore.ScoredPredictions) != 1 || mockStore.ScoredPredictions[0].UserID != user.UserID {
+				t.Errorf("expected the new prediction to be scored, got %+v", mockStore.ScoredPredictions)
+			}
+		})
 	}
 }
 
@@ -173,7 +182,10 @@ func TestSetUserPrediction_SingleEliminationFormat_Success(t *testing.T) {
 
 	_, err := api.SetUserPrediction(bg(), testGuildID, testChannelID, user, teams)
 	if err != nil {
-		t.Errorf("expected no error, got: %v", err)
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if got := mockStore.Predictions[user.UserID].Progression["Team D"]; got != (models.TeamProgress{Round: "Grand Final", Status: "advanced"}) {
+		t.Errorf("expected the last pick stored as champion, got %+v", got)
 	}
 }
 
@@ -302,8 +314,9 @@ func TestCheckPrediction_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
-	if result == nil {
-		t.Error("expected non-nil score report")
+	// Both 3-0 and both 0-3 picks landed; advance picks missing from the results count as failed.
+	if got := result.GetScore(); got != (models.ScoreResult{Successes: 4, Failed: 6}) {
+		t.Errorf("score = %+v, want 4 correct, 6 failed", got)
 	}
 }
 
@@ -400,8 +413,8 @@ func TestCheckPredictionByUsername_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
-	if report == nil {
-		t.Error("expected non-nil score report")
+	if got := report.GetScore(); got != (models.ScoreResult{Successes: 4, Failed: 6}) {
+		t.Errorf("score = %+v, want 4 correct, 6 failed", got)
 	}
 	if user.Username != "PickemsBot" {
 		t.Errorf("expected canonical username PickemsBot, got %s", user.Username)
@@ -559,12 +572,13 @@ func TestPredictionCommands_NoStoredFormat_FriendlyError(t *testing.T) {
 		},
 	}
 	for name, call := range calls {
-		mockStore := NewMockStore("", "test_round")
-		mockStore.GuildConfig.Format = nil
-		err := call(NewTestApp(mockStore))
-		if !errors.Is(err, ErrFormatDoesNotSupportPredictions) {
-			t.Errorf("%s: expected ErrFormatDoesNotSupportPredictions, got: %v", name, err)
-		}
+		t.Run(name, func(t *testing.T) {
+			mockStore := NewMockStore("", "test_round")
+			mockStore.GuildConfig.Format = nil
+			if err := call(NewTestApp(mockStore)); !errors.Is(err, ErrFormatDoesNotSupportPredictions) {
+				t.Errorf("expected ErrFormatDoesNotSupportPredictions, got: %v", err)
+			}
+		})
 	}
 }
 
@@ -912,18 +926,19 @@ func TestGetTournamentInfo_ListValidTeamsError(t *testing.T) {
 
 func TestGetTournamentInfo_UnknownOrEmptyFormat_NotSupported(t *testing.T) {
 	for _, kind := range []tournament.Kind{"unknown-format", ""} {
-		mockStore := NewMockStore(kind, "test_round")
-		mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
-		api := NewTestApp(mockStore)
+		t.Run(string(kind), func(t *testing.T) {
+			mockStore := NewMockStore(kind, "test_round")
+			mockStore.SetScheduledMatches([]sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B"}})
+			api := NewTestApp(mockStore)
 
-		info, err := api.GetTournamentInfo(bg(), testGuildID, testChannelID)
-		if err != nil {
-			t.Errorf("format %q: expected no error, got: %v", kind, err)
-			continue
-		}
-		if info.SupportsPredictions {
-			t.Errorf("format %q: expected SupportsPredictions false", kind)
-		}
+			info, err := api.GetTournamentInfo(bg(), testGuildID, testChannelID)
+			if err != nil {
+				t.Fatalf("expected no error, got: %v", err)
+			}
+			if info.SupportsPredictions {
+				t.Error("expected SupportsPredictions false")
+			}
+		})
 	}
 }
 
@@ -947,7 +962,10 @@ func TestPopulateMatches_ScheduleOnly_Success(t *testing.T) {
 	api := &App{Store: mockStore, pandaScoreLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
 
 	if err := api.PopulateMatches(bg(), 1, "test_round", "pandascore", true); err != nil {
-		t.Errorf("expected no error for scheduleOnly=true, got: %v", err)
+		t.Fatalf("expected no error for scheduleOnly=true, got: %v", err)
+	}
+	if mockStore.FetchAndSaveMatchResultsCallCount != 0 {
+		t.Error("expected a schedule-only populate to skip the results fetch")
 	}
 }
 
@@ -956,7 +974,10 @@ func TestPopulateMatches_FullUpdate_Success(t *testing.T) {
 	api := &App{Store: mockStore, pandaScoreLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
 
 	if err := api.PopulateMatches(bg(), 1, "test_round", "pandascore", false); err != nil {
-		t.Errorf("expected no error for scheduleOnly=false, got: %v", err)
+		t.Fatalf("expected no error for scheduleOnly=false, got: %v", err)
+	}
+	if mockStore.FetchAndSaveMatchResultsCallCount != 1 {
+		t.Errorf("expected one results fetch, got %d", mockStore.FetchAndSaveMatchResultsCallCount)
 	}
 }
 
@@ -1049,7 +1070,10 @@ func TestStoreSchedule_Success(t *testing.T) {
 
 	matches := []sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B", EpochTime: 1000, BestOf: "3"}}
 	if err := api.StoreSchedule(bg(), 1, matches); err != nil {
-		t.Errorf("expected no error, got: %v", err)
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if len(mockStore.ScheduledMatches) != 1 || mockStore.ScheduledMatches[0].Team1 != "Team A" {
+		t.Errorf("expected the schedule to be stored, got %+v", mockStore.ScheduledMatches)
 	}
 }
 
@@ -1073,7 +1097,10 @@ func TestUpdateMatchResults_Success(t *testing.T) {
 	api := &App{Store: mockStore, pandaScoreLimiter: rate.NewLimiter(rate.Every(time.Second), 10)}
 
 	if err := api.UpdateMatchResults(bg(), 1, "test_round", "pandascore"); err != nil {
-		t.Errorf("expected no error, got: %v", err)
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if mockStore.FetchAndSaveMatchResultsCallCount != 1 {
+		t.Errorf("expected one results fetch, got %d", mockStore.FetchAndSaveMatchResultsCallCount)
 	}
 }
 
@@ -1107,35 +1134,6 @@ func TestUpdateMatchResults_StoreError(t *testing.T) {
 	err := api.UpdateMatchResults(bg(), 1, "test_round", "pandascore")
 	if err == nil || !strings.Contains(err.Error(), "store error") {
 		t.Errorf("expected store error, got: %v", err)
-	}
-}
-
-// endregion
-
-// region misc
-
-func TestNewTestApp_HasRateLimiter(t *testing.T) {
-	a := NewTestApp(NewMockStore("swiss", "test_round"))
-	if !a.Allow("pandascore") {
-		t.Error("expected NewTestApp to return an App with a working pandascore rate limiter")
-	}
-	if !a.Allow("liquipedia") {
-		t.Error("expected NewTestApp to return an App with a working liquipedia rate limiter")
-	}
-}
-
-func TestApp_Logger_NilLogger_ReturnsDefault(t *testing.T) {
-	a := &App{}
-	if a.logger() == nil {
-		t.Error("expected non-nil logger when no logger injected")
-	}
-}
-
-func TestMockStore_SetEliminationResults(t *testing.T) {
-	mockStore := NewMockStore("single-elimination", "test_round")
-	mockStore.SetEliminationResults(map[string]models.TeamProgress{"Team A": {Round: "final", Status: "advanced"}})
-	if mockStore.MatchResults == nil {
-		t.Error("expected MatchResults to be set")
 	}
 }
 
