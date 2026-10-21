@@ -13,7 +13,7 @@ import (
 )
 
 // Kind is the canonical string identifier for a tournament format.
-// Values are persisted in MongoDB and surfaced in API/wikitext, so changing
+// Values are persisted in tournaments.format and predictions, so changing
 // these strings is a breaking change.
 type Kind string
 

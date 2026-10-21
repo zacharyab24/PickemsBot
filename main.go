@@ -2,8 +2,9 @@
 
 /* main.go
  * The "main" method for running the bot. For details about the bot see `readme.md`
- * Tournament settings live in config.toml (see `go run ./scripts/configure`).
- * Secrets (Discord tokens, Mongo URI, Liquipedia API key) live in .env.
+ * Deployment settings live in config.toml (see `go run ./scripts/configure`);
+ * tournaments are chosen per channel with /config.
+ * Secrets (Discord tokens, Postgres URI, API keys) live in .env.
  * Authors: Zachary Bower
  */
 

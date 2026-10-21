@@ -5,8 +5,6 @@
 
 package models
 
-import "go.mongodb.org/mongo-driver/bson/primitive"
-
 // User represents a user with their Discord ID and username
 type User struct {
 	UserID   string
@@ -15,8 +13,8 @@ type User struct {
 
 // TeamProgress represents a team's progress through tournament rounds
 type TeamProgress struct {
-	Round  string `bson:"round,omitempty"`  // e.g. "semifinal", "grandfinal"
-	Status string `bson:"status,omitempty"` // "advanced", "eliminated"
+	Round  string // e.g. "semifinal", "grandfinal"
+	Status string // "advanced", "eliminated"
 }
 
 // Prediction represents a user's prediction for a tournament round.
@@ -24,20 +22,19 @@ type TeamProgress struct {
 // can reference it without creating an import cycle.
 type Prediction struct {
 	// Generic attributes
-	ID       primitive.ObjectID `bson:"_id,omitempty"`
-	UserID   string             `bson:"userid,omitempty"`
-	Username string             `bson:"username,omitempty"`
-	GuildID  string             `bson:"guildid,omitempty"`
-	Format   string             `bson:"format,omitempty"` // "swiss" or "single-elimination"
-	Round    string             `bson:"round,omitempty"`
+	UserID   string
+	Username string
+	GuildID  string
+	Format   string // "swiss" or "single-elimination"
+	Round    string
 
 	// Swiss-specific attributes
-	Win     []string `bson:"win,omitempty"`
-	Advance []string `bson:"advance,omitempty"`
-	Lose    []string `bson:"lose,omitempty"`
+	Win     []string
+	Advance []string
+	Lose    []string
 
 	// Elimination specific attributes
-	Progression map[string]TeamProgress `bson:"progression,omitempty"`
+	Progression map[string]TeamProgress
 }
 
 // PredictionField is a format-agnostic name/value pair used to display a
@@ -49,7 +46,7 @@ type PredictionField struct {
 
 // ScoreResult represents the result of scoring a user's predictions.
 type ScoreResult struct {
-	Successes int `bson:"successes"`
-	Pending   int `bson:"pending"`
-	Failed    int `bson:"failed"`
+	Successes int
+	Pending   int
+	Failed    int
 }

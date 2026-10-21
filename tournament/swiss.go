@@ -13,8 +13,8 @@ import (
 // SwissResult is the unified in-memory + on-disk representation of a Swiss
 // tournament's match data. Teams maps team name → score string (e.g. "3-0").
 type SwissResult struct {
-	Round string            `bson:"round,omitempty"`
-	Teams map[string]string `bson:"teams,omitempty"`
+	Round string
+	Teams map[string]string
 }
 
 // SwissReport is the structured result returned by swissFormat.CalculateScore.

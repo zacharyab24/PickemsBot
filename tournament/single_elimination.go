@@ -36,8 +36,8 @@ func (s SingleElimReport) GetScore() models.ScoreResult { return s.Score }
 // single-elimination bracket's progression data. Teams maps team name →
 // TeamProgress (round reached + advanced/eliminated/pending status).
 type EliminationResult struct {
-	Round string                         `bson:"round,omitempty"`
-	Teams map[string]models.TeamProgress `bson:"teams,omitempty"`
+	Round string
+	Teams map[string]models.TeamProgress
 }
 
 // GetType returns the single-elimination format identifier.
@@ -196,9 +196,9 @@ func bracketDepth(n int) int {
 	return k
 }
 
-// renderRoundNames maps round depth index → canonical section label.
+// sectionRoundNames maps round depth index → canonical section label.
 // Index 0 = Grand Final (latest round), increasing index = earlier rounds.
-var renderRoundNames = []string{
+var sectionRoundNames = []string{
 	"Grand Final",   // 0 — depth 1 bracket
 	"Semifinals",    // 1 — depth 2
 	"Quarterfinals", // 2 — depth 3
@@ -206,11 +206,11 @@ var renderRoundNames = []string{
 	"Round of 32",   // 4 — depth 5
 }
 
-// NormalizeSingleElimSections rewrites the Section field on each node so the
-// renderer places each match in the correct column. It is a no-op when sections
-// already vary (Liquipedia already provided round-specific names). When all
-// sections are identical (e.g. all "Bracket/8"), it assigns renderer-compatible
-// names by match position using the same logic as getEliminationResults.
+// NormalizeSingleElimSections rewrites the Section field on each node so each
+// match is grouped under its round. It is a no-op when sections already vary
+// (Liquipedia already provided round-specific names). When all sections are
+// identical (e.g. all "Bracket/8"), it assigns round names by match position
+// using the same logic as getEliminationResults.
 func NormalizeSingleElimSections(nodes []sources.MatchNode) []sources.MatchNode {
 	if len(nodes) == 0 {
 		return nodes
@@ -236,9 +236,9 @@ func NormalizeSingleElimSections(nodes []sources.MatchNode) []sources.MatchNode 
 
 	for i := range out {
 		roundNum := roundFromIndex(i, n) // 1 = earliest (QF), numRounds = GF
-		idx := numRounds - roundNum      // maps to renderRoundNames: 0 = GF
-		if idx >= 0 && idx < len(renderRoundNames) {
-			out[i].Section = renderRoundNames[idx]
+		idx := numRounds - roundNum      // maps to sectionRoundNames: 0 = GF
+		if idx >= 0 && idx < len(sectionRoundNames) {
+			out[i].Section = sectionRoundNames[idx]
 		} else {
 			out[i].Section = fmt.Sprintf("Round %d", roundNum)
 		}
