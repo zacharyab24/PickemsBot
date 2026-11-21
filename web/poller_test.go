@@ -186,6 +186,18 @@ func TestScheduleKey_DetectsTeamChange(t *testing.T) {
 	assert.NotEqual(t, scheduleKey(before), scheduleKey(after))
 }
 
+func TestScheduleKey_DetectsLiveChange(t *testing.T) {
+	before := []sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B", EpochTime: 1000}}
+	after := []sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B", EpochTime: 1000, Live: true}}
+	assert.NotEqual(t, scheduleKey(before), scheduleKey(after))
+}
+
+func TestScheduleKey_DetectsFinishedChange(t *testing.T) {
+	before := []sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B", EpochTime: 1000, Live: true}}
+	after := []sources.ScheduledMatch{{Team1: "Team A", Team2: "Team B", EpochTime: 1000, Finished: true}}
+	assert.NotEqual(t, scheduleKey(before), scheduleKey(after))
+}
+
 func TestScheduleKey_EmptySlice(t *testing.T) {
 	assert.Equal(t, scheduleKey(nil), scheduleKey([]sources.ScheduledMatch{}))
 }
