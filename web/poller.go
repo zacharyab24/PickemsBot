@@ -142,16 +142,17 @@ func (p *Poller) tick(entry *app.PoolEntry) bool {
 }
 
 // scheduleKey returns a fingerprint of a scheduled match slice. Two slices with the
-// same teams and start times (regardless of order) produce the same key, so the
-// poller can detect real changes without writing to the DB every tick.
+// same teams, start times and live/finished state (regardless of order) produce the
+// same key, so the poller can detect real changes without writing to the DB every tick.
 func scheduleKey(matches []sources.ScheduledMatch) string {
 	type entry struct {
-		team1, team2 string
-		epoch        int64
+		team1, team2   string
+		epoch          int64
+		live, finished bool
 	}
 	entries := make([]entry, len(matches))
 	for i, m := range matches {
-		entries[i] = entry{m.Team1, m.Team2, m.EpochTime}
+		entries[i] = entry{m.Team1, m.Team2, m.EpochTime, m.Live, m.Finished}
 	}
 	sort.Slice(entries, func(i, j int) bool {
 		if entries[i].team1 != entries[j].team1 {
@@ -161,7 +162,7 @@ func scheduleKey(matches []sources.ScheduledMatch) string {
 	})
 	var b strings.Builder
 	for _, e := range entries {
-		fmt.Fprintf(&b, "%s|%s|%d;", e.team1, e.team2, e.epoch)
+		fmt.Fprintf(&b, "%s|%s|%d|%t|%t;", e.team1, e.team2, e.epoch, e.live, e.finished)
 	}
 	return b.String()
 }
