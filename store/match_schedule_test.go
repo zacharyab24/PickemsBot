@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"pickems-bot/sources"
+	"pickems-bot/tournament"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -129,4 +130,44 @@ func TestFetchAndSaveSchedule_FetcherError(t *testing.T) {
 	tournamentID := seedTournament(t, "test-fetch-schedule-err", "swiss")
 
 	assert.ErrorIs(t, s.FetchAndSaveSchedule(context.Background(), tournamentID), assert.AnError)
+}
+
+func TestUpsertMatchSchedule_PreservesResultRows(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournament(t, "test-schedule-preserves-results", "swiss")
+	nodes := []sources.MatchNode{
+		{ID: "m1", Team1: "TeamA", Team2: "TeamB", Status: "not_started", Timestamp: time.Now().Add(1 * time.Hour).Unix()},
+		{ID: "m2", Team1: "TeamC", Team2: "TeamD", Status: "running", Timestamp: time.Now().Unix()},
+	}
+	require.NoError(t, s.upsertMatchNodes(ctx, tournamentID, "Stage 1", nodes, tournament.Swiss))
+
+	schedule := []sources.ScheduledMatch{
+		{Team1: "TeamA", Team2: "TeamB", BestOf: "3", EpochTime: time.Now().Add(1 * time.Hour).Unix()},
+		{Team1: "TeamC", Team2: "TeamD", BestOf: "3", EpochTime: time.Now().Unix(), Live: true},
+	}
+	require.NoError(t, s.UpsertMatchSchedule(ctx, tournamentID, schedule))
+
+	got, _, err := s.GetMatchNodes(ctx, tournamentID, "Stage 1")
+	require.NoError(t, err)
+	assert.Len(t, got, 2)
+}
+
+func TestUpsertMatchSchedule_DoesNotAccumulateFinishedRows(t *testing.T) {
+	cleanDB(t)
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tournamentID := seedTournament(t, "test-schedule-finished-dupes", "swiss")
+	schedule := []sources.ScheduledMatch{
+		{Team1: "TeamA", Team2: "TeamB", BestOf: "3", EpochTime: time.Now().Add(-2 * time.Hour).Unix(), Finished: true},
+	}
+	require.NoError(t, s.UpsertMatchSchedule(ctx, tournamentID, schedule))
+	require.NoError(t, s.UpsertMatchSchedule(ctx, tournamentID, schedule))
+
+	var count int
+	require.NoError(t, s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM matches WHERE tournament_id = $1`, tournamentID).Scan(&count))
+	assert.Equal(t, 1, count)
 }
