@@ -65,8 +65,8 @@ func (s *PostgresStore) GetMatchSchedule(ctx context.Context, tournamentID int) 
 	return matches, nil
 }
 
-// UpsertMatchSchedule replaces all pending non-live matches for the tournament with the provided list.
-// Completed and in-progress matches are preserved.
+// UpsertMatchSchedule replaces the tournament's schedule rows with the provided list.
+// Result rows (those with an external_id) are left untouched.
 func (s *PostgresStore) UpsertMatchSchedule(ctx context.Context, tournamentID int, matches []sources.ScheduledMatch) error {
 	if len(matches) == 0 {
 		return nil
@@ -80,7 +80,7 @@ func (s *PostgresStore) UpsertMatchSchedule(ctx context.Context, tournamentID in
 
 	_, err = tx.Exec(ctx, `
 		DELETE FROM matches
-		WHERE tournament_id = $1 AND status != 'completed'
+		WHERE tournament_id = $1 AND external_id IS NULL
 	`, tournamentID)
 	if err != nil {
 		return fmt.Errorf("UpsertMatchSchedule: clear pending: %w", err)
